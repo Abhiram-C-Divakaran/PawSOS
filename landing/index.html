@@ -1,0 +1,850 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PawReach — Rescue Coordination for Every Stray Life</title>
+  <meta name="description" content="PawReach connects citizens, rescuers, NGOs, veterinarians, and foster caregivers to coordinate stray animal rescue from first report to full recovery." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════ NAVIGATION ═══════════════════════════════════════════ -->
+<header id="site-header" class="site-header">
+  <div class="container nav-container">
+    <a href="#" class="logo" id="logo">
+      <div class="logo-icon">
+        <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+          <circle cx="16" cy="16" r="15" fill="url(#logoGrad)" />
+          <path d="M10 11.5C10 10.12 11.12 9 12.5 9C13.88 9 15 10.12 15 11.5C15 12.88 13.88 14 12.5 14C11.12 14 10 12.88 10 11.5Z" fill="white"/>
+          <path d="M17 11.5C17 10.12 18.12 9 19.5 9C20.88 9 22 10.12 22 11.5C22 12.88 20.88 14 19.5 14C18.12 14 17 12.88 17 11.5Z" fill="white"/>
+          <path d="M8 16C8 14.9 8.9 14 10 14C11.1 14 12 14.9 12 16C12 17.1 11.1 18 10 18C8.9 18 8 17.1 8 16Z" fill="white"/>
+          <path d="M20 16C20 14.9 20.9 14 22 14C23.1 14 24 14.9 24 16C24 17.1 23.1 18 22 18C20.9 18 20 17.1 20 16Z" fill="white"/>
+          <path d="M16 23C18.76 23 21 20.76 21 18C21 16.5 19 15 16 15C13 15 11 16.5 11 18C11 20.76 13.24 23 16 23Z" fill="white"/>
+          <path d="M14.5 19.5C14.5 19.5 15 21 16 21C17 21 17.5 19.5 17.5 19.5" stroke="#E85D3A" stroke-width="1.2" stroke-linecap="round"/>
+          <defs>
+            <linearGradient id="logoGrad" x1="0" y1="0" x2="32" y2="32">
+              <stop offset="0%" stop-color="#0D9488"/>
+              <stop offset="100%" stop-color="#1A365D"/>
+            </linearGradient>
+          </defs>
+        </svg>
+      </div>
+      <div class="logo-text">
+        <span class="logo-name">PawReach</span>
+        <span class="logo-tagline">Rescue coordination for every stray life</span>
+      </div>
+    </a>
+
+    <nav class="main-nav" id="main-nav">
+      <a href="#platform" class="nav-link">Platform</a>
+      <a href="#how-it-works" class="nav-link">How It Works</a>
+      <a href="#organizations" class="nav-link">For Organizations</a>
+      <a href="#impact" class="nav-link">Impact</a>
+      <a href="#stories" class="nav-link">Stories</a>
+      <a href="#resources" class="nav-link">Resources</a>
+      <a href="#contact" class="nav-link">Contact</a>
+    </nav>
+
+    <div class="nav-actions">
+      <button class="btn btn-ghost" id="btn-watch-demo">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.5"/><polygon points="6.5,5 11.5,8 6.5,11" fill="currentColor"/></svg>
+        Watch Demo
+      </button>
+      <button class="btn btn-primary" id="btn-get-started">Get Started</button>
+    </div>
+
+    <button class="mobile-toggle" id="mobile-toggle" aria-label="Toggle navigation">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+</header>
+
+<!-- ═══════════════════════════════════════════ HERO ═══════════════════════════════════════════ -->
+<section class="hero" id="hero">
+  <div class="container hero-container">
+    <div class="hero-content">
+      <span class="eyebrow">A smarter response system for animals in distress</span>
+      <h1 class="hero-title">From Street to Safety, <span class="highlight">Faster.</span></h1>
+      <p class="hero-description">PawReach helps people report animals in distress, instantly alerts nearby rescue networks, and coordinates every case through rescue, veterinary care, foster support, and recovery.</p>
+      <div class="hero-actions">
+        <button class="btn btn-primary btn-lg" id="btn-report">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M10 2C10 2 4 6 4 11C4 14.31 6.69 17 10 17C13.31 17 16 14.31 16 11C16 6 10 2 10 2Z" stroke="currentColor" stroke-width="1.5" fill="none"/><circle cx="10" cy="11" r="2" fill="currentColor"/></svg>
+          Report an Animal
+        </button>
+        <button class="btn btn-outline btn-lg" id="btn-orgs">For NGOs &amp; Veterinary Teams</button>
+      </div>
+      <div class="trust-row">
+        <div class="trust-item">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" stroke="#0D9488" stroke-width="1.5"/><path d="M5 8L7 10L11 6" stroke="#0D9488" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          24/7 Rescue Coordination
+        </div>
+        <div class="trust-item">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" stroke="#0D9488" stroke-width="1.5"/><path d="M5 8L7 10L11 6" stroke="#0D9488" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          AI-assisted Triage
+        </div>
+        <div class="trust-item">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" stroke="#0D9488" stroke-width="1.5"/><path d="M5 8L7 10L11 6" stroke="#0D9488" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Live Case Tracking
+        </div>
+      </div>
+    </div>
+
+    <div class="hero-visual">
+      <!-- Main animal photo -->
+      <div class="hero-photo-wrapper">
+        <img src="hero_animals.jpg" alt="Rescued dog and cat together" class="hero-photo" />
+      </div>
+
+      <!-- Dashboard mockup overlay -->
+      <div class="dashboard-mockup">
+        <div class="mockup-header">
+          <div class="mockup-dot red"></div>
+          <div class="mockup-dot yellow"></div>
+          <div class="mockup-dot green"></div>
+          <span class="mockup-title">PawReach Dashboard</span>
+        </div>
+        <div class="mockup-stats">
+          <div class="mockup-stat">
+            <span class="stat-num">142</span>
+            <span class="stat-label">Active Cases</span>
+          </div>
+          <div class="mockup-stat">
+            <span class="stat-num orange">28</span>
+            <span class="stat-label">Awaiting Rescue</span>
+          </div>
+          <div class="mockup-stat">
+            <span class="stat-num teal">64</span>
+            <span class="stat-label">Under Treatment</span>
+          </div>
+          <div class="mockup-stat">
+            <span class="stat-num green-text">50</span>
+            <span class="stat-label">Recovered</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Mobile mockup overlay -->
+      <div class="mobile-mockup">
+        <div class="mobile-screen">
+          <div class="mobile-top-bar">
+            <span class="mobile-app-name">PawReach</span>
+          </div>
+          <div class="mobile-title">Report an Animal</div>
+          <div class="mobile-steps">
+            <div class="mobile-step">
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="3" width="12" height="9" rx="1.5" stroke="#0D9488" stroke-width="1.2"/><circle cx="7" cy="7.5" r="2" stroke="#0D9488" stroke-width="1.2"/></svg>
+              Take Photo
+            </div>
+            <div class="mobile-step">
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1L7 8M7 8L4 5.5M7 8L10 5.5" stroke="#0D9488" stroke-width="1.2" stroke-linecap="round"/><circle cx="7" cy="11" r="2" stroke="#0D9488" stroke-width="1.2"/></svg>
+              Add Location
+            </div>
+            <div class="mobile-step">
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="2" y="2" width="10" height="10" rx="2" stroke="#0D9488" stroke-width="1.2"/><path d="M5 5H9M5 7H8M5 9H7" stroke="#0D9488" stroke-width="1.2" stroke-linecap="round"/></svg>
+              Describe Situation
+            </div>
+            <div class="mobile-step active">
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 7L5.5 10.5L12 3.5" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              Submit Report
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Activity feed -->
+      <div class="activity-feed">
+        <div class="activity-title">Live Activity</div>
+        <div class="activity-item done">
+          <div class="activity-dot"></div>
+          <span>Emergency Reported</span>
+          <span class="activity-time">2m ago</span>
+        </div>
+        <div class="activity-item done">
+          <div class="activity-dot"></div>
+          <span>Volunteer Assigned</span>
+          <span class="activity-time">1m ago</span>
+        </div>
+        <div class="activity-item active">
+          <div class="activity-dot"></div>
+          <span>At Veterinary Clinic</span>
+          <span class="activity-time">Now</span>
+        </div>
+        <div class="activity-item pending">
+          <div class="activity-dot"></div>
+          <span>Treatment in Progress</span>
+          <span class="activity-time">—</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Decorative blobs -->
+  <div class="hero-blob hero-blob-1"></div>
+  <div class="hero-blob hero-blob-2"></div>
+</section>
+
+<!-- ═══════════════════════════════════════════ STATS STRIP ═══════════════════════════════════════════ -->
+<section class="stats-strip" id="stats">
+  <div class="container">
+    <div class="stats-grid">
+      <div class="stat-card" data-count="3" data-suffix=" min">
+        <div class="stat-icon">
+          <svg width="28" height="28" viewBox="0 0 28 28" fill="none"><circle cx="14" cy="14" r="12" stroke="#0D9488" stroke-width="2"/><path d="M14 7V14L18 18" stroke="#0D9488" stroke-width="2" stroke-linecap="round"/></svg>
+        </div>
+        <span class="stat-number">3 min</span>
+        <span class="stat-desc">Average first response</span>
+      </div>
+      <div class="stat-card" data-count="1200" data-suffix="+">
+        <div class="stat-icon">
+          <svg width="28" height="28" viewBox="0 0 28 28" fill="none"><circle cx="10" cy="10" r="4" stroke="#E85D3A" stroke-width="2"/><circle cx="18" cy="10" r="4" stroke="#E85D3A" stroke-width="2"/><path d="M6 22C6 18.69 8.69 16 12 16H16C19.31 16 22 18.69 22 22" stroke="#E85D3A" stroke-width="2" stroke-linecap="round"/></svg>
+        </div>
+        <span class="stat-number">1,200+</span>
+        <span class="stat-desc">Rescue partners</span>
+      </div>
+      <div class="stat-card" data-count="85000" data-suffix="+">
+        <div class="stat-icon">
+          <svg width="28" height="28" viewBox="0 0 28 28" fill="none"><rect x="4" y="4" width="20" height="20" rx="3" stroke="#1A365D" stroke-width="2"/><path d="M9 14L12 17L19 10" stroke="#1A365D" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+        <span class="stat-number">85,000+</span>
+        <span class="stat-desc">Cases coordinated</span>
+      </div>
+      <div class="stat-card" data-count="140" data-suffix="+">
+        <div class="stat-icon">
+          <svg width="28" height="28" viewBox="0 0 28 28" fill="none"><path d="M14 3L14 7M14 21L14 25M3 14H7M21 14H25M6.1 6.1L8.93 8.93M19.07 19.07L21.9 21.9M21.9 6.1L19.07 8.93M8.93 19.07L6.1 21.9" stroke="#0D9488" stroke-width="2" stroke-linecap="round"/><circle cx="14" cy="14" r="5" stroke="#0D9488" stroke-width="2"/></svg>
+        </div>
+        <span class="stat-number">140+</span>
+        <span class="stat-desc">Cities &amp; regions</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════ PLATFORM CAPABILITIES ═══════════════════════════════════════════ -->
+<section class="platform-section" id="platform">
+  <div class="container">
+    <div class="section-header">
+      <h2 class="section-title">One platform. Every rescue step.</h2>
+      <p class="section-subtitle">Everything needed to move an animal from first report to full recovery.</p>
+    </div>
+    <div class="features-grid">
+      <div class="feature-card">
+        <div class="feature-icon smart-reporting">
+          <svg width="28" height="28" viewBox="0 0 28 28" fill="none"><rect x="4" y="2" width="20" height="24" rx="3" stroke="currentColor" stroke-width="2"/><circle cx="14" cy="12" r="4" stroke="currentColor" stroke-width="2"/><path d="M8 20H20" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        </div>
+        <h3 class="feature-title">Smart Reporting</h3>
+        <p class="feature-desc">Photo, GPS location, emergency questions and rapid case creation from any mobile device.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon dispatch">
+          <svg width="28" height="28" viewBox="0 0 28 28" fill="none"><circle cx="14" cy="12" r="8" stroke="currentColor" stroke-width="2"/><path d="M14 12V8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M14 20V24" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="14" cy="12" r="2" fill="currentColor"/><path d="M8 24H20" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        </div>
+        <h3 class="feature-title">Intelligent Dispatch</h3>
+        <p class="feature-desc">Automatically identify and alert nearby available responders based on proximity and capability.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon medical">
+          <svg width="28" height="28" viewBox="0 0 28 28" fill="none"><path d="M14 4L14 24M4 14H24" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><rect x="6" y="6" width="16" height="16" rx="3" stroke="currentColor" stroke-width="2"/></svg>
+        </div>
+        <h3 class="feature-title">Medical Coordination</h3>
+        <p class="feature-desc">Connect rescue cases with verified veterinary partners and maintain complete treatment records.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon foster">
+          <svg width="28" height="28" viewBox="0 0 28 28" fill="none"><path d="M14 6C14 6 6 10 6 16C6 20.42 9.58 24 14 24C18.42 24 22 20.42 22 16C22 10 14 6 14 6Z" stroke="currentColor" stroke-width="2"/><path d="M11 16C11 14.34 12.34 13 14 13C15.66 13 17 14.34 17 16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        </div>
+        <h3 class="feature-title">Foster Matching</h3>
+        <p class="feature-desc">Match recovering animals with suitable temporary foster caregivers based on needs and capacity.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon community">
+          <svg width="28" height="28" viewBox="0 0 28 28" fill="none"><path d="M4 20L4 8C4 6.9 4.9 6 6 6H18C19.1 6 20 6.9 20 8V16C20 17.1 19.1 18 18 18H8L4 20Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M20 12H22C23.1 12 24 12.9 24 14V22L20 20H12" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+        </div>
+        <h3 class="feature-title">Community Updates</h3>
+        <p class="feature-desc">Keep reporters, volunteers and organizations updated throughout every rescue case.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon analytics">
+          <svg width="28" height="28" viewBox="0 0 28 28" fill="none"><path d="M4 22V14L10 10L16 14L24 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M20 6H24V10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 24H24" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        </div>
+        <h3 class="feature-title">Impact Analytics</h3>
+        <p class="feature-desc">Understand rescue performance, hotspots, response times and outcomes with real-time dashboards.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════ HOW IT WORKS ═══════════════════════════════════════════ -->
+<section class="how-section" id="how-it-works">
+  <div class="container">
+    <div class="section-header">
+      <h2 class="section-title">How PawReach Works</h2>
+      <p class="section-subtitle">From one report to a second chance.</p>
+    </div>
+    <div class="steps-timeline">
+      <div class="timeline-line"></div>
+      <div class="step-item">
+        <div class="step-number">1</div>
+        <div class="step-icon-wrap">
+          <svg width="40" height="40" viewBox="0 0 40 40" fill="none"><rect x="8" y="4" width="24" height="32" rx="4" stroke="#0D9488" stroke-width="2"/><circle cx="20" cy="18" r="5" stroke="#0D9488" stroke-width="2"/><path d="M12 28H28" stroke="#0D9488" stroke-width="2" stroke-linecap="round"/><circle cx="20" cy="33" r="1.5" fill="#0D9488"/></svg>
+        </div>
+        <h3 class="step-title">Report</h3>
+        <p class="step-desc">Citizen uploads a photo, shares their location, and describes the animal's basic condition.</p>
+      </div>
+      <div class="step-item">
+        <div class="step-number">2</div>
+        <div class="step-icon-wrap">
+          <svg width="40" height="40" viewBox="0 0 40 40" fill="none"><circle cx="20" cy="20" r="14" stroke="#E85D3A" stroke-width="2"/><path d="M14 20L18 24L26 16" stroke="#E85D3A" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M20 6V10M20 30V34M6 20H10M30 20H34" stroke="#E85D3A" stroke-width="1.5" stroke-linecap="round"/></svg>
+        </div>
+        <h3 class="step-title">Assess</h3>
+        <p class="step-desc">AI-assisted and rule-based triage helps determine urgency and assigns a priority category.</p>
+      </div>
+      <div class="step-item">
+        <div class="step-number">3</div>
+        <div class="step-icon-wrap">
+          <svg width="40" height="40" viewBox="0 0 40 40" fill="none"><path d="M20 8C20 8 8 14 8 22C8 26 10 28 14 28" stroke="#1A365D" stroke-width="2" stroke-linecap="round"/><path d="M20 8C20 8 32 14 32 22C32 26 30 28 26 28" stroke="#1A365D" stroke-width="2" stroke-linecap="round"/><circle cx="14" cy="28" r="3" stroke="#1A365D" stroke-width="2"/><circle cx="26" cy="28" r="3" stroke="#1A365D" stroke-width="2"/><circle cx="20" cy="14" r="3" fill="#1A365D"/></svg>
+        </div>
+        <h3 class="step-title">Mobilize</h3>
+        <p class="step-desc">Nearby rescuers, ambulances and veterinary facilities are identified and notified instantly.</p>
+      </div>
+      <div class="step-item">
+        <div class="step-number">4</div>
+        <div class="step-icon-wrap">
+          <svg width="40" height="40" viewBox="0 0 40 40" fill="none"><path d="M20 8C12 8 8 14 8 20C8 26 12 32 20 32C28 32 32 26 32 20C32 14 28 8 20 8Z" stroke="#0D9488" stroke-width="2"/><path d="M14 20L18 24L26 16" stroke="#0D9488" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M16 8C14 10 13 14 14 18" stroke="#0D9488" stroke-width="1.5" stroke-linecap="round" opacity="0.4"/><path d="M24 8C26 10 27 14 26 18" stroke="#0D9488" stroke-width="1.5" stroke-linecap="round" opacity="0.4"/></svg>
+        </div>
+        <h3 class="step-title">Recover</h3>
+        <p class="step-desc">Track treatment, foster care, recovery, release or adoption — until the case is fully closed.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════ LIVE RESCUE MAP ═══════════════════════════════════════════ -->
+<section class="map-section" id="live-map">
+  <div class="container">
+    <div class="section-header">
+      <h2 class="section-title">Live Rescue Experience</h2>
+      <p class="section-subtitle">See how every rescue case is tracked in real time across your network.</p>
+    </div>
+    <div class="map-demo">
+      <!-- Filter sidebar -->
+      <div class="map-sidebar">
+        <h4 class="sidebar-title">Case Filters</h4>
+        <div class="filter-item active" data-filter="critical">
+          <span class="filter-dot critical"></span>
+          Critical
+          <span class="filter-count">12</span>
+        </div>
+        <div class="filter-item active" data-filter="urgent">
+          <span class="filter-dot urgent"></span>
+          Urgent
+          <span class="filter-count">23</span>
+        </div>
+        <div class="filter-item active" data-filter="assigned">
+          <span class="filter-dot assigned"></span>
+          Assigned
+          <span class="filter-count">41</span>
+        </div>
+        <div class="filter-item" data-filter="treatment">
+          <span class="filter-dot treatment"></span>
+          Under Treatment
+          <span class="filter-count">38</span>
+        </div>
+        <div class="filter-item" data-filter="recovering">
+          <span class="filter-dot recovering"></span>
+          Recovering
+          <span class="filter-count">28</span>
+        </div>
+
+        <div class="sidebar-stats">
+          <div class="sidebar-stat">
+            <span class="sidebar-stat-num">142</span>
+            <span class="sidebar-stat-label">Total Active</span>
+          </div>
+          <div class="sidebar-stat">
+            <span class="sidebar-stat-num">2.4 min</span>
+            <span class="sidebar-stat-label">Avg. Dispatch</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Map area -->
+      <div class="map-area">
+        <div class="map-canvas" id="map-canvas">
+          <!-- Map tiles simulation with gradient background -->
+          <div class="map-bg"></div>
+
+          <!-- Map grid lines -->
+          <div class="map-grid"></div>
+
+          <!-- Map labels -->
+          <div class="map-label" style="top:15%;left:20%;">Andheri West</div>
+          <div class="map-label" style="top:35%;left:55%;">Bandra</div>
+          <div class="map-label" style="top:60%;left:30%;">Dadar</div>
+          <div class="map-label" style="top:75%;left:65%;">Worli</div>
+          <div class="map-label" style="top:25%;left:75%;">Juhu</div>
+
+          <!-- Road lines -->
+          <svg class="map-roads" viewBox="0 0 800 500" preserveAspectRatio="none">
+            <path d="M0 250 Q200 200 400 250 T800 200" stroke="rgba(255,255,255,0.3)" stroke-width="2" fill="none"/>
+            <path d="M200 0 Q250 150 200 300 T250 500" stroke="rgba(255,255,255,0.3)" stroke-width="2" fill="none"/>
+            <path d="M500 0 Q480 200 550 350 T500 500" stroke="rgba(255,255,255,0.3)" stroke-width="2" fill="none"/>
+            <path d="M0 100 Q300 80 600 150 T800 100" stroke="rgba(255,255,255,0.2)" stroke-width="1.5" fill="none"/>
+            <path d="M0 400 Q200 380 500 420 T800 380" stroke="rgba(255,255,255,0.2)" stroke-width="1.5" fill="none"/>
+          </svg>
+
+          <!-- Map pins -->
+          <div class="map-pin critical pulse" style="top:22%;left:35%;" data-case="PR-02481">
+            <svg width="24" height="24" viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9C5 14.25 12 22 12 22S19 14.25 19 9C19 5.13 15.87 2 12 2Z" fill="#EF4444"/><circle cx="12" cy="9" r="3" fill="white"/></svg>
+          </div>
+          <div class="map-pin critical" style="top:45%;left:22%;">
+            <svg width="24" height="24" viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9C5 14.25 12 22 12 22S19 14.25 19 9C19 5.13 15.87 2 12 2Z" fill="#EF4444"/><circle cx="12" cy="9" r="3" fill="white"/></svg>
+          </div>
+          <div class="map-pin urgent" style="top:55%;left:52%;">
+            <svg width="24" height="24" viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9C5 14.25 12 22 12 22S19 14.25 19 9C19 5.13 15.87 2 12 2Z" fill="#F59E0B"/><circle cx="12" cy="9" r="3" fill="white"/></svg>
+          </div>
+          <div class="map-pin assigned" style="top:30%;left:65%;">
+            <svg width="24" height="24" viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9C5 14.25 12 22 12 22S19 14.25 19 9C19 5.13 15.87 2 12 2Z" fill="#3B82F6"/><circle cx="12" cy="9" r="3" fill="white"/></svg>
+          </div>
+          <div class="map-pin treatment" style="top:65%;left:40%;">
+            <svg width="24" height="24" viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9C5 14.25 12 22 12 22S19 14.25 19 9C19 5.13 15.87 2 12 2Z" fill="#8B5CF6"/><circle cx="12" cy="9" r="3" fill="white"/></svg>
+          </div>
+          <div class="map-pin recovering" style="top:40%;left:78%;">
+            <svg width="24" height="24" viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9C5 14.25 12 22 12 22S19 14.25 19 9C19 5.13 15.87 2 12 2Z" fill="#10B981"/><circle cx="12" cy="9" r="3" fill="white"/></svg>
+          </div>
+          <div class="map-pin urgent" style="top:72%;left:70%;">
+            <svg width="24" height="24" viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9C5 14.25 12 22 12 22S19 14.25 19 9C19 5.13 15.87 2 12 2Z" fill="#F59E0B"/><circle cx="12" cy="9" r="3" fill="white"/></svg>
+          </div>
+          <div class="map-pin assigned" style="top:18%;left:50%;">
+            <svg width="24" height="24" viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9C5 14.25 12 22 12 22S19 14.25 19 9C19 5.13 15.87 2 12 2Z" fill="#3B82F6"/><circle cx="12" cy="9" r="3" fill="white"/></svg>
+          </div>
+          <div class="map-pin recovering" style="top:80%;left:25%;">
+            <svg width="24" height="24" viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9C5 14.25 12 22 12 22S19 14.25 19 9C19 5.13 15.87 2 12 2Z" fill="#10B981"/><circle cx="12" cy="9" r="3" fill="white"/></svg>
+          </div>
+
+          <!-- Rescue radius indicator -->
+          <div class="rescue-radius" style="top:22%;left:35%;"></div>
+        </div>
+
+        <!-- Case detail card -->
+        <div class="case-card" id="case-card">
+          <div class="case-header">
+            <span class="case-id">Case PR-02481</span>
+            <span class="case-priority critical">Critical</span>
+          </div>
+          <p class="case-desc">Dog injured near roadway</p>
+          <div class="case-details">
+            <div class="case-detail">
+              <span class="case-label">Reported</span>
+              <span class="case-value">8 minutes ago</span>
+            </div>
+            <div class="case-detail">
+              <span class="case-label">Nearest responder</span>
+              <span class="case-value">1.7 km</span>
+            </div>
+            <div class="case-detail">
+              <span class="case-label">Assigned volunteer</span>
+              <span class="case-value">Anjali R.</span>
+            </div>
+            <div class="case-detail">
+              <span class="case-label">Veterinary facility</span>
+              <span class="case-value">City Veterinary Care</span>
+            </div>
+          </div>
+          <div class="case-status">
+            <span class="case-label">Status</span>
+            <span class="case-value highlight-status">Responder En Route</span>
+          </div>
+          <div class="case-progress">
+            <div class="progress-step completed">
+              <div class="progress-dot"></div>
+              <span>Reported</span>
+            </div>
+            <div class="progress-step completed">
+              <div class="progress-dot"></div>
+              <span>Triaged</span>
+            </div>
+            <div class="progress-step completed">
+              <div class="progress-dot"></div>
+              <span>Assigned</span>
+            </div>
+            <div class="progress-step current">
+              <div class="progress-dot"></div>
+              <span>En Route</span>
+            </div>
+            <div class="progress-step">
+              <div class="progress-dot"></div>
+              <span>Treatment</span>
+            </div>
+            <div class="progress-step">
+              <div class="progress-dot"></div>
+              <span>Recovery</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════ ORGANIZATION SECTION ═══════════════════════════════════════════ -->
+<section class="org-section" id="organizations">
+  <div class="container org-container">
+    <div class="org-content">
+      <h2 class="org-title">Built for the teams doing the hard work.</h2>
+      <p class="org-subtitle">One operating system for NGOs, municipal teams, veterinary networks and animal welfare organizations.</p>
+      <ul class="org-benefits">
+        <li>
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="9" stroke="#5EEAD4" stroke-width="1.5"/><path d="M6 10L9 13L14 7" stroke="#5EEAD4" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Coordinate rescue cases across regions
+        </li>
+        <li>
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="9" stroke="#5EEAD4" stroke-width="1.5"/><path d="M6 10L9 13L14 7" stroke="#5EEAD4" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Assign and monitor responders
+        </li>
+        <li>
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="9" stroke="#5EEAD4" stroke-width="1.5"/><path d="M6 10L9 13L14 7" stroke="#5EEAD4" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Maintain animal and treatment records
+        </li>
+        <li>
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="9" stroke="#5EEAD4" stroke-width="1.5"/><path d="M6 10L9 13L14 7" stroke="#5EEAD4" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Manage partner organizations
+        </li>
+        <li>
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="9" stroke="#5EEAD4" stroke-width="1.5"/><path d="M6 10L9 13L14 7" stroke="#5EEAD4" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Track rescue response times
+        </li>
+        <li>
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="9" stroke="#5EEAD4" stroke-width="1.5"/><path d="M6 10L9 13L14 7" stroke="#5EEAD4" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Generate impact reports
+        </li>
+        <li>
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="9" stroke="#5EEAD4" stroke-width="1.5"/><path d="M6 10L9 13L14 7" stroke="#5EEAD4" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Identify high-risk rescue locations
+        </li>
+        <li>
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="9" stroke="#5EEAD4" stroke-width="1.5"/><path d="M6 10L9 13L14 7" stroke="#5EEAD4" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Maintain complete case histories
+        </li>
+      </ul>
+      <button class="btn btn-primary-light btn-lg">See the Operations Dashboard →</button>
+    </div>
+
+    <div class="org-dashboard">
+      <div class="dash-window">
+        <div class="dash-chrome">
+          <div class="mockup-dot red"></div>
+          <div class="mockup-dot yellow"></div>
+          <div class="mockup-dot green"></div>
+          <span class="dash-url">app.pawreach.org/dashboard</span>
+        </div>
+        <div class="dash-body">
+          <div class="dash-top-bar">
+            <span class="dash-logo-sm">PawReach</span>
+            <span class="dash-nav-item active">Overview</span>
+            <span class="dash-nav-item">Cases</span>
+            <span class="dash-nav-item">Map</span>
+            <span class="dash-nav-item">Analytics</span>
+          </div>
+          <div class="dash-metrics">
+            <div class="dash-metric">
+              <span class="dm-value">128</span>
+              <span class="dm-label">Active Cases</span>
+              <span class="dm-change up">↑ 12%</span>
+            </div>
+            <div class="dash-metric">
+              <span class="dm-value">2.4 hrs</span>
+              <span class="dm-label">Avg Response</span>
+              <span class="dm-change down">↓ 18%</span>
+            </div>
+            <div class="dash-metric">
+              <span class="dm-value">89%</span>
+              <span class="dm-label">Recovery Rate</span>
+              <span class="dm-change up">↑ 4%</span>
+            </div>
+            <div class="dash-metric">
+              <span class="dm-value">560</span>
+              <span class="dm-label">Partner Network</span>
+              <span class="dm-change up">↑ 8%</span>
+            </div>
+          </div>
+          <div class="dash-content">
+            <div class="dash-chart">
+              <div class="chart-title">Rescue Activity — Last 30 days</div>
+              <div class="chart-bars">
+                <div class="chart-bar" style="height:45%"><span>M</span></div>
+                <div class="chart-bar" style="height:62%"><span>T</span></div>
+                <div class="chart-bar" style="height:38%"><span>W</span></div>
+                <div class="chart-bar" style="height:75%"><span>T</span></div>
+                <div class="chart-bar highlight-bar" style="height:88%"><span>F</span></div>
+                <div class="chart-bar" style="height:55%"><span>S</span></div>
+                <div class="chart-bar" style="height:42%"><span>S</span></div>
+              </div>
+            </div>
+            <div class="dash-recent">
+              <div class="chart-title">Recent Cases</div>
+              <div class="recent-item">
+                <span class="recent-dot critical"></span>
+                <span class="recent-text">PR-02481 • Dog, Bandra W</span>
+                <span class="recent-status">En Route</span>
+              </div>
+              <div class="recent-item">
+                <span class="recent-dot urgent"></span>
+                <span class="recent-text">PR-02479 • Cat, Andheri</span>
+                <span class="recent-status">Treating</span>
+              </div>
+              <div class="recent-item">
+                <span class="recent-dot assigned"></span>
+                <span class="recent-text">PR-02477 • Dog, Dadar</span>
+                <span class="recent-status">Assigned</span>
+              </div>
+              <div class="recent-item">
+                <span class="recent-dot recovering"></span>
+                <span class="recent-text">PR-02475 • Cat, Worli</span>
+                <span class="recent-status">Recovering</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════ TRUST / PARTNERS ═══════════════════════════════════════════ -->
+<section class="trust-section" id="impact">
+  <div class="container">
+    <p class="trust-heading">Built for people protecting animals every day</p>
+    <div class="trust-logos">
+      <div class="trust-logo">
+        <svg width="32" height="32" viewBox="0 0 32 32" fill="none"><path d="M16 4C16 4 6 10 6 18C6 24 10 28 16 28C22 28 26 24 26 18C26 10 16 4 16 4Z" stroke="currentColor" stroke-width="2"/><circle cx="16" cy="18" r="3" stroke="currentColor" stroke-width="2"/></svg>
+        <span>HopePaws<br><small>Animal Rescue</small></span>
+      </div>
+      <div class="trust-logo">
+        <svg width="32" height="32" viewBox="0 0 32 32" fill="none"><rect x="4" y="8" width="24" height="16" rx="3" stroke="currentColor" stroke-width="2"/><path d="M4 14H28" stroke="currentColor" stroke-width="2"/><path d="M12 8V4M20 8V4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        <span>CityCare<br><small>Municipal Services</small></span>
+      </div>
+      <div class="trust-logo">
+        <svg width="32" height="32" viewBox="0 0 32 32" fill="none"><path d="M16 6V26M6 16H26" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><rect x="8" y="8" width="16" height="16" rx="3" stroke="currentColor" stroke-width="2"/></svg>
+        <span>VetAlliance<br><small>Veterinary Network</small></span>
+      </div>
+      <div class="trust-logo">
+        <svg width="32" height="32" viewBox="0 0 32 32" fill="none"><path d="M6 28V12L16 4L26 12V28H6Z" stroke="currentColor" stroke-width="2"/><rect x="12" y="18" width="8" height="10" stroke="currentColor" stroke-width="2"/></svg>
+        <span>SafeHaven<br><small>Animal Welfare</small></span>
+      </div>
+      <div class="trust-logo">
+        <svg width="32" height="32" viewBox="0 0 32 32" fill="none"><circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="2"/><circle cx="20" cy="12" r="4" stroke="currentColor" stroke-width="2"/><path d="M4 28C4 22 8 18 16 18C24 18 28 22 28 28" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        <span>RescueNet<br><small>Community Network</small></span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════ STORIES ═══════════════════════════════════════════ -->
+<section class="stories-section" id="stories">
+  <div class="container">
+    <div class="section-header">
+      <h2 class="section-title">Real people. Real rescues. Real impact.</h2>
+    </div>
+    <div class="testimonials-grid">
+      <div class="testimonial-card">
+        <div class="testimonial-stars">★★★★★</div>
+        <blockquote class="testimonial-quote">"PawReach transformed how we coordinate field rescues. Before, we relied on WhatsApp groups and phone calls. Now every case is tracked, every volunteer knows their assignment, and we can see response times improve week over week."</blockquote>
+        <div class="testimonial-author">
+          <img src="testimonial_rescuer.jpg" alt="Meera S." class="testimonial-avatar" />
+          <div class="testimonial-info">
+            <span class="testimonial-name">Meera S.</span>
+            <span class="testimonial-role">Independent Animal Rescuer</span>
+          </div>
+        </div>
+      </div>
+      <div class="testimonial-card">
+        <div class="testimonial-stars">★★★★★</div>
+        <blockquote class="testimonial-quote">"The case tracking and medical records integration make collaboration with rescue teams seamless. I can see an animal's full history the moment they arrive—injury details, triage notes, photos from the field. It saves critical time."</blockquote>
+        <div class="testimonial-author">
+          <img src="testimonial_vet2.jpg" alt="Dr. James C." class="testimonial-avatar" />
+          <div class="testimonial-info">
+            <span class="testimonial-name">Dr. James C.</span>
+            <span class="testimonial-role">Veterinarian, City Vet Clinic</span>
+          </div>
+        </div>
+      </div>
+      <div class="testimonial-card">
+        <div class="testimonial-stars">★★★★★</div>
+        <blockquote class="testimonial-quote">"PawReach has strengthened our entire network. We can see the impact in real numbers—faster response, more animals getting treatment, better coordination with foster homes. The analytics help us make the case for more resources."</blockquote>
+        <div class="testimonial-author">
+          <img src="testimonial_ngo.jpg" alt="Anita R." class="testimonial-avatar" />
+          <div class="testimonial-info">
+            <span class="testimonial-name">Anita R.</span>
+            <span class="testimonial-role">NGO Program Manager</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════ WHY PAWREACH ═══════════════════════════════════════════ -->
+<section class="why-section" id="resources">
+  <div class="container">
+    <div class="section-header">
+      <h2 class="section-title">Designed for real-world rescue operations</h2>
+    </div>
+    <div class="why-grid">
+      <div class="why-card">
+        <div class="why-icon">
+          <svg width="32" height="32" viewBox="0 0 32 32" fill="none"><path d="M6 26L6 14L16 6L26 14V26" stroke="#0D9488" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M16 6V2" stroke="#E85D3A" stroke-width="2" stroke-linecap="round"/><circle cx="16" cy="2" r="1" fill="#E85D3A"/><path d="M12 26V20H20V26" stroke="#0D9488" stroke-width="2"/></svg>
+        </div>
+        <h3 class="why-title">Fast Deployment</h3>
+        <p class="why-desc">Teams can start coordinating rescue operations quickly with minimal setup and onboarding.</p>
+      </div>
+      <div class="why-card">
+        <div class="why-icon">
+          <svg width="32" height="32" viewBox="0 0 32 32" fill="none"><circle cx="16" cy="12" r="5" stroke="#0D9488" stroke-width="2"/><path d="M8 28C8 23.58 11.58 20 16 20C20.42 20 24 23.58 24 28" stroke="#0D9488" stroke-width="2" stroke-linecap="round"/><path d="M22 10L26 6M26 6V10M26 6H22" stroke="#E85D3A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+        <h3 class="why-title">Role-Based Access</h3>
+        <p class="why-desc">Dedicated workflows for citizens, rescuers, veterinarians, NGOs and administrators.</p>
+      </div>
+      <div class="why-card">
+        <div class="why-icon">
+          <svg width="32" height="32" viewBox="0 0 32 32" fill="none"><rect x="6" y="4" width="20" height="24" rx="3" stroke="#0D9488" stroke-width="2"/><path d="M12 12H20M12 16H18M12 20H16" stroke="#0D9488" stroke-width="2" stroke-linecap="round"/><path d="M22 8C24 6 28 6 28 10C28 14 22 16 22 16" stroke="#E85D3A" stroke-width="1.5" stroke-linecap="round"/></svg>
+        </div>
+        <h3 class="why-title">Low-Bandwidth Friendly</h3>
+        <p class="why-desc">Optimized for areas with unreliable mobile connectivity — because rescues happen everywhere.</p>
+      </div>
+      <div class="why-card">
+        <div class="why-icon">
+          <svg width="32" height="32" viewBox="0 0 32 32" fill="none"><rect x="6" y="10" width="20" height="16" rx="3" stroke="#0D9488" stroke-width="2"/><path d="M10 10V8C10 4.69 12.69 2 16 2C19.31 2 22 4.69 22 8V10" stroke="#0D9488" stroke-width="2"/><circle cx="16" cy="18" r="2" fill="#E85D3A"/><path d="M16 20V23" stroke="#E85D3A" stroke-width="2" stroke-linecap="round"/></svg>
+        </div>
+        <h3 class="why-title">Privacy &amp; Accountability</h3>
+        <p class="why-desc">Secure data handling, controlled location visibility and complete audit trails for every action.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════ EMOTIONAL IMPACT ═══════════════════════════════════════════ -->
+<section class="emotional-section">
+  <div class="emotional-bg">
+    <img src="recovery_panorama.jpg" alt="Recovered animals resting peacefully" />
+    <div class="emotional-overlay"></div>
+  </div>
+  <div class="container emotional-content">
+    <h2 class="emotional-title">Every rescue deserves a complete journey.</h2>
+    <p class="emotional-desc">Reporting an animal should be the beginning of care—not the end of a complaint.</p>
+    <div class="emotional-flow">
+      <span class="flow-step">Reported</span>
+      <span class="flow-arrow">→</span>
+      <span class="flow-step">Rescued</span>
+      <span class="flow-arrow">→</span>
+      <span class="flow-step">Treated</span>
+      <span class="flow-arrow">→</span>
+      <span class="flow-step active">Recovered</span>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════ FINAL CTA ═══════════════════════════════════════════ -->
+<section class="cta-section" id="contact">
+  <div class="container cta-container">
+    <h2 class="cta-title">Give every stray animal a faster path to care.</h2>
+    <p class="cta-subtitle">Connect reports, rescuers, veterinary teams and recovery into one coordinated system.</p>
+    <div class="cta-actions">
+      <button class="btn btn-primary btn-xl" id="btn-start-network">Start a Rescue Network</button>
+      <button class="btn btn-outline-light btn-xl" id="btn-book-demo">Book a Demo</button>
+    </div>
+    <p class="cta-note">For NGOs, veterinary networks and municipal teams.</p>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════ FOOTER ═══════════════════════════════════════════ -->
+<footer class="site-footer">
+  <div class="container">
+    <div class="footer-grid">
+      <div class="footer-brand">
+        <div class="footer-logo">
+          <svg width="28" height="28" viewBox="0 0 32 32" fill="none">
+            <circle cx="16" cy="16" r="15" fill="url(#footerLogoGrad)" />
+            <path d="M10 11.5C10 10.12 11.12 9 12.5 9C13.88 9 15 10.12 15 11.5C15 12.88 13.88 14 12.5 14C11.12 14 10 12.88 10 11.5Z" fill="white"/>
+            <path d="M17 11.5C17 10.12 18.12 9 19.5 9C20.88 9 22 10.12 22 11.5C22 12.88 20.88 14 19.5 14C18.12 14 17 12.88 17 11.5Z" fill="white"/>
+            <path d="M8 16C8 14.9 8.9 14 10 14C11.1 14 12 14.9 12 16C12 17.1 11.1 18 10 18C8.9 18 8 17.1 8 16Z" fill="white"/>
+            <path d="M20 16C20 14.9 20.9 14 22 14C23.1 14 24 14.9 24 16C24 17.1 23.1 18 22 18C20.9 18 20 17.1 20 16Z" fill="white"/>
+            <path d="M16 23C18.76 23 21 20.76 21 18C21 16.5 19 15 16 15C13 15 11 16.5 11 18C11 20.76 13.24 23 16 23Z" fill="white"/>
+            <defs>
+              <linearGradient id="footerLogoGrad" x1="0" y1="0" x2="32" y2="32">
+                <stop offset="0%" stop-color="#0D9488"/>
+                <stop offset="100%" stop-color="#1A365D"/>
+              </linearGradient>
+            </defs>
+          </svg>
+          <span>PawReach</span>
+        </div>
+        <p class="footer-tagline">Rescue coordination for every stray life</p>
+        <div class="footer-social">
+          <a href="#" aria-label="Twitter" class="social-link">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" fill="currentColor"/></svg>
+          </a>
+          <a href="#" aria-label="LinkedIn" class="social-link">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z" fill="currentColor"/></svg>
+          </a>
+          <a href="#" aria-label="Instagram" class="social-link">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><rect x="2" y="2" width="20" height="20" rx="5" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="5" stroke="currentColor" stroke-width="2"/><circle cx="18" cy="6" r="1.5" fill="currentColor"/></svg>
+          </a>
+          <a href="#" aria-label="YouTube" class="social-link">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M23 6.5C23 6.5 22.78 4.85 22.05 4.1C21.15 3.14 20.13 3.14 19.67 3.08C16.5 2.86 12 2.86 12 2.86S7.5 2.86 4.33 3.08C3.87 3.14 2.85 3.14 1.95 4.1C1.22 4.85 1 6.5 1 6.5S.78 8.42.78 10.34V12.16C.78 14.08 1 16 1 16S1.22 17.65 1.95 18.4C2.85 19.36 4.05 19.33 4.56 19.43C6.5 19.62 12 19.67 12 19.67S16.5 19.67 19.67 19.43C20.13 19.37 21.15 19.37 22.05 18.41C22.78 17.66 23 16.01 23 16.01S23.22 14.09 23.22 12.17V10.35C23.22 8.43 23 6.5 23 6.5Z" fill="currentColor"/><polygon points="10,8.5 16,12 10,15.5" fill="white"/></svg>
+          </a>
+        </div>
+      </div>
+
+      <div class="footer-col">
+        <h4>Product</h4>
+        <a href="#">Platform</a>
+        <a href="#">Smart Dispatch</a>
+        <a href="#">Case Tracking</a>
+        <a href="#">Mobile App</a>
+        <a href="#">Integrations</a>
+      </div>
+
+      <div class="footer-col">
+        <h4>Organizations</h4>
+        <a href="#">For NGOs</a>
+        <a href="#">For Municipalities</a>
+        <a href="#">For Veterinary Partners</a>
+        <a href="#">For Rescue Networks</a>
+      </div>
+
+      <div class="footer-col">
+        <h4>Resources</h4>
+        <a href="#">Help Center</a>
+        <a href="#">Guides</a>
+        <a href="#">Rescue Resources</a>
+        <a href="#">Case Studies</a>
+        <a href="#">Impact Reports</a>
+      </div>
+
+      <div class="footer-col">
+        <h4>Company</h4>
+        <a href="#">About</a>
+        <a href="#">Mission</a>
+        <a href="#">Careers</a>
+        <a href="#">Contact</a>
+      </div>
+    </div>
+
+    <div class="footer-bottom">
+      <span>&copy; 2026 PawReach. All rights reserved.</span>
+      <div class="footer-legal">
+        <a href="#">Privacy Policy</a>
+        <a href="#">Terms of Service</a>
+        <a href="#">Accessibility</a>
+      </div>
+    </div>
+  </div>
+</footer>
+
+<script src="script.js"></script>
+</body>
+</html>
