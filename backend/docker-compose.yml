@@ -1,0 +1,49 @@
+version: '3.8'
+
+services:
+  backend:
+    build: .
+    container_name: pawsos_backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/pawsos
+      - JWT_SECRET_KEY=dev_secret_key_change_in_production
+      - JWT_ALGORITHM=HS256
+      - ACCESS_TOKEN_EXPIRE_MINUTES=30
+      - REFRESH_TOKEN_EXPIRE_DAYS=7
+      - CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000,http://localhost:8080
+      - ENVIRONMENT=development
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - pawsos_network
+
+  db:
+    image: postgis/postgis:15-3.4
+    container_name: pawsos_db
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=pawsos
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - pawsos_network
+
+volumes:
+  postgres_data:
+
+networks:
+  pawsos_network:
+    driver: bridge
