@@ -25,3 +25,23 @@ build/
 
 # Gemini / Antigravity
 .agents/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.pytest_cache/
+*.sqlite
+*.sqlite3
+*.db
+
+# Test Coverage
+coverage/
+htmlcov/
+.coverage
+.coverage.*
+
+# Uploads
+backend/uploads/*
+!backend/uploads/.gitkeep

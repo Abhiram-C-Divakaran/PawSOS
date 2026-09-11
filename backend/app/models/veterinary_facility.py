@@ -4,6 +4,7 @@ from sqlalchemy import Column, String, Boolean, DateTime, Float, ForeignKey
 from sqlalchemy import Uuid as UUID
 from sqlalchemy.orm import relationship
 from app.database import Base
+from app.models.types import PointField
 
 class VeterinaryFacility(Base):
     __tablename__ = "veterinary_facilities"
@@ -17,6 +18,7 @@ class VeterinaryFacility(Base):
     
     latitude = Column(Float, nullable=False)
     longitude = Column(Float, nullable=False)
+    location = Column(PointField, nullable=True)
     address = Column(String, nullable=True)
     
     supports_emergency = Column(Boolean, default=False)

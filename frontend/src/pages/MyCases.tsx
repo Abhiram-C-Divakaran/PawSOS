@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../services/api';
-import { RescueCase } from '../types';
+import type { RescueCase } from '../types';
 import { AlertCircle, Clock, MapPin, Activity } from 'lucide-react';
 
 export const MyCases = () => {

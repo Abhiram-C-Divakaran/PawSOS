@@ -16,7 +16,7 @@ class User(Base):
     password_hash = Column(String, nullable=False)
     role = Column(Enum(UserRole, name="user_role_enum"), default=UserRole.CITIZEN, nullable=False)
     
-    # Rescuer specific fields, can be null if not rescuer
+    # Organization link
     organization_id = Column(UUID, ForeignKey("organizations.id"), nullable=True)
     is_active = Column(Boolean, default=True)
     is_verified = Column(Boolean, default=False)
@@ -26,3 +26,4 @@ class User(Base):
     last_login_at = Column(DateTime, nullable=True)
 
     organization = relationship("Organization", back_populates="users")
+    rescuer_profile = relationship("RescuerProfile", back_populates="user", uselist=False)

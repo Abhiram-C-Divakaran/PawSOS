@@ -1,11 +1,38 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+@import "leaflet/dist/leaflet.css";
 
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+@config "../tailwind.config.js";
 
-@layer base {
-  body {
-    @apply bg-brand-warmBg text-brand-darkNavy antialiased;
-  }
+body {
+  background-color: #FCFAF7;
+  color: #0F1D3A;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Custom map marker styles */
+.custom-rescue-marker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background-color: #EF4444;
+  color: white;
+  border-radius: 50%;
+  border: 3px solid white;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
+}
+
+.custom-rescuer-marker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background-color: #0D9488;
+  color: white;
+  border-radius: 50%;
+  border: 3px solid white;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
 }

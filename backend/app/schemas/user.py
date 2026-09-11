@@ -3,17 +3,18 @@ from uuid import UUID
 from datetime import datetime
 from app.core.constants import UserRole
 
-class UserBase(BaseModel):
+class UserCreate(BaseModel):
     full_name: str
     email: EmailStr | None = None
     phone: str
-    role: UserRole = UserRole.CITIZEN
-
-class UserCreate(UserBase):
     password: str
 
-class UserResponse(UserBase):
+class UserResponse(BaseModel):
     id: UUID
+    full_name: str
+    email: EmailStr | None = None
+    phone: str
+    role: UserRole
     is_active: bool
     is_verified: bool
     created_at: datetime

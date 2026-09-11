@@ -63,8 +63,9 @@ export const Register = () => {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
+            <label htmlFor="full_name" className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
             <input
+              id="full_name"
               type="text"
               name="full_name"
               required
@@ -74,8 +75,9 @@ export const Register = () => {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+            <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">Email Address</label>
             <input
+              id="email"
               type="email"
               name="email"
               required
@@ -85,8 +87,9 @@ export const Register = () => {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Phone Number</label>
+            <label htmlFor="phone" className="block text-sm font-medium text-gray-700 mb-1">Phone Number</label>
             <input
+              id="phone"
               type="text"
               name="phone"
               required
@@ -96,8 +99,9 @@ export const Register = () => {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+            <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">Password</label>
             <input
+              id="password"
               type="password"
               name="password"
               required
@@ -107,8 +111,9 @@ export const Register = () => {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Confirm Password</label>
+            <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 mb-1">Confirm Password</label>
             <input
+              id="confirmPassword"
               type="password"
               name="confirmPassword"
               required

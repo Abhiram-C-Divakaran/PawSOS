@@ -1,5 +1,6 @@
 from app.database import Base
 from .user import User
+from .rescuer_profile import RescuerProfile
 from .organization import Organization
 from .animal import Animal
 from .animal_image import AnimalImage

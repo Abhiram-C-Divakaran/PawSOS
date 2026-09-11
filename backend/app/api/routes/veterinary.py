@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from uuid import UUID
 from typing import List
+from datetime import datetime
 from app.database import get_db
 from app.models.user import User
 from app.models.treatment import Treatment
@@ -11,7 +12,6 @@ from app.core.permissions import RoleChecker
 from app.core.constants import UserRole, RescueStatus
 from app.core.exceptions import NotFoundException
 from app.services.rescue_service import RescueService
-from datetime import datetime
 
 router = APIRouter()
 
@@ -34,12 +34,25 @@ def add_treatment(
         diagnosis=treatment_in.diagnosis,
         treatment_notes=treatment_in.treatment_notes,
         medications=treatment_in.medications,
+        treatment_started_at=treatment_in.treatment_started_at or datetime.utcnow(),
+        follow_up_date=treatment_in.follow_up_date,
+        recovery_status=treatment_in.recovery_status or "In Treatment",
     )
     db.add(treatment)
     
+    # Assign facility to case if not already set
+    if not case.veterinary_facility_id:
+        case.veterinary_facility_id = treatment_in.facility_id
+
     # Update case status to UNDER_TREATMENT
     if case.status != RescueStatus.UNDER_TREATMENT:
-        RescueService.update_status(db, case, RescueStatus.UNDER_TREATMENT, current_user.id, "Treatment started")
+        RescueService.update_status(
+            db,
+            case,
+            RescueStatus.UNDER_TREATMENT,
+            current_user.id,
+            f"Treatment initiated: {treatment_in.diagnosis}"
+        )
         
     db.commit()
     db.refresh(treatment)
@@ -49,7 +62,7 @@ def add_treatment(
 def get_treatments(
     case_id: UUID,
     db: Session = Depends(get_db),
-    current_user: User = Depends(RoleChecker([UserRole.VETERINARIAN, UserRole.RESCUER, UserRole.NGO_ADMIN]))
+    current_user: User = Depends(RoleChecker([UserRole.VETERINARIAN, UserRole.RESCUER, UserRole.NGO_ADMIN, UserRole.SUPER_ADMIN]))
 ):
     treatments = db.query(Treatment).filter(Treatment.rescue_case_id == case_id).all()
     return treatments
@@ -65,7 +78,8 @@ def update_treatment(
     if not treatment:
         raise NotFoundException("Treatment not found")
         
-    for key, value in treatment_in.dict(exclude_unset=True).items():
+    update_data = treatment_in.model_dump(exclude_unset=True)
+    for key, value in update_data.items():
         setattr(treatment, key, value)
         
     db.commit()

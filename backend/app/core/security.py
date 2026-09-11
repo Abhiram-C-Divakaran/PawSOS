@@ -4,6 +4,7 @@ import jwt
 from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError
 from app.config import settings
+from app.core.exceptions import UnauthorizedException
 
 ph = PasswordHasher()
 
@@ -35,3 +36,12 @@ def create_refresh_token(subject: Union[str, Any], expires_delta: timedelta = No
     to_encode = {"exp": expire, "sub": str(subject), "type": "refresh"}
     encoded_jwt = jwt.encode(to_encode, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
     return encoded_jwt
+
+def decode_token(token: str) -> dict:
+    try:
+        payload = jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=[settings.JWT_ALGORITHM])
+        return payload
+    except jwt.ExpiredSignatureError:
+        raise UnauthorizedException("Token has expired")
+    except jwt.InvalidTokenError:
+        raise UnauthorizedException("Invalid token")

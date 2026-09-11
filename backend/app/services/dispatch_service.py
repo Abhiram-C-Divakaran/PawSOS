@@ -1,41 +1,112 @@
+import math
+from typing import List, Tuple
 from sqlalchemy.orm import Session
+from sqlalchemy import func
+from app.models.rescue_case import RescueCase
 from app.models.user import User
-from app.models.rescue_assignment import RescueAssignment
-from app.core.constants import UserRole, RescuerAvailability
-from typing import List
+from app.models.rescuer_profile import RescuerProfile
+from app.core.constants import RescueStatus, RescuePriority, RescuerAvailability, UserRole
+
+PRIORITY_ORDER = {
+    RescuePriority.CRITICAL: 4,
+    RescuePriority.URGENT: 3,
+    RescuePriority.MODERATE: 2,
+    RescuePriority.GENERAL: 1,
+}
+
+def haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Calculate the great-circle distance between two points on the Earth in kilometers."""
+    R = 6371.0  # Earth radius in kilometers
+    dlat = math.radians(lat2 - lat1)
+    dlon = math.radians(lon2 - lon1)
+    a = (
+        math.sin(dlat / 2.0) ** 2
+        + math.cos(math.radians(lat1))
+        * math.cos(math.radians(lat2))
+        * math.sin(dlon / 2.0) ** 2
+    )
+    c = 2.0 * math.atan2(math.sqrt(a), math.sqrt(1.0 - a))
+    return round(R * c, 2)
 
 class DispatchService:
     @staticmethod
-    def find_nearest_responders(db: Session, lat: float, lng: float, radius_km: float = 5.0) -> List[User]:
+    def find_nearby_rescues(
+        db: Session,
+        lat: float,
+        lng: float,
+        radius_km: float = 10.0
+    ) -> List[Tuple[RescueCase, float]]:
         """
-        Mock implementation of PostGIS nearest responders query for MVP.
-        In a real scenario, this uses GeoAlchemy2 to query `ST_DWithin` and `ST_Distance`.
-        For now, we fetch available rescuers and mock a distance calculation.
+        Geographic filtering for available rescue cases.
+        Uses native PostGIS on PostgreSQL if available, otherwise Haversine math.
+        Ranks by:
+          1. Priority (CRITICAL > URGENT > MODERATE > GENERAL)
+          2. Distance (closest first)
+          3. Age (oldest first)
         """
-        # Fetch available rescuers
-        # NOTE: MVP assumes we don't have PostGIS coords for rescuers yet, just returning all available for the demo.
-        rescuers = db.query(User).filter(
-            User.role == UserRole.RESCUER,
-            User.is_active == True,
-            # User.availability_status == RescuerAvailability.AVAILABLE # Assuming added to rescuer profile
-        ).all()
-        
-        # Sort by mocked distance
-        return rescuers
+        open_statuses = [RescueStatus.TRIAGED, RescueStatus.SEARCHING_RESPONDER]
+        dialect_name = db.bind.dialect.name if db.bind else "sqlite"
+
+        results: List[Tuple[RescueCase, float]] = []
+
+        if dialect_name == "postgresql":
+            # Native PostGIS query
+            point_geom = func.ST_SetSRID(func.ST_MakePoint(lng, lat), 4326)
+            query = (
+                db.query(
+                    RescueCase,
+                    (func.ST_Distance(RescueCase.location, point_geom) / 1000.0).label("dist_km")
+                )
+                .filter(
+                    RescueCase.status.in_(open_statuses),
+                    func.ST_DWithin(RescueCase.location, point_geom, radius_km * 1000.0)
+                )
+                .all()
+            )
+            for case, dist in query:
+                results.append((case, round(float(dist), 2)))
+        else:
+            # SQLite / standard SQL fallback with Python Haversine calculation
+            cases = db.query(RescueCase).filter(RescueCase.status.in_(open_statuses)).all()
+            for case in cases:
+                dist = haversine_distance(lat, lng, case.latitude, case.longitude)
+                if dist <= radius_km:
+                    results.append((case, dist))
+
+        # Sort: Highest priority first, then closest distance, then oldest created_at
+        results.sort(
+            key=lambda item: (
+                -PRIORITY_ORDER.get(item[0].triage_priority, 0),
+                item[1],
+                item[0].created_at
+            )
+        )
+
+        return results
 
     @staticmethod
-    def calculate_dispatch_score(distance_km: float, availability: bool, experience: int = 1) -> float:
-        """
-        Calculate dispatch score based on weighting.
-        """
-        score = 0.0
-        if distance_km < 2:
-            score += 40
-        elif distance_km < 5:
-            score += 20
-            
-        if availability:
-            score += 25
-            
-        score += (experience * 5)
-        return min(score, 100)
+    def find_nearby_available_rescuers(
+        db: Session,
+        case_lat: float,
+        case_lng: float,
+        radius_km: float = 10.0
+    ) -> List[Tuple[User, float]]:
+        """Find available responders within the specified radius."""
+        profiles = (
+            db.query(RescuerProfile)
+            .filter(
+                RescuerProfile.availability_status == RescuerAvailability.AVAILABLE,
+                RescuerProfile.latitude.isnot(None),
+                RescuerProfile.longitude.isnot(None),
+            )
+            .all()
+        )
+
+        nearby = []
+        for p in profiles:
+            dist = haversine_distance(case_lat, case_lng, p.latitude, p.longitude)
+            if dist <= radius_km:
+                nearby.append((p.user, dist))
+
+        nearby.sort(key=lambda x: x[1])
+        return nearby
