@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import api from '../services/api';
 import { formatApiError } from '../utils/error';
 import type { RescueCase, RescueStatus, VeterinaryFacility, DispatchOffer } from '../types';
@@ -17,6 +17,11 @@ import {
 import { MapView } from '../components/MapView';
 import { Toast, type ToastMessage } from '../components/Toast';
 
+const formatMinutesAgo = (createdAt: string) => {
+  const elapsed = Math.round((Date.now() - new Date(createdAt).getTime()) / 60000);
+  return `${Math.max(0, elapsed)} min ago`;
+};
+
 const OfferCountdown = ({
   expiresAt,
   onExpired,
@@ -28,21 +33,24 @@ const OfferCountdown = ({
 
   useEffect(() => {
     if (!expiresAt) return;
-    const calculateTime = () => {
-      const diff = Math.max(0, Math.floor((new Date(expiresAt).getTime() - Date.now()) / 1000));
+
+    const calcTime = () => {
+      const exp = new Date(expiresAt).getTime();
+      const diff = Math.max(0, Math.floor((exp - Date.now()) / 1000));
       setTimeLeft(diff);
       if (diff <= 0) {
         onExpired();
       }
     };
-    calculateTime();
-    const interval = setInterval(calculateTime, 1000);
+
+    calcTime();
+    const interval = setInterval(calcTime, 1000);
     return () => clearInterval(interval);
   }, [expiresAt, onExpired]);
 
   const minutes = Math.floor(timeLeft / 60);
   const seconds = timeLeft % 60;
-  const formatted = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+  const formatted = `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
 
   return (
     <span
@@ -54,7 +62,7 @@ const OfferCountdown = ({
       }`}
     >
       <Clock className="w-3.5 h-3.5 mr-1" />
-      Expires in {formatted}
+      {formatted}
     </span>
   );
 };
@@ -68,15 +76,21 @@ export const RescuerDashboard = () => {
 
   const [loading, setLoading] = useState(true);
   const [rescuerCoords, setRescuerCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const rescuerCoordsRef = useRef<{ lat: number; lng: number } | null>(null);
   const [locating, setLocating] = useState(false);
   const [toast, setToast] = useState<ToastMessage | null>(null);
+
+  // Keep ref in sync
+  useEffect(() => {
+    rescuerCoordsRef.current = rescuerCoords;
+  }, [rescuerCoords]);
 
   // Reject dialog state
   const [rejectingOfferId, setRejectingOfferId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState<string>('too_far');
   const [submittingAction, setSubmittingAction] = useState<string | null>(null);
 
-  const fetchFacilities = async () => {
+  const fetchFacilities = useCallback(async () => {
     try {
       const res = await api.get('/veterinary/facilities');
       setFacilities(res.data);
@@ -86,7 +100,7 @@ export const RescuerDashboard = () => {
     } catch (err) {
       console.error('Failed to load facilities', err);
     }
-  };
+  }, []);
 
   const fetchIncomingOffers = useCallback(async () => {
     try {
@@ -97,7 +111,7 @@ export const RescuerDashboard = () => {
     }
   }, []);
 
-  const syncLocationAndFetchNearby = async (lat: number, lng: number) => {
+  const syncLocationAndFetchNearby = useCallback(async (lat: number, lng: number) => {
     try {
       await api.patch('/rescuers/me/location', { latitude: lat, longitude: lng });
 
@@ -115,9 +129,9 @@ export const RescuerDashboard = () => {
       setLoading(false);
       setLocating(false);
     }
-  };
+  }, []);
 
-  const detectLocation = () => {
+  const detectLocation = useCallback(() => {
     if (!navigator.geolocation) {
       setToast({
         id: 'no-geo',
@@ -144,15 +158,12 @@ export const RescuerDashboard = () => {
         setToast({
           id: 'geo-denied',
           type: 'warning',
-          message: 'Location access denied. Using station coordinates.',
+          message: 'Location access was denied or unavailable. Please enable GPS permissions to receive distance-matched rescues.',
         });
-        const defaultCoords = { lat: 19.0760, lng: 72.8777 };
-        setRescuerCoords(defaultCoords);
-        syncLocationAndFetchNearby(defaultCoords.lat, defaultCoords.lng);
       },
       { timeout: 10000, enableHighAccuracy: true }
     );
-  };
+  }, [syncLocationAndFetchNearby]);
 
   useEffect(() => {
     fetchFacilities();
@@ -161,13 +172,13 @@ export const RescuerDashboard = () => {
 
     const interval = setInterval(() => {
       fetchIncomingOffers();
-      if (rescuerCoords) {
-        syncLocationAndFetchNearby(rescuerCoords.lat, rescuerCoords.lng);
+      if (rescuerCoordsRef.current) {
+        syncLocationAndFetchNearby(rescuerCoordsRef.current.lat, rescuerCoordsRef.current.lng);
       }
     }, 8000);
 
     return () => clearInterval(interval);
-  }, [fetchIncomingOffers]);
+  }, [fetchFacilities, detectLocation, fetchIncomingOffers, syncLocationAndFetchNearby]);
 
   const handleAcceptOffer = async (offerId: string) => {
     setSubmittingAction(offerId);
@@ -653,7 +664,7 @@ export const RescuerDashboard = () => {
                       <span className="text-xs font-mono text-gray-400 font-semibold">{rescue.case_number}</span>
                       <span className="text-xs text-gray-400 flex items-center">
                         <Clock className="w-3.5 h-3.5 mr-1" />
-                        {Math.round((Date.now() - new Date(rescue.created_at).getTime()) / 60000)} min ago
+                        {formatMinutesAgo(rescue.created_at)}
                       </span>
                     </div>
 

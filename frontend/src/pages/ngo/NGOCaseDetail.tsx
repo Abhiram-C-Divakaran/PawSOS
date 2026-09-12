@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -14,24 +14,26 @@ import api from '../../services/api';
 import { formatApiError } from '../../utils/error';
 import { MapView } from '../../components/MapView';
 import { Toast, type ToastMessage } from '../../components/Toast';
+import type { NGOResponderSummary, VeterinaryFacility } from '../../types';
 
-export const NGOCaseDetail: React.FC = () => {
+export const NGOCaseDetail = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [caseData, setCaseData] = useState<any | null>(null);
-  const [loading, setLoading] = useState<boolean>(true);
+  const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<ToastMessage | null>(null);
 
   // Administrative action modal state
   const [actionType, setActionType] = useState<string | null>(null);
-  const [actionReason, setActionReason] = useState<string>('');
+  const [actionReason, setActionReason] = useState('');
   const [selectedRescuerId, setSelectedRescuerId] = useState<string>('');
   const [selectedFacilityId, setSelectedFacilityId] = useState<string>('');
-  const [respondersList, setRespondersList] = useState<any[]>([]);
-  const [facilitiesList, setFacilitiesList] = useState<any[]>([]);
-  const [executingAction, setExecutingAction] = useState<boolean>(false);
+  const [respondersList, setRespondersList] = useState<NGOResponderSummary[]>([]);
+  const [facilitiesList, setFacilitiesList] = useState<VeterinaryFacility[]>([]);
+  const [executingAction, setExecutingAction] = useState(false);
 
-  const fetchDossier = async () => {
+  const fetchDossier = useCallback(async () => {
+    if (!id) return;
     try {
       const res = await api.get(`/ngo/cases/${id}`);
       setCaseData(res.data);
@@ -44,9 +46,9 @@ export const NGOCaseDetail: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [id]);
 
-  const loadActionPrerequisites = async () => {
+  const loadActionPrerequisites = useCallback(async () => {
     try {
       const [respRes, facRes] = await Promise.all([
         api.get('/ngo/responders').catch(() => ({ data: [] })),
@@ -59,12 +61,12 @@ export const NGOCaseDetail: React.FC = () => {
     } catch (err) {
       console.error('Failed to load action prerequisites', err);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchDossier();
     loadActionPrerequisites();
-  }, [id]);
+  }, [fetchDossier, loadActionPrerequisites]);
 
   const handleExecuteAction = async () => {
     if (!actionType) return;
@@ -360,7 +362,7 @@ export const NGOCaseDetail: React.FC = () => {
                 >
                   {facilitiesList.map((f) => (
                     <option key={f.id} value={f.id}>
-                      {f.name} {f.is_24_7 ? '(24/7)' : ''}
+                      {f.name} {f.is_24_hours ? '(24/7)' : ''}
                     </option>
                   ))}
                 </select>

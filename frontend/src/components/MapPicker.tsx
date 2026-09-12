@@ -16,6 +16,11 @@ export const MapPicker: React.FC<MapPickerProps> = ({
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
   const markerRef = useRef<L.Marker | null>(null);
+  const onLocationSelectRef = useRef(onLocationSelect);
+
+  useEffect(() => {
+    onLocationSelectRef.current = onLocationSelect;
+  }, [onLocationSelect]);
 
   const [hasLocation, setHasLocation] = useState<boolean>(!!(initialLat && initialLng));
   const [detecting, setDetecting] = useState<boolean>(false);
@@ -54,7 +59,7 @@ export const MapPicker: React.FC<MapPickerProps> = ({
       marker.on('dragend', () => {
         const pos = marker.getLatLng();
         setHasLocation(true);
-        onLocationSelect({
+        onLocationSelectRef.current({
           lat: Number(pos.lat.toFixed(6)),
           lng: Number(pos.lng.toFixed(6)),
         });
@@ -78,7 +83,7 @@ export const MapPicker: React.FC<MapPickerProps> = ({
 
         marker.on('dragend', () => {
           const pos = marker.getLatLng();
-          onLocationSelect({
+          onLocationSelectRef.current({
             lat: Number(pos.lat.toFixed(6)),
             lng: Number(pos.lng.toFixed(6)),
           });
@@ -89,7 +94,7 @@ export const MapPicker: React.FC<MapPickerProps> = ({
 
       setHasLocation(true);
       setGeoError('');
-      onLocationSelect({ lat: cleanLat, lng: cleanLng });
+      onLocationSelectRef.current({ lat: cleanLat, lng: cleanLng });
     });
 
     return () => {
@@ -97,7 +102,7 @@ export const MapPicker: React.FC<MapPickerProps> = ({
       mapInstanceRef.current = null;
       markerRef.current = null;
     };
-  }, []);
+  }, [initialLat, initialLng]);
 
   const handleDetectLocation = () => {
     if (!navigator.geolocation) {
@@ -127,7 +132,7 @@ export const MapPicker: React.FC<MapPickerProps> = ({
 
             marker.on('dragend', () => {
               const pos = marker.getLatLng();
-              onLocationSelect({
+              onLocationSelectRef.current({
                 lat: Number(pos.lat.toFixed(6)),
                 lng: Number(pos.lng.toFixed(6)),
               });
@@ -138,7 +143,7 @@ export const MapPicker: React.FC<MapPickerProps> = ({
         }
 
         setHasLocation(true);
-        onLocationSelect({
+        onLocationSelectRef.current({
           lat,
           lng,
           addressText: `GPS Coordinates: ${lat}, ${lng}`,

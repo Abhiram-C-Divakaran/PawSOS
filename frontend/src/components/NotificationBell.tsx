@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Bell, CheckCheck, ShieldAlert, HeartHandshake, Stethoscope } from 'lucide-react';
 import api from '../services/api';
@@ -16,21 +16,21 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ variant = 'l
   const dropdownRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
 
-  const fetchNotifications = async () => {
+  const fetchNotifications = useCallback(async () => {
     try {
       const res = await api.get('/notifications');
       setNotifications(res.data.items || []);
       setUnreadCount(res.data.unread_count || 0);
-    } catch (err) {
+    } catch {
       // Ignore network errors in polling
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchNotifications();
     const interval = setInterval(fetchNotifications, 15000);
     return () => clearInterval(interval);
-  }, []);
+  }, [fetchNotifications]);
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -61,7 +61,7 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ variant = 'l
           prev.map((n) => (n.id === notif.id ? { ...n, is_read: true } : n))
         );
         setUnreadCount((prev) => Math.max(0, prev - 1));
-      } catch (err) {
+      } catch {
         // Continue navigation even if read patch fails
       }
     }
@@ -78,7 +78,7 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ variant = 'l
           navigate(`/cases/${parsed.case_id}`);
           return;
         }
-      } catch (e) {
+      } catch {
         // ignore parse errors
       }
     }

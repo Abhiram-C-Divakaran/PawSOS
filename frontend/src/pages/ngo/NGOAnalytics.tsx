@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   TrendingUp,
   Clock,
@@ -40,7 +40,7 @@ export const NGOAnalytics: React.FC = () => {
   const [hotspots, setHotspots] = useState<HotspotItem[]>([]);
   const [insights, setInsights] = useState<NGOInsightsData | null>(null);
 
-  const fetchAnalytics = async () => {
+  const fetchAnalytics = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -63,11 +63,11 @@ export const NGOAnalytics: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [period]);
 
   useEffect(() => {
     fetchAnalytics();
-  }, [period]);
+  }, [fetchAnalytics]);
 
   const chartData = responseTimes.map((item) => ({
     date: item.date.length > 5 ? item.date.slice(5) : item.date,

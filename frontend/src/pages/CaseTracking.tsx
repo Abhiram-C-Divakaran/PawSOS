@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import api from '../services/api';
 import { formatApiError } from '../utils/error';
@@ -13,7 +13,7 @@ export const CaseTracking = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  const fetchCaseData = async () => {
+  const fetchCaseData = useCallback(async () => {
     try {
       const [caseRes, timelineRes] = await Promise.all([
         api.get(`/rescues/${id}`),
@@ -26,14 +26,14 @@ export const CaseTracking = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [id]);
 
   useEffect(() => {
     fetchCaseData();
     // Auto refresh every 10 seconds for real-time tracking
     const interval = setInterval(fetchCaseData, 10000);
     return () => clearInterval(interval);
-  }, [id]);
+  }, [fetchCaseData]);
 
   if (loading && !rescueCase) {
     return (

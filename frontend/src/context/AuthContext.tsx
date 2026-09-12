@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
 import api from '../services/api';
 import { unregisterDeviceTokenFromBackend } from '../services/firebase';
 import type { User } from '../types';
@@ -18,7 +18,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
 
-  const refreshUser = async () => {
+  const refreshUser = useCallback(async () => {
     const token = localStorage.getItem('access_token');
     if (!token) {
       setUser(null);
@@ -37,11 +37,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     refreshUser();
-  }, []);
+  }, [refreshUser]);
 
   const login = async (tokenData: any) => {
     if (tokenData?.access_token) {
@@ -58,13 +58,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const logout = async () => {
     try {
       await unregisterDeviceTokenFromBackend();
-    } catch (e) {
+    } catch {
       // Ignore unregister errors during logout
     }
 
     try {
       await api.post('/auth/logout');
-    } catch (e) {
+    } catch {
       // Continue cleanup even if server request fails
     }
 

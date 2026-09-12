@@ -14,7 +14,7 @@ export const MyCases = () => {
       try {
         const response = await api.get('/rescues/my');
         setCases(response.data);
-      } catch (err) {
+      } catch {
         setError('Failed to load your rescue cases.');
       } finally {
         setLoading(false);
