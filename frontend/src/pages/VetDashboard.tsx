@@ -112,6 +112,7 @@ export const VetDashboard = () => {
   const handleAdvanceStatus = async (targetStatus: RescueStatus) => {
     if (!selectedCase) return;
 
+    setSubmitting(true);
     try {
       await api.patch(`/rescues/${selectedCase.id}/status`, {
         status: targetStatus,
@@ -132,6 +133,8 @@ export const VetDashboard = () => {
         type: 'error',
         message: formatApiError(err, 'Failed to advance case status.'),
       });
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -332,10 +335,11 @@ export const VetDashboard = () => {
                       <button
                         type="button"
                         onClick={() => handleAdvanceStatus('RECOVERING')}
-                        className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-4 py-2.5 rounded-lg shadow-sm transition-colors flex items-center"
+                        disabled={submitting}
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-4 py-2.5 rounded-lg shadow-sm transition-colors flex items-center disabled:opacity-50"
                       >
                         <HeartPulse className="w-3.5 h-3.5 mr-1.5" />
-                        Mark as Recovering
+                        {submitting ? 'Updating...' : 'Mark as Recovering'}
                       </button>
                     </div>
                   </div>
@@ -350,23 +354,26 @@ export const VetDashboard = () => {
                       <button
                         type="button"
                         onClick={() => handleAdvanceStatus('READY_FOR_RELEASE')}
-                        className="bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold px-4 py-2.5 rounded-lg shadow-sm transition-colors"
+                        disabled={submitting}
+                        className="bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold px-4 py-2.5 rounded-lg shadow-sm transition-colors disabled:opacity-50"
                       >
-                        Ready for Release
+                        {submitting ? 'Updating...' : 'Ready for Release'}
                       </button>
                       <button
                         type="button"
                         onClick={() => handleAdvanceStatus('READY_FOR_ADOPTION')}
-                        className="bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold px-4 py-2.5 rounded-lg shadow-sm transition-colors"
+                        disabled={submitting}
+                        className="bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold px-4 py-2.5 rounded-lg shadow-sm transition-colors disabled:opacity-50"
                       >
-                        Ready for Adoption
+                        {submitting ? 'Updating...' : 'Ready for Adoption'}
                       </button>
                       <button
                         type="button"
                         onClick={() => handleAdvanceStatus('CLOSED')}
-                        className="bg-gray-800 hover:bg-gray-900 text-white text-xs font-bold px-4 py-2.5 rounded-lg shadow-sm transition-colors"
+                        disabled={submitting}
+                        className="bg-gray-800 hover:bg-gray-900 text-white text-xs font-bold px-4 py-2.5 rounded-lg shadow-sm transition-colors disabled:opacity-50"
                       >
-                        Close Case
+                        {submitting ? 'Updating...' : 'Close Case'}
                       </button>
                     </div>
                   </div>

@@ -29,6 +29,7 @@ export const NGOCaseDetail: React.FC = () => {
   const [selectedFacilityId, setSelectedFacilityId] = useState<string>('');
   const [respondersList, setRespondersList] = useState<any[]>([]);
   const [facilitiesList, setFacilitiesList] = useState<any[]>([]);
+  const [executingAction, setExecutingAction] = useState<boolean>(false);
 
   const fetchDossier = async () => {
     try {
@@ -48,8 +49,8 @@ export const NGOCaseDetail: React.FC = () => {
   const loadActionPrerequisites = async () => {
     try {
       const [respRes, facRes] = await Promise.all([
-        api.get('/ngo/responders'),
-        api.get('/ngo/veterinary'),
+        api.get('/ngo/responders').catch(() => ({ data: [] })),
+        api.get('/ngo/veterinary').catch(() => ({ data: [] })),
       ]);
       setRespondersList(respRes.data || []);
       setFacilitiesList(facRes.data || []);
@@ -68,17 +69,20 @@ export const NGOCaseDetail: React.FC = () => {
   const handleExecuteAction = async () => {
     if (!actionType) return;
     try {
+      setExecutingAction(true);
       const payload: any = {
         action: actionType,
         reason: actionReason || 'Administrative override from NGO Command Center',
       };
       if (actionType === 'assign_responder') {
+        payload.rescuer_id = selectedRescuerId;
         payload.target_id = selectedRescuerId;
       } else if (actionType === 'change_facility') {
+        payload.veterinary_facility_id = selectedFacilityId;
         payload.target_id = selectedFacilityId;
       }
 
-      const res = await api.post(`/ngo/cases/${id}/action`, payload);
+      const res = await api.post(`/ngo/cases/${id}/actions`, payload);
       setToast({
         id: 'action-ok',
         type: 'success',
@@ -93,6 +97,8 @@ export const NGOCaseDetail: React.FC = () => {
         type: 'error',
         message: formatApiError(err, 'Failed to execute administrative action.'),
       });
+    } finally {
+      setExecutingAction(false);
     }
   };
 
@@ -354,9 +360,16 @@ export const NGOCaseDetail: React.FC = () => {
             <div className="flex gap-2 pt-2">
               <button
                 onClick={handleExecuteAction}
-                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 rounded-xl text-xs transition-colors"
+                disabled={executingAction}
+                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 rounded-xl text-xs transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5"
               >
-                Execute & Audit Log
+                {executingAction ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" /> Executing...
+                  </>
+                ) : (
+                  'Execute & Audit Log'
+                )}
               </button>
               <button
                 onClick={() => setActionType(null)}

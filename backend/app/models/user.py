@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import Column, String, Boolean, DateTime, Enum, ForeignKey
+from sqlalchemy import Column, String, Boolean, DateTime, Enum, ForeignKey, JSON
 from sqlalchemy import Uuid as UUID
 from sqlalchemy.orm import relationship
 from app.database import Base
@@ -21,6 +21,7 @@ class User(Base):
     veterinary_facility_id = Column(UUID, ForeignKey("veterinary_facilities.id"), nullable=True)
     is_active = Column(Boolean, default=True)
     is_verified = Column(Boolean, default=False)
+    notification_preferences = Column(JSON, nullable=True)
     
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

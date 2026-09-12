@@ -154,7 +154,70 @@ export interface HotspotItem {
   area_name?: string;
   incident_count: number;
   critical_count: number;
+  urgent_count?: number;
   top_species: string;
+  average_response_minutes?: number;
+}
+
+export interface ResponseTimeDataPoint {
+  date: string;
+  avg_response_minutes: number;
+  cases: number;
+}
+
+export interface RescueOutcomesData {
+  outcomes: Record<string, number>;
+  rescue_success_rate: number;
+  unresolved_rate: number;
+  veterinary_handoff_rate: number;
+  total_cases: number;
+}
+
+export interface NGOInsightsData {
+  busiest_day: string | null;
+  busiest_time_range: string | null;
+  top_rescue_area: string | null;
+  responder_acceptance_rate_pct: number;
+  avg_dispatch_attempts: number;
+  escalation_rate_pct: number;
+}
+
+export interface OrganizationProfile {
+  id: string;
+  name: string;
+  organization_type: string;
+  email?: string;
+  phone?: string;
+  address?: string;
+  operating_region?: string;
+  description?: string;
+  responders_count: number;
+  veterinary_partners_count: number;
+  created_at?: string;
+  is_active: boolean;
+}
+
+export interface OrganizationProfileUpdate {
+  name?: string;
+  email?: string;
+  phone?: string;
+  address?: string;
+  operating_region?: string;
+  description?: string;
+}
+
+export interface DispatchSettings {
+  default_radius_km: number;
+  radius_escalation_levels: number[];
+  offer_expiration_seconds: number;
+  stale_location_timeout_seconds: number;
+}
+
+export interface NotificationPreferences {
+  critical_rescue_alerts: boolean;
+  dispatch_failures: boolean;
+  veterinary_updates: boolean;
+  case_closures: boolean;
 }
 
 export interface NGOResponderSummary {
@@ -188,4 +251,5 @@ export interface AuditLogItem {
   new_value?: Record<string, any>;
   timestamp: string;
 }
+
 

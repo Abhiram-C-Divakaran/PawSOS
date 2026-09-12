@@ -74,6 +74,7 @@ export const RescuerDashboard = () => {
   // Reject dialog state
   const [rejectingOfferId, setRejectingOfferId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState<string>('too_far');
+  const [submittingAction, setSubmittingAction] = useState<string | null>(null);
 
   const fetchFacilities = async () => {
     try {
@@ -169,6 +170,7 @@ export const RescuerDashboard = () => {
   }, [fetchIncomingOffers]);
 
   const handleAcceptOffer = async (offerId: string) => {
+    setSubmittingAction(offerId);
     try {
       const res = await api.post(`/rescuers/offers/${offerId}/accept`);
       setToast({
@@ -192,11 +194,14 @@ export const RescuerDashboard = () => {
         message: formatApiError(err, 'This offer expired or was claimed by another responder.'),
       });
       fetchIncomingOffers();
+    } finally {
+      setSubmittingAction(null);
     }
   };
 
   const handleRejectOffer = async () => {
     if (!rejectingOfferId) return;
+    setSubmittingAction(rejectingOfferId);
     try {
       await api.post(`/rescuers/offers/${rejectingOfferId}/reject`, {
         reason: rejectReason,
@@ -214,10 +219,13 @@ export const RescuerDashboard = () => {
         type: 'error',
         message: formatApiError(err, 'Failed to decline offer.'),
       });
+    } finally {
+      setSubmittingAction(null);
     }
   };
 
   const handleDirectAccept = async (caseId: string) => {
+    setSubmittingAction(caseId);
     try {
       await api.post(`/rescues/${caseId}/accept`);
       const caseRes = await api.get(`/rescues/${caseId}`);
@@ -239,12 +247,15 @@ export const RescuerDashboard = () => {
       if (rescuerCoords) {
         syncLocationAndFetchNearby(rescuerCoords.lat, rescuerCoords.lng);
       }
+    } finally {
+      setSubmittingAction(null);
     }
   };
 
   const handleStatusUpdate = async (newStatus: RescueStatus) => {
     if (!activeCase) return;
 
+    setSubmittingAction(newStatus);
     try {
       const payload: any = {
         status: newStatus,
@@ -276,6 +287,8 @@ export const RescuerDashboard = () => {
         type: 'error',
         message: formatApiError(err, 'Failed to update rescue status.'),
       });
+    } finally {
+      setSubmittingAction(null);
     }
   };
 
@@ -409,15 +422,17 @@ export const RescuerDashboard = () => {
                     <button
                       id={`accept-offer-btn-${offer.id}`}
                       onClick={() => handleAcceptOffer(offer.id)}
-                      className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 px-4 rounded-xl shadow transition-colors flex items-center justify-center gap-2"
+                      disabled={!!submittingAction}
+                      className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 px-4 rounded-xl shadow transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
                     >
                       <CheckCircle className="w-4 h-4" />
-                      Accept Rescue
+                      {submittingAction === offer.id ? 'Accepting...' : 'Accept Rescue'}
                     </button>
                     <button
                       id={`decline-offer-btn-${offer.id}`}
                       onClick={() => setRejectingOfferId(offer.id)}
-                      className="px-4 py-3 border border-stone-300 hover:bg-stone-100 text-stone-700 font-semibold rounded-xl transition-colors flex items-center justify-center gap-1.5"
+                      disabled={!!submittingAction}
+                      className="px-4 py-3 border border-stone-300 hover:bg-stone-100 text-stone-700 font-semibold rounded-xl transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50"
                     >
                       <XCircle className="w-4 h-4 text-stone-400" />
                       Decline
@@ -578,9 +593,10 @@ export const RescuerDashboard = () => {
                       key={nextStatus}
                       type="button"
                       onClick={() => handleStatusUpdate(nextStatus)}
-                      className="w-full bg-brand-coral hover:bg-red-500 text-white font-bold py-3.5 px-4 rounded-xl shadow-md transition-all flex items-center justify-between"
+                      disabled={!!submittingAction}
+                      className="w-full bg-brand-coral hover:bg-red-500 text-white font-bold py-3.5 px-4 rounded-xl shadow-md transition-all flex items-center justify-between disabled:opacity-50"
                     >
-                      <span>Mark as {nextStatus.replace(/_/g, ' ')}</span>
+                      <span>{submittingAction === nextStatus ? 'Updating Status...' : `Mark as ${nextStatus.replace(/_/g, ' ')}`}</span>
                       <ChevronRight className="w-5 h-5" />
                     </button>
                   ))}
@@ -660,9 +676,10 @@ export const RescuerDashboard = () => {
                   <button
                     type="button"
                     onClick={() => handleDirectAccept(rescue.id)}
-                    className="w-full md:w-auto bg-brand-darkNavy hover:bg-brand-deepNavy text-white px-5 py-2.5 rounded-lg text-sm font-semibold shadow-sm transition-colors flex items-center justify-center flex-shrink-0"
+                    disabled={!!submittingAction}
+                    className="w-full md:w-auto bg-brand-darkNavy hover:bg-brand-deepNavy text-white px-5 py-2.5 rounded-lg text-sm font-semibold shadow-sm transition-colors flex items-center justify-center flex-shrink-0 disabled:opacity-50"
                   >
-                    Accept Rescue Mission
+                    {submittingAction === rescue.id ? 'Claiming Mission...' : 'Accept Rescue Mission'}
                   </button>
                 </div>
               ))}

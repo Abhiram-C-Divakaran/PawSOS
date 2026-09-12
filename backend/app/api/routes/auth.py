@@ -12,6 +12,7 @@ from app.models.user import User
 from app.models.refresh_session import RefreshSession
 from app.schemas.auth import Token, RefreshRequest
 from app.schemas.user import UserCreate, UserResponse
+from app.schemas.ngo import NotificationPreferences
 from app.config import settings
 from app.core.security import (
     verify_password,
@@ -246,3 +247,29 @@ def logout_all(
 @router.get("/me", response_model=UserResponse)
 def get_me(current_user: User = Depends(get_current_active_user)):
     return current_user
+
+@router.get("/me/preferences", response_model=NotificationPreferences)
+def get_user_preferences(current_user: User = Depends(get_current_active_user)):
+    """Retrieve personal notification alert preferences."""
+    defaults = {
+        "critical_rescue_alerts": True,
+        "dispatch_failures": True,
+        "veterinary_updates": True,
+        "case_closures": True,
+    }
+    user_prefs = current_user.notification_preferences or {}
+    defaults.update(user_prefs)
+    return NotificationPreferences(**defaults)
+
+@router.patch("/me/preferences", response_model=NotificationPreferences)
+def update_user_preferences(
+    payload: NotificationPreferences,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Persist updated notification alert preferences."""
+    current_user.notification_preferences = payload.model_dump()
+    db.commit()
+    db.refresh(current_user)
+    return NotificationPreferences(**current_user.notification_preferences)
+

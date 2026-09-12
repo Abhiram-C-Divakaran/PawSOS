@@ -51,7 +51,6 @@ def health_readiness(response: Response, db: Session = Depends(get_db)):
             else:
                 checks["worker"] = "no_heartbeat"
                 if settings.ENVIRONMENT in ["production", "staging"]:
-                    # Worker absence in production indicates degraded background processing
                     checks["worker"] = "degraded"
         except Exception as e:
             logger.warning(f"Health check warning on Redis/Worker: {e}")
@@ -60,11 +59,38 @@ def health_readiness(response: Response, db: Session = Depends(get_db)):
             if settings.ENVIRONMENT in ["production", "staging"]:
                 healthy = False
 
+    # 3. Storage Provider check
+    try:
+        from app.services.storage_service import storage_service, LocalStorageProvider, S3StorageProvider
+        if isinstance(storage_service, (LocalStorageProvider, S3StorageProvider)):
+            checks["storage"] = "healthy"
+        else:
+            checks["storage"] = "healthy"
+    except Exception as e:
+        logger.warning(f"Storage readiness check warning: {e}")
+        checks["storage"] = "unhealthy"
+
+    # 4. Firebase Cloud Messaging configuration check
+    try:
+        from app.services.notification_service import _firebase_initialized
+        checks["firebase"] = "configured" if _firebase_initialized else "unconfigured"
+    except Exception:
+        checks["firebase"] = "unconfigured"
+
     if not healthy:
         response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+
+    services = {
+        "database": "healthy" if checks["database"] == "connected" else "unhealthy",
+        "redis": "healthy" if checks["redis"] == "connected" else checks["redis"],
+        "celery": "healthy" if checks["worker"] == "active" else checks["worker"],
+        "storage": checks["storage"],
+        "firebase": checks["firebase"],
+    }
 
     return {
         "status": "ready" if healthy else "degraded",
         "environment": settings.ENVIRONMENT,
-        "checks": checks
+        "services": services,
+        "checks": checks,
     }

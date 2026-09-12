@@ -15,6 +15,9 @@ import { NGOCases } from './pages/ngo/NGOCases';
 import { NGOCaseDetail } from './pages/ngo/NGOCaseDetail';
 import { NGOResponders } from './pages/ngo/NGOResponders';
 import { NGOVeterinary } from './pages/ngo/NGOVeterinary';
+import { NGOAnalytics } from './pages/ngo/NGOAnalytics';
+import { NGOOrganization } from './pages/ngo/NGOOrganization';
+import { NGOSettings } from './pages/ngo/NGOSettings';
 
 const ProtectedRoute = ({ children, allowedRoles }: { children: ReactElement, allowedRoles?: string[] }) => {
   const { isAuthenticated, user, loading } = useAuth();
@@ -87,6 +90,9 @@ function App() {
             <Route path="cases/:id" element={<NGOCaseDetail />} />
             <Route path="responders" element={<NGOResponders />} />
             <Route path="veterinary" element={<NGOVeterinary />} />
+            <Route path="analytics" element={<NGOAnalytics />} />
+            <Route path="organization" element={<NGOOrganization />} />
+            <Route path="settings" element={<NGOSettings />} />
           </Route>
         </Routes>
       </BrowserRouter>

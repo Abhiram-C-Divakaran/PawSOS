@@ -5,7 +5,7 @@ import shutil
 import logging
 from abc import ABC, abstractmethod
 from fastapi import UploadFile
-from PIL import Image
+from PIL import Image, ImageOps
 from app.config import settings
 from app.core.exceptions import BadRequestException
 
@@ -23,6 +23,7 @@ MAX_IMAGE_DIMENSION = 2048
 def optimize_image(file: UploadFile) -> io.BytesIO:
     """
     Image optimization for evidence photos:
+    - Normalizes image orientation using EXIF transpose
     - Resizes dimensions exceeding 2048px using high-quality Lanczos resampling
     - Strips unnecessary EXIF metadata to protect user location/device privacy
     - Compresses without noticeable loss of forensic evidence quality
@@ -33,6 +34,7 @@ def optimize_image(file: UploadFile) -> io.BytesIO:
 
     try:
         image = Image.open(io.BytesIO(raw_bytes))
+        image = ImageOps.exif_transpose(image)
         content_type = file.content_type
         fmt = "JPEG" if content_type in ["image/jpeg", "image/jpg"] else ("WEBP" if content_type == "image/webp" else "PNG")
 
@@ -159,12 +161,15 @@ class S3StorageProvider(BaseStorageProvider):
 
 def get_storage_provider() -> BaseStorageProvider:
     provider = settings.STORAGE_PROVIDER.lower()
-    if provider == "s3" and settings.S3_BUCKET_NAME:
+    if provider == "s3":
         try:
             return S3StorageProvider()
         except Exception as e:
+            if settings.ENVIRONMENT in ["production", "staging"]:
+                raise RuntimeError(f"FATAL: S3StorageProvider initialization failed in {settings.ENVIRONMENT}: {e}")
             logger.warning(f"Could not initialize S3 provider ({e}). Falling back to local storage.")
             return LocalStorageProvider()
     return LocalStorageProvider()
 
 storage_service = get_storage_provider()
+

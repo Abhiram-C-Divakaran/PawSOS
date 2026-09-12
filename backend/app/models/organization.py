@@ -19,6 +19,8 @@ class Organization(Base):
     # Simple float lat/lng for now, PostGIS points can be added if needed for orgs
     latitude = Column(Float, nullable=True)
     longitude = Column(Float, nullable=True)
+    operating_region = Column(String, nullable=True)
+    description = Column(String, nullable=True)
     
     verification_status = Column(Boolean, default=False)
     

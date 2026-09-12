@@ -1,8 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
-  Compass,
   FileText,
   Users,
   Building2,
@@ -19,12 +18,33 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { NotificationBell } from '../../components/NotificationBell';
+import api from '../../services/api';
+import type { OrganizationProfile } from '../../types';
 
 export const NGOLayout: React.FC = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState<boolean>(false);
+  const [orgProfile, setOrgProfile] = useState<OrganizationProfile | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    const loadOrg = async () => {
+      try {
+        const res = await api.get('/ngo/organization');
+        if (isMounted && res.data) {
+          setOrgProfile(res.data);
+        }
+      } catch {
+        // Silently fall back if organization is not yet linked
+      }
+    };
+    loadOrg();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const handleLogout = async () => {
     await logout();
@@ -33,18 +53,17 @@ export const NGOLayout: React.FC = () => {
 
   const navItems = [
     { to: '/ngo', end: true, label: 'Overview', icon: LayoutDashboard },
-    { to: '/ngo#live-map', end: false, label: 'Live Map', icon: Compass },
     { to: '/ngo/cases', end: false, label: 'Cases', icon: FileText },
     { to: '/ngo/responders', end: false, label: 'Responders', icon: Users },
     { to: '/ngo/veterinary', end: false, label: 'Veterinary Partners', icon: Building2 },
-    { to: '/ngo#analytics', end: false, label: 'Analytics', icon: TrendingUp },
-    { to: '/ngo#organization', end: false, label: 'Organization', icon: Landmark },
-    { to: '/ngo#settings', end: false, label: 'Settings', icon: Settings },
+    { to: '/ngo/analytics', end: false, label: 'Analytics', icon: TrendingUp },
+    { to: '/ngo/organization', end: false, label: 'Organization', icon: Landmark },
+    { to: '/ngo/settings', end: false, label: 'Settings', icon: Settings },
   ];
 
-  // Dynamic organization name fallback
-  const orgName = (user as any)?.organization_name || 'Green Paws Foundation';
-  const userName = user?.full_name || 'Priya Sharma';
+  // Authoritative organization and user names with zero fake fallbacks
+  const orgName = orgProfile?.name || (user?.organization_id ? 'Organization' : 'Command Center');
+  const userName = user?.full_name || 'Admin';
 
   const renderSidebarContent = () => (
     <div className="flex flex-col h-full justify-between p-5 text-white">
@@ -79,13 +98,9 @@ export const NGOLayout: React.FC = () => {
         <nav className="space-y-1.5" aria-label="NGO Command Navigation">
           {navItems.map((item) => {
             const Icon = item.icon;
-            const isHashNav = item.to.includes('#');
-            const isCurrentPage =
-              item.end
-                ? location.pathname === item.to && !location.hash
-                : isHashNav
-                ? location.hash === item.to.split('#')[1]
-                : location.pathname.startsWith(item.to);
+            const isCurrentPage = item.end
+              ? location.pathname === item.to
+              : location.pathname.startsWith(item.to);
 
             return (
               <NavLink
@@ -93,10 +108,9 @@ export const NGOLayout: React.FC = () => {
                 to={item.to}
                 end={item.end}
                 onClick={() => setMobileMenuOpen(false)}
-                className={({ isActive }) => {
-                  const active = isHashNav ? isCurrentPage : isActive;
+                className={() => {
                   return `flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition-all ${
-                    active
+                    isCurrentPage
                       ? 'bg-[#2F73D9] text-white shadow-md shadow-blue-900/40'
                       : 'text-[#8E9EB5] hover:text-white hover:bg-white/5'
                   }`;
@@ -131,7 +145,7 @@ export const NGOLayout: React.FC = () => {
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
             System Online
           </span>
-          <span className="font-mono text-[10px] opacity-70">v2.5 Pilot</span>
+          <span className="font-mono text-[10px] opacity-70">v2.6 Pilot</span>
         </div>
       </div>
     </div>
@@ -187,10 +201,10 @@ export const NGOLayout: React.FC = () => {
                 </span>
               </div>
               <h2 className="text-lg sm:text-xl font-extrabold text-[#12213A] truncate mt-0.5 tracking-tight">
-                Good morning, {orgName}
+                Good day, {orgName}
               </h2>
               <p className="text-xs text-[#65748B] hidden sm:block truncate">
-                Here's what's happening with your rescue operations today.
+                Real-time situational command and telemetry.
               </p>
             </div>
           </div>
@@ -198,11 +212,15 @@ export const NGOLayout: React.FC = () => {
           {/* Right Controls & Profile */}
           <div className="flex items-center gap-3 sm:gap-4 shrink-0">
             {/* Organization Selector Pill */}
-            <div className="hidden md:flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold shadow-2xs">
+            <button
+              onClick={() => navigate('/ngo/organization')}
+              className="hidden md:flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold shadow-2xs hover:bg-emerald-100 transition-colors"
+              title="View Organization Profile"
+            >
               <CheckCircle className="w-3.5 h-3.5 text-emerald-600 fill-emerald-100" />
-              <span>Organization: {orgName}</span>
+              <span className="max-w-[150px] truncate">Org: {orgName}</span>
               <ChevronDown className="w-3 h-3 text-emerald-700 opacity-60 ml-0.5" />
-            </div>
+            </button>
 
             {/* Notification Bell */}
             <NotificationBell variant="light" />
@@ -215,14 +233,14 @@ export const NGOLayout: React.FC = () => {
                   .map((n) => n[0])
                   .slice(0, 2)
                   .join('')
-                  .toUpperCase() || 'NA'}
+                  .toUpperCase() || 'AD'}
               </div>
               <div className="hidden sm:block text-left">
                 <p className="text-xs font-bold text-[#12213A] leading-none">
                   {userName}
                 </p>
                 <p className="text-[11px] text-[#65748B] font-medium mt-0.5">
-                  NGO Admin
+                  {user?.role === 'SUPER_ADMIN' ? 'Super Admin' : 'NGO Admin'}
                 </p>
               </div>
 

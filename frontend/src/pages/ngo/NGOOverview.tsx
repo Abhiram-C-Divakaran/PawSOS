@@ -12,13 +12,9 @@ import {
   Stethoscope,
   Heart,
   ChevronRight,
-  TrendingDown,
-  TrendingUp,
-  Building2,
-  CheckCircle,
   PlusCircle,
-  Landmark,
   Flame,
+  RotateCw,
 } from 'lucide-react';
 import {
   LineChart,
@@ -29,7 +25,14 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import api from '../../services/api';
-import type { NGOOverviewKPIs, HotspotItem, RescueCase, NGOResponderSummary } from '../../types';
+import type {
+  NGOOverviewKPIs,
+  HotspotItem,
+  RescueCase,
+  NGOResponderSummary,
+  ResponseTimeDataPoint,
+  NotificationItem,
+} from '../../types';
 
 export const NGOOverview: React.FC = () => {
   const [kpis, setKpis] = useState<NGOOverviewKPIs | null>(null);
@@ -37,8 +40,12 @@ export const NGOOverview: React.FC = () => {
   const [cases, setCases] = useState<RescueCase[]>([]);
   const [responders, setResponders] = useState<NGOResponderSummary[]>([]);
   const [facilities, setFacilities] = useState<any[]>([]);
+  const [trendData, setTrendData] = useState<{ date: string; minutes: number }[]>([]);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [selectedCase, setSelectedCase] = useState<RescueCase | null>(null);
   const [tableFilter, setTableFilter] = useState<'ALL' | 'CRITICAL' | 'URGENT' | 'MODERATE' | 'GENERAL'>('ALL');
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
 
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
@@ -47,20 +54,37 @@ export const NGOOverview: React.FC = () => {
 
   const fetchOverviewData = async () => {
     try {
-      const [kpiRes, hotspotRes, casesRes, respondersRes, facilitiesRes] = await Promise.all([
+      setError(null);
+      const [kpiRes, hotspotRes, casesRes, respondersRes, facilitiesRes, trendRes, notifRes] = await Promise.all([
         api.get('/ngo/analytics/overview'),
         api.get('/ngo/analytics/hotspots'),
         api.get('/ngo/cases?limit=40'),
         api.get('/ngo/responders').catch(() => ({ data: [] })),
         api.get('/ngo/veterinary').catch(() => ({ data: [] })),
+        api.get('/ngo/analytics/response-times?period=30d').catch(() => ({ data: [] })),
+        api.get('/notifications').catch(() => ({ data: [] })),
       ]);
+
       setKpis(kpiRes?.data || null);
       setHotspots(Array.isArray(hotspotRes?.data) ? hotspotRes.data : []);
       setCases(Array.isArray(casesRes?.data) ? casesRes.data : []);
       setResponders(Array.isArray(respondersRes?.data) ? respondersRes.data : []);
       setFacilities(Array.isArray(facilitiesRes?.data) ? facilitiesRes.data : []);
-    } catch (err) {
+
+      const rawTrend: ResponseTimeDataPoint[] = Array.isArray(trendRes?.data) ? trendRes.data : [];
+      setTrendData(
+        rawTrend.map((t) => ({
+          date: t.date.length > 5 ? t.date.slice(5) : t.date,
+          minutes: t.avg_response_minutes,
+        }))
+      );
+
+      setNotifications(Array.isArray(notifRes?.data) ? notifRes.data.slice(0, 5) : []);
+    } catch (err: any) {
       console.error('Error fetching NGO overview data', err);
+      setError('Unable to load authoritative operational data. Please check network connection.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -78,7 +102,7 @@ export const NGOOverview: React.FC = () => {
       const map = L.map(mapContainerRef.current, {
         zoomControl: true,
         scrollWheelZoom: false,
-      }).setView([9.9816, 76.2999], 12); // Kochi center coordinates
+      }).setView([9.9816, 76.2999], 12);
 
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '&copy; OpenStreetMap contributors',
@@ -94,7 +118,6 @@ export const NGOOverview: React.FC = () => {
     markersRef.current.forEach((m) => m.remove());
     markersRef.current = [];
 
-    // Helper to create polished SVG teardrop pin
     const createPinIcon = (color: string, iconHtml: string) => {
       return L.divIcon({
         className: 'ngo-pin-marker',
@@ -118,7 +141,7 @@ export const NGOOverview: React.FC = () => {
     // 1. Add Rescue Case Markers
     if (Array.isArray(cases)) {
       cases.forEach((c) => {
-        let pinColor = '#22A65A'; // General (green)
+        let pinColor = '#22A65A';
         let iconColor = '#22A65A';
         let iconContent = '<span style="width: 8px; height: 8px; border-radius: 50%; background: #22A65A;"></span>';
 
@@ -179,26 +202,31 @@ export const NGOOverview: React.FC = () => {
           const vetIcon = L.divIcon({
             className: 'ngo-pin-marker',
             html: `
-              <div style="width: 32px; height: 32px; border-radius: 50%; background: #8B5CF6; border: 2.5px solid white; box-shadow: 0 4px 8px rgba(139,92,246,0.4); display: flex; align-items: center; justify-content: center; cursor: pointer;">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="white" stroke="white" stroke-width="1">
-                  <path d="M10 4h4v6h6v4h-6v6h-4v-6H4v-4h6z"/>
+              <div style="width: 30px; height: 30px; border-radius: 50%; background: #8B5CF6; border: 2.5px solid white; box-shadow: 0 4px 8px rgba(139,92,246,0.4); display: flex; align-items: center; justify-content: center; cursor: pointer;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 5v14M5 12h14"/>
                 </svg>
               </div>
             `,
-            iconSize: [32, 32],
-            iconAnchor: [16, 16],
+            iconSize: [30, 30],
+            iconAnchor: [15, 15],
           });
-          const vetMarker = L.marker([f.latitude, f.longitude], { icon: vetIcon }).addTo(map);
-          markersRef.current.push(vetMarker);
+          const facMarker = L.marker([f.latitude, f.longitude], { icon: vetIcon }).addTo(map);
+          markersRef.current.push(facMarker);
         }
       });
     }
 
-    // Fit bounds if markers exist
-    if (markersRef.current.length > 0 && map) {
-      const group = L.featureGroup(markersRef.current);
-      if (group.getBounds().isValid()) {
-        map.fitBounds(group.getBounds().pad(0.12));
+    // Auto-fit bounds if we have points
+    const points: [number, number][] = [];
+    cases.forEach((c) => points.push([c.latitude, c.longitude]));
+    responders.forEach((r) => r.latitude && r.longitude && points.push([r.latitude, r.longitude]));
+    facilities.forEach((f) => f.latitude && f.longitude && points.push([f.latitude, f.longitude]));
+
+    if (points.length > 0) {
+      const group = L.latLngBounds(points);
+      if (group.isValid()) {
+        map.fitBounds(group.pad(0.12));
       }
     }
   }, [cases, responders, facilities]);
@@ -211,25 +239,16 @@ export const NGOOverview: React.FC = () => {
     return safeCases.filter((c) => c.triage_priority === tableFilter).slice(0, 5);
   }, [safeCases, tableFilter]);
 
-  // Counts for tabs
+  // Real counts for tabs
   const priorityCounts = useMemo(() => {
     return {
-      all: safeCases.length || 12,
-      critical: safeCases.filter((c) => c.triage_priority === 'CRITICAL').length || 4,
-      urgent: safeCases.filter((c) => c.triage_priority === 'URGENT').length || 3,
-      moderate: safeCases.filter((c) => c.triage_priority === 'MODERATE').length || 3,
-      general: safeCases.filter((c) => c.triage_priority === 'GENERAL').length || 2,
+      all: safeCases.length,
+      critical: safeCases.filter((c) => c.triage_priority === 'CRITICAL').length,
+      urgent: safeCases.filter((c) => c.triage_priority === 'URGENT').length,
+      moderate: safeCases.filter((c) => c.triage_priority === 'MODERATE').length,
+      general: safeCases.filter((c) => c.triage_priority === 'GENERAL').length,
     };
   }, [safeCases]);
-
-  // Response time trend dataset matching reference visual curve
-  const trendData = [
-    { date: 'Apr 1', minutes: 24 },
-    { date: 'Apr 7', minutes: 12 },
-    { date: 'Apr 14', minutes: 26 },
-    { date: 'Apr 21', minutes: 42 },
-    { date: 'Apr 28', minutes: 35 },
-  ];
 
   // Priority badge helper
   const renderPriorityPill = (priority: string) => {
@@ -262,7 +281,7 @@ export const NGOOverview: React.FC = () => {
     }
   };
 
-  // Animal emoji / thumbnail helper
+  // Animal emoji helper
   const getAnimalEmoji = (species?: string) => {
     const s = (species || '').toLowerCase();
     if (s.includes('dog')) return '🐕';
@@ -272,9 +291,29 @@ export const NGOOverview: React.FC = () => {
     return '🐾';
   };
 
+  const activeRespondersCount = responders.filter(
+    (r) => r.availability_status === 'AVAILABLE' || r.availability_status === 'BUSY'
+  ).length;
+
   return (
     <div className="space-y-6">
-      {/* 1. TOP EXACT SIX KPI CARDS */}
+      {/* Error banner */}
+      {error && (
+        <div className="p-4 rounded-xl bg-red-50 border border-red-200 text-red-700 flex items-center justify-between text-sm">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 shrink-0" />
+            <span>{error}</span>
+          </div>
+          <button
+            onClick={fetchOverviewData}
+            className="px-3 py-1 bg-red-600 text-white rounded-lg text-xs font-bold hover:bg-red-700 flex items-center gap-1"
+          >
+            <RotateCw className="w-3.5 h-3.5" /> Retry
+          </button>
+        </div>
+      )}
+
+      {/* 1. TOP SIX KPI CARDS - ZERO FAKE DATA */}
       <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
         {/* Card 1: Active Rescue Cases */}
         <div className="bg-white p-4 lg:p-5 rounded-2xl border border-[#E4EAF2] shadow-2xs flex flex-col justify-between transition-all hover:shadow-xs">
@@ -284,15 +323,15 @@ export const NGOOverview: React.FC = () => {
             </div>
             <div className="min-w-0">
               <p className="text-2xl lg:text-3xl font-black text-[#12213A] tracking-tight">
-                {kpis?.active_cases ?? 12}
+                {loading ? <span className="inline-block w-8 h-7 bg-slate-100 animate-pulse rounded" /> : (kpis?.active_cases ?? 0)}
               </p>
               <p className="text-xs text-[#65748B] font-medium truncate mt-0.5">
-                Active Rescue Cases
+                Active Cases
               </p>
             </div>
           </div>
           <div className="mt-3 pt-2.5 border-t border-slate-100 text-[11px] font-semibold text-rose-600 flex items-center gap-1">
-            <TrendingUp className="w-3 h-3" /> ↑ 3 from yesterday
+            <Activity className="w-3 h-3" /> Live Incident Load
           </div>
         </div>
 
@@ -304,7 +343,7 @@ export const NGOOverview: React.FC = () => {
             </div>
             <div className="min-w-0">
               <p className="text-2xl lg:text-3xl font-black text-[#12213A] tracking-tight">
-                {kpis?.critical_cases ?? 4}
+                {loading ? <span className="inline-block w-8 h-7 bg-slate-100 animate-pulse rounded" /> : (kpis?.critical_cases ?? 0)}
               </p>
               <p className="text-xs text-[#65748B] font-medium truncate mt-0.5">
                 Critical Cases
@@ -312,7 +351,7 @@ export const NGOOverview: React.FC = () => {
             </div>
           </div>
           <div className="mt-3 pt-2.5 border-t border-slate-100 text-[11px] font-semibold text-red-600 flex items-center gap-1">
-            <TrendingUp className="w-3 h-3" /> ↑ 1 from yesterday
+            <AlertTriangle className="w-3 h-3" /> Urgent Priority Tier
           </div>
         </div>
 
@@ -324,15 +363,15 @@ export const NGOOverview: React.FC = () => {
             </div>
             <div className="min-w-0">
               <p className="text-2xl lg:text-3xl font-black text-[#12213A] tracking-tight">
-                {kpis?.awaiting_responder ?? 3}
+                {loading ? <span className="inline-block w-8 h-7 bg-slate-100 animate-pulse rounded" /> : (kpis?.awaiting_responder ?? 0)}
               </p>
               <p className="text-xs text-[#65748B] font-medium truncate mt-0.5">
                 Awaiting Responder
               </p>
             </div>
           </div>
-          <div className="mt-3 pt-2.5 border-t border-slate-100 text-[11px] font-semibold text-emerald-600 flex items-center gap-1">
-            <TrendingDown className="w-3 h-3" /> ↓ 2 from yesterday
+          <div className="mt-3 pt-2.5 border-t border-slate-100 text-[11px] font-semibold text-amber-600 flex items-center gap-1">
+            <Clock className="w-3 h-3" /> Radius Escalation Active
           </div>
         </div>
 
@@ -344,7 +383,7 @@ export const NGOOverview: React.FC = () => {
             </div>
             <div className="min-w-0">
               <p className="text-2xl lg:text-3xl font-black text-[#12213A] tracking-tight">
-                {kpis?.responders_en_route ?? 7}
+                {loading ? <span className="inline-block w-8 h-7 bg-slate-100 animate-pulse rounded" /> : (kpis?.responders_en_route ?? 0)}
               </p>
               <p className="text-xs text-[#65748B] font-medium truncate mt-0.5">
                 Responders En Route
@@ -352,7 +391,7 @@ export const NGOOverview: React.FC = () => {
             </div>
           </div>
           <div className="mt-3 pt-2.5 border-t border-slate-100 text-[11px] font-semibold text-blue-600 flex items-center gap-1">
-            <TrendingUp className="w-3 h-3" /> ↑ 2 from yesterday
+            <Car className="w-3 h-3" /> Field Transit In-Flight
           </div>
         </div>
 
@@ -364,15 +403,15 @@ export const NGOOverview: React.FC = () => {
             </div>
             <div className="min-w-0">
               <p className="text-2xl lg:text-3xl font-black text-[#12213A] tracking-tight">
-                {kpis?.under_treatment ?? 11}
+                {loading ? <span className="inline-block w-8 h-7 bg-slate-100 animate-pulse rounded" /> : (kpis?.under_treatment ?? 0)}
               </p>
               <p className="text-xs text-[#65748B] font-medium truncate mt-0.5">
-                Animals Under Treatment
+                Under Treatment
               </p>
             </div>
           </div>
           <div className="mt-3 pt-2.5 border-t border-slate-100 text-[11px] font-semibold text-purple-600 flex items-center gap-1">
-            <TrendingUp className="w-3 h-3" /> ↑ 3 from yesterday
+            <Stethoscope className="w-3 h-3" /> In Partner Clinics
           </div>
         </div>
 
@@ -384,7 +423,7 @@ export const NGOOverview: React.FC = () => {
             </div>
             <div className="min-w-0">
               <p className="text-2xl lg:text-3xl font-black text-[#12213A] tracking-tight">
-                {kpis?.recovering ?? 6}
+                {loading ? <span className="inline-block w-8 h-7 bg-slate-100 animate-pulse rounded" /> : (kpis?.recovering ?? 0)}
               </p>
               <p className="text-xs text-[#65748B] font-medium truncate mt-0.5">
                 Recovering Animals
@@ -392,7 +431,7 @@ export const NGOOverview: React.FC = () => {
             </div>
           </div>
           <div className="mt-3 pt-2.5 border-t border-slate-100 text-[11px] font-semibold text-emerald-600 flex items-center gap-1">
-            <TrendingUp className="w-3 h-3" /> ↑ 1 from yesterday
+            <Heart className="w-3 h-3" /> Post-Care & Shelter
           </div>
         </div>
       </div>
@@ -410,7 +449,7 @@ export const NGOOverview: React.FC = () => {
                   Live Rescue Map
                 </h3>
                 <p className="text-xs text-[#65748B]">
-                  Real-time view of all active rescue cases and responder locations
+                  Real-time telemetry of active rescue cases and responder locations
                 </p>
               </div>
             </div>
@@ -438,71 +477,68 @@ export const NGOOverview: React.FC = () => {
                 </span>
               </div>
 
-              {/* Real-time indicator pill */}
               <div className="flex items-center gap-1.5 px-3 py-1 rounded-lg border border-slate-200 bg-slate-50 text-[11px] font-semibold text-slate-700">
                 <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
-                <span>Real-time</span>
+                <span>Live Feed</span>
               </div>
             </div>
           </div>
 
           {/* Leaflet Map Canvas */}
           <div className="relative flex-1 min-h-[460px]">
-            <div
-              ref={mapContainerRef}
-              style={{ height: '100%', minHeight: '460px', width: '100%' }}
-              className="z-10"
-            />
+            <div ref={mapContainerRef} className="absolute inset-0 z-10 w-full h-full" />
 
-            {/* Interactive Floating Case Popup Card (matching reference design) */}
+            {/* Floating Case Card Overlay */}
             {selectedCase && (
-              <div className="absolute top-4 right-4 max-w-sm w-full bg-white p-4 rounded-2xl shadow-xl border border-[#E4EAF2] z-[1000] animate-in fade-in zoom-in-95 duration-150">
-                <div className="flex items-start gap-3">
-                  {/* Animal Thumbnail */}
-                  <div className="w-14 h-14 rounded-xl bg-slate-100 overflow-hidden shrink-0 border border-slate-200 flex items-center justify-center">
-                    {(selectedCase.images?.[0]?.image_url || (selectedCase as any).image_url) ? (
-                      <img
-                        src={selectedCase.images?.[0]?.image_url || (selectedCase as any).image_url}
-                        alt={selectedCase.species}
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <span className="text-2xl">{getAnimalEmoji(selectedCase.species)}</span>
-                    )}
+              <div className="absolute top-4 right-4 z-20 w-80 bg-white/95 backdrop-blur-md rounded-2xl shadow-xl border border-slate-200 p-4 animate-in fade-in zoom-in-95 duration-150">
+                <div className="flex items-start justify-between pb-2 mb-2 border-b border-slate-100">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xl">{getAnimalEmoji(selectedCase.species)}</span>
+                    <div>
+                      <h4 className="font-extrabold text-sm text-[#12213A]">
+                        {selectedCase.case_number}
+                      </h4>
+                      <p className="text-[11px] text-[#65748B]">
+                        {selectedCase.species} · {selectedCase.address_text || 'Active Location'}
+                      </p>
+                    </div>
                   </div>
+                  <button
+                    onClick={() => setSelectedCase(null)}
+                    className="text-slate-400 hover:text-slate-600 p-1"
+                    aria-label="Close details"
+                  >
+                    ×
+                  </button>
+                </div>
 
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between gap-1 mb-1">
-                      <span className="px-2 py-0.5 text-[10px] font-black bg-red-100 text-red-700 rounded-md uppercase">
-                        {selectedCase.triage_priority}
+                <div className="space-y-2 text-xs">
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-500">Triage Priority</span>
+                    {renderPriorityPill(selectedCase.triage_priority)}
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-500">Operation Status</span>
+                    {renderStatusPill(selectedCase.status)}
+                  </div>
+                  {selectedCase.assigned_responder && (
+                    <div className="flex justify-between items-center">
+                      <span className="text-slate-500">Assigned Rescuer</span>
+                      <span className="font-semibold text-slate-800">
+                        {selectedCase.assigned_responder.full_name}
                       </span>
-                      <button
-                        onClick={() => setSelectedCase(null)}
-                        className="text-slate-400 hover:text-slate-600 text-xs font-bold"
-                        aria-label="Close popup"
-                      >
-                        ✕
-                      </button>
                     </div>
-
-                    <h4 className="font-bold text-sm text-[#12213A] truncate">
-                      {selectedCase.case_number}
-                    </h4>
-                    <p className="text-xs text-[#65748B] truncate">
-                      {selectedCase.species} Rescue • {selectedCase.address_text || 'Active Incident'}
-                    </p>
-
-                    <div className="mt-2 pt-2 border-t border-slate-100 flex items-center justify-between text-xs">
-                      <span className="text-[11px] text-[#65748B]">
-                        Status: <strong className="text-[#12213A]">{selectedCase.status.replace(/_/g, ' ')}</strong>
-                      </span>
-                      <button
-                        onClick={() => navigate(`/ngo/cases/${selectedCase.id}`)}
-                        className="font-bold text-blue-600 hover:text-blue-700 flex items-center gap-0.5 text-xs"
-                      >
-                        View Dossier <ChevronRight className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
+                  )}
+                  <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
+                    <span className="text-[11px] text-slate-400">
+                      Reported {new Date(selectedCase.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                    <button
+                      onClick={() => navigate(`/ngo/cases/${selectedCase.id}`)}
+                      className="font-bold text-blue-600 hover:text-blue-700 flex items-center gap-0.5 text-xs"
+                    >
+                      View Dossier <ChevronRight className="w-3.5 h-3.5" />
+                    </button>
                   </div>
                 </div>
               </div>
@@ -510,15 +546,15 @@ export const NGOOverview: React.FC = () => {
           </div>
         </div>
 
-        {/* Right Column: Recent Notifications + Recent Activity (~30% width) */}
+        {/* Right Column: Real Notifications + Incident Hotspots (~30% width) */}
         <div className="xl:col-span-4 space-y-6">
-          {/* Card: Recent Notifications */}
+          {/* Card: Authoritative Notifications */}
           <div className="bg-white p-5 rounded-2xl border border-[#E4EAF2] shadow-sm">
             <div className="flex items-center justify-between pb-3 mb-3 border-b border-slate-100">
               <div className="flex items-center gap-2">
                 <Bell className="w-4 h-4 text-[#10243E]" />
                 <h3 className="font-extrabold text-sm text-[#12213A]">
-                  Recent Notifications
+                  Operational Alerts
                 </h3>
               </div>
               <Link
@@ -529,214 +565,71 @@ export const NGOOverview: React.FC = () => {
               </Link>
             </div>
 
-            <div className="space-y-3.5">
-              {/* Item 1: Critical rescue */}
-              <div className="flex items-start gap-3 text-xs group cursor-pointer">
-                <div className="w-8 h-8 rounded-full bg-red-100 text-red-600 flex items-center justify-center shrink-0 mt-0.5">
-                  <AlertTriangle className="w-4 h-4" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between">
-                    <p className="font-bold text-[#12213A] group-hover:text-blue-600 transition-colors">
-                      New critical rescue nearby
-                    </p>
-                    <span className="text-[10px] font-semibold text-slate-400 shrink-0 flex items-center gap-1">
-                      2 min ago <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
-                    </span>
+            {notifications.length === 0 ? (
+              <div className="py-8 text-center text-slate-400 text-xs">
+                <Bell className="w-6 h-6 mx-auto mb-1.5 opacity-40" />
+                No unread alerts for this organization.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {notifications.map((n) => (
+                  <div
+                    key={n.id}
+                    onClick={() => n.rescue_case_id && navigate(`/ngo/cases/${n.rescue_case_id}`)}
+                    className="flex items-start gap-3 text-xs group cursor-pointer p-1.5 rounded-lg hover:bg-slate-50 transition-colors"
+                  >
+                    <div className="w-7 h-7 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center shrink-0 mt-0.5">
+                      <Activity className="w-3.5 h-3.5" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between">
+                        <p className="font-bold text-[#12213A] truncate group-hover:text-blue-600">
+                          {n.title}
+                        </p>
+                        <span className="text-[10px] text-slate-400 shrink-0 ml-1">
+                          {new Date(n.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-[#65748B] mt-0.5 truncate">
+                        {n.message}
+                      </p>
+                    </div>
                   </div>
-                  <p className="text-[11px] text-[#65748B] mt-0.5 truncate">
-                    Injured dog near Fort Kochi (2.4 km)
-                  </p>
-                </div>
+                ))}
               </div>
-
-              {/* Item 2: Responder accepted */}
-              <div className="flex items-start gap-3 text-xs group cursor-pointer">
-                <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center shrink-0 mt-0.5">
-                  <Car className="w-4 h-4" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between">
-                    <p className="font-bold text-[#12213A] group-hover:text-blue-600 transition-colors">
-                      Responder accepted a case
-                    </p>
-                    <span className="text-[10px] text-slate-400 shrink-0">5 min ago</span>
-                  </div>
-                  <p className="text-[11px] text-[#65748B] mt-0.5 truncate">
-                    Case #PR-2025-1038 assigned to Arjun Nair
-                  </p>
-                </div>
-              </div>
-
-              {/* Item 3: Treatment update */}
-              <div className="flex items-start gap-3 text-xs group cursor-pointer">
-                <div className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0 mt-0.5">
-                  <Heart className="w-4 h-4 fill-emerald-500 text-emerald-500" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between">
-                    <p className="font-bold text-[#12213A] group-hover:text-blue-600 transition-colors">
-                      Treatment update
-                    </p>
-                    <span className="text-[10px] text-slate-400 shrink-0">12 min ago</span>
-                  </div>
-                  <p className="text-[11px] text-[#65748B] mt-0.5 truncate">
-                    Case #PR-2025-1021 is now recovering
-                  </p>
-                </div>
-              </div>
-
-              {/* Item 4: Dispatch offer expired */}
-              <div className="flex items-start gap-3 text-xs group cursor-pointer">
-                <div className="w-8 h-8 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center shrink-0 mt-0.5">
-                  <Clock className="w-4 h-4" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between">
-                    <p className="font-bold text-[#12213A] group-hover:text-blue-600 transition-colors">
-                      Dispatch offer expired
-                    </p>
-                    <span className="text-[10px] text-slate-400 shrink-0">12 min ago</span>
-                  </div>
-                  <p className="text-[11px] text-[#65748B] mt-0.5 truncate">
-                    Case #PR-2025-1040 - expanding search radius
-                  </p>
-                </div>
-              </div>
-
-              {/* Item 5: Assigned to facility */}
-              <div className="flex items-start gap-3 text-xs group cursor-pointer">
-                <div className="w-8 h-8 rounded-full bg-purple-100 text-purple-600 flex items-center justify-center shrink-0 mt-0.5">
-                  <Building2 className="w-4 h-4" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between">
-                    <p className="font-bold text-[#12213A] group-hover:text-blue-600 transition-colors">
-                      New case assigned to facility
-                    </p>
-                    <span className="text-[10px] text-slate-400 shrink-0">25 min ago</span>
-                  </div>
-                  <p className="text-[11px] text-[#65748B] mt-0.5 truncate">
-                    Case #PR-2025-1035 → Cochin Pet Care Hospital
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Card: Recent Activity */}
-          <div className="bg-white p-5 rounded-2xl border border-[#E4EAF2] shadow-sm">
-            <div className="flex items-center justify-between pb-3 mb-3 border-b border-slate-100">
-              <div className="flex items-center gap-2">
-                <Clock className="w-4 h-4 text-[#10243E]" />
-                <h3 className="font-extrabold text-sm text-[#12213A]">
-                  Recent Activity
-                </h3>
-              </div>
-              <Link
-                to="/ngo/cases"
-                className="text-xs font-bold text-blue-600 hover:text-blue-700"
-              >
-                View All
-              </Link>
-            </div>
-
-            <div className="space-y-3.5">
-              {/* Activity Item 1 */}
-              <div className="flex items-start gap-3 text-xs">
-                <div className="w-7 h-7 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0">
-                  <CheckCircle className="w-3.5 h-3.5" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between">
-                    <p className="font-bold text-[#12213A]">Case #PR-2025-1037 completed</p>
-                    <span className="text-[10px] text-slate-400">1 hour ago</span>
-                  </div>
-                  <p className="text-[11px] text-[#65748B]">Animal recovered and adopted</p>
-                </div>
-              </div>
-
-              {/* Activity Item 2 */}
-              <div className="flex items-start gap-3 text-xs">
-                <div className="w-7 h-7 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center shrink-0">
-                  <Users className="w-3.5 h-3.5" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between">
-                    <p className="font-bold text-[#12213A]">New responder registered</p>
-                    <span className="text-[10px] text-slate-400">2 hours ago</span>
-                  </div>
-                  <p className="text-[11px] text-[#65748B]">Sneha M. (Field Responder)</p>
-                </div>
-              </div>
-
-              {/* Activity Item 3 */}
-              <div className="flex items-start gap-3 text-xs">
-                <div className="w-7 h-7 rounded-full bg-purple-100 text-purple-600 flex items-center justify-center shrink-0">
-                  <Stethoscope className="w-3.5 h-3.5" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between">
-                    <p className="font-bold text-[#12213A]">Treatment updated</p>
-                    <span className="text-[10px] text-slate-400">3 hours ago</span>
-                  </div>
-                  <p className="text-[11px] text-[#65748B]">Case #PR-2025-1032</p>
-                </div>
-              </div>
-
-              {/* Activity Item 4 */}
-              <div className="flex items-start gap-3 text-xs">
-                <div className="w-7 h-7 rounded-full bg-blue-100 text-blue-800 flex items-center justify-center shrink-0">
-                  <Landmark className="w-3.5 h-3.5" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between">
-                    <p className="font-bold text-[#12213A]">Organization added</p>
-                    <span className="text-[10px] text-slate-400">4 hours ago</span>
-                  </div>
-                  <p className="text-[11px] text-[#65748B]">Hope Animal Welfare Foundation</p>
-                </div>
-              </div>
-
-              {/* Activity Item 5 */}
-              <div className="flex items-start gap-3 text-xs">
-                <div className="w-7 h-7 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0">
-                  <PlusCircle className="w-3.5 h-3.5" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between">
-                    <p className="font-bold text-[#12213A]">New veterinary partner</p>
-                    <span className="text-[10px] text-slate-400">5 hours ago</span>
-                  </div>
-                  <p className="text-[11px] text-[#65748B]">PetCare Emergency Hospital</p>
-                </div>
-              </div>
-            </div>
+            )}
           </div>
 
           {/* Card: Incident Hotspots */}
-          {Array.isArray(hotspots) && hotspots.length > 0 && (
-            <div className="bg-white p-5 rounded-2xl border border-[#E4EAF2] shadow-sm">
-              <div className="flex items-center justify-between pb-3 mb-3 border-b border-slate-100">
-                <div className="flex items-center gap-2">
-                  <Flame className="w-4 h-4 text-orange-500" />
-                  <h3 className="font-extrabold text-sm text-[#12213A]">
-                    Incident Hotspots
-                  </h3>
-                </div>
-                <span className="text-[10px] font-semibold text-[#65748B] uppercase tracking-wider">
-                  Spatial Cluster
-                </span>
+          <div className="bg-white p-5 rounded-2xl border border-[#E4EAF2] shadow-sm">
+            <div className="flex items-center justify-between pb-3 mb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <Flame className="w-4 h-4 text-orange-500" />
+                <h3 className="font-extrabold text-sm text-[#12213A]">
+                  Spatial Hotspots
+                </h3>
               </div>
+              <Link
+                to="/ngo/analytics"
+                className="text-[11px] font-bold text-blue-600 hover:text-blue-700"
+              >
+                Deep Analytics
+              </Link>
+            </div>
 
+            {hotspots.length === 0 ? (
+              <div className="py-6 text-center text-slate-400 text-xs">
+                No spatial cluster patterns identified yet.
+              </div>
+            ) : (
               <div className="space-y-2.5">
-                {hotspots.map((h, idx) => (
+                {hotspots.slice(0, 4).map((h, idx) => (
                   <div
                     key={idx}
                     className="p-3 rounded-xl border border-slate-100 bg-slate-50/60 hover:bg-blue-50/40 transition-colors flex items-center justify-between"
                   >
                     <div className="space-y-0.5 min-w-0 pr-2">
-                      <p className="text-xs font-bold text-[#12213A] truncate">{h.area_name}</p>
+                      <p className="text-xs font-bold text-[#12213A] truncate">{h.area_name || 'Operating Cluster'}</p>
                       <p className="text-[11px] text-[#65748B]">Top species: {h.top_species}</p>
                     </div>
                     <div className="text-right shrink-0">
@@ -750,8 +643,8 @@ export const NGOOverview: React.FC = () => {
                   </div>
                 ))}
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </div>
 
@@ -764,18 +657,18 @@ export const NGOOverview: React.FC = () => {
               <div className="flex items-center gap-2">
                 <Users className="w-4 h-4 text-[#10243E]" />
                 <h3 className="font-extrabold text-sm text-[#12213A]">
-                  Active Rescue Cases
+                  Active Rescue Operations
                 </h3>
               </div>
               <Link
                 to="/ngo/cases"
                 className="text-xs font-bold text-blue-600 hover:text-blue-700"
               >
-                View All
+                View Full Roster
               </Link>
             </div>
 
-            {/* Filter Tabs matching reference */}
+            {/* Filter Tabs with authoritative counts */}
             <div className="flex items-center gap-2 py-3 overflow-x-auto">
               {(
                 [
@@ -811,7 +704,7 @@ export const NGOOverview: React.FC = () => {
                     <th className="py-2.5 px-2">Status</th>
                     <th className="py-2.5 px-2">Location</th>
                     <th className="py-2.5 px-2">Responder</th>
-                    <th className="py-2.5 px-2 text-right">Updated</th>
+                    <th className="py-2.5 px-2 text-right">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-[#12213A]">
@@ -822,45 +715,37 @@ export const NGOOverview: React.FC = () => {
                       </td>
                     </tr>
                   ) : (
-                    filteredCases.map((c, idx) => {
-                      const minutesAgo = Math.round(
-                        (Date.now() - new Date(c.updated_at || c.created_at).getTime()) / 60000
-                      );
-                      const timeString =
-                        minutesAgo < 1 ? 'Just now' : minutesAgo < 60 ? `${minutesAgo} min ago` : `${Math.floor(minutesAgo / 60)}h ago`;
-
-                      return (
-                        <tr
-                          key={c.id}
-                          onClick={() => navigate(`/ngo/cases/${c.id}`)}
-                          className="hover:bg-blue-50/40 cursor-pointer transition-colors"
-                        >
-                          <td className="py-3 px-2 font-mono font-bold text-slate-800">
-                            {c.case_number}
-                          </td>
-                          <td className="py-3 px-2">
-                            <div className="flex items-center gap-1.5">
-                              <span className="text-base">{getAnimalEmoji(c.species)}</span>
-                              <span className="font-semibold text-[#12213A]">{c.species}</span>
-                            </div>
-                          </td>
-                          <td className="py-3 px-2">{renderPriorityPill(c.triage_priority)}</td>
-                          <td className="py-3 px-2">{renderStatusPill(c.status)}</td>
-                          <td className="py-3 px-2 text-[#65748B] max-w-[120px] truncate">
-                            {c.address_text ? c.address_text.split(',')[0] : 'Kochi'}
-                          </td>
-                          <td className="py-3 px-2 text-[#65748B]">
-                            {idx === 1 ? 'Arjun Nair' : '—'}
-                          </td>
-                          <td className="py-3 px-2 text-right text-[#65748B]">
-                            <span className="inline-flex items-center gap-1">
-                              {timeString}
-                              <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
-                            </span>
-                          </td>
-                        </tr>
-                      );
-                    })
+                    filteredCases.map((c) => (
+                      <tr
+                        key={c.id}
+                        onClick={() => navigate(`/ngo/cases/${c.id}`)}
+                        className="hover:bg-blue-50/40 cursor-pointer transition-colors"
+                      >
+                        <td className="py-3 px-2 font-mono font-bold text-slate-800">
+                          {c.case_number}
+                        </td>
+                        <td className="py-3 px-2">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-base">{getAnimalEmoji(c.species)}</span>
+                            <span className="font-semibold text-[#12213A]">{c.species}</span>
+                          </div>
+                        </td>
+                        <td className="py-3 px-2">{renderPriorityPill(c.triage_priority)}</td>
+                        <td className="py-3 px-2">{renderStatusPill(c.status)}</td>
+                        <td className="py-3 px-2 text-[#65748B] max-w-[120px] truncate">
+                          {c.address_text ? c.address_text.split(',')[0] : 'Reported GPS'}
+                        </td>
+                        <td className="py-3 px-2 text-[#65748B]">
+                          {c.assigned_responder?.full_name || '—'}
+                        </td>
+                        <td className="py-3 px-2 text-right text-blue-600 font-semibold">
+                          <span className="inline-flex items-center gap-0.5">
+                            Manage
+                            <ChevronRight className="w-3.5 h-3.5 text-blue-600" />
+                          </span>
+                        </td>
+                      </tr>
+                    ))
                   )}
                 </tbody>
               </table>
@@ -868,142 +753,130 @@ export const NGOOverview: React.FC = () => {
           </div>
         </div>
 
-        {/* Right: Key Performance Metrics & Response Time Trend (~42% width) */}
+        {/* Right: Key Performance Metrics & Real Response Time Trend (~42% width) */}
         <div className="xl:col-span-5 bg-white rounded-2xl border border-[#E4EAF2] shadow-sm p-5 flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between pb-3 mb-4 border-b border-slate-100">
               <div className="flex items-center gap-2">
                 <Activity className="w-4 h-4 text-[#10243E]" />
                 <h3 className="font-extrabold text-sm text-[#12213A]">
-                  Key Performance Metrics
+                  Operational Telemetry
                 </h3>
               </div>
-              <span className="text-[11px] font-semibold text-slate-400">
-                Avg Dispatch: {kpis?.avg_dispatch_seconds ?? 42.5}s
+              <span className="text-[11px] font-semibold text-slate-500">
+                Avg Dispatch: {kpis?.avg_dispatch_seconds ?? 0}s
               </span>
             </div>
 
-            {/* 2x2 Grid of Performance Metrics */}
+            {/* 2x2 Grid of Authoritative Metrics */}
             <div className="grid grid-cols-2 gap-3 mb-5">
-              {/* Metric 1 */}
+              {/* Metric 1: Avg Response Time */}
               <div className="p-3.5 rounded-xl border border-slate-100 bg-slate-50/60 flex items-start gap-3">
                 <div className="w-8 h-8 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center shrink-0">
                   <Clock className="w-4 h-4" />
                 </div>
                 <div className="min-w-0">
                   <p className="text-[11px] text-[#65748B] font-medium truncate">Avg. Response Time</p>
-                  <div className="flex items-baseline gap-1.5 mt-0.5">
-                    <p className="text-lg font-black text-[#12213A]">
-                      {kpis?.avg_response_minutes ?? 16.2} min
-                    </p>
-                    <span className="text-[11px] font-bold text-emerald-600 flex items-center">
-                      ↓ 32%
-                    </span>
-                  </div>
+                  <p className="text-lg font-black text-[#12213A] mt-0.5">
+                    {kpis?.avg_response_minutes ?? 0} min
+                  </p>
+                  <p className="text-[10px] text-slate-400 mt-0.5">Report to arrival</p>
                 </div>
               </div>
 
-              {/* Metric 2 */}
+              {/* Metric 2: Avg Dispatch Speed */}
               <div className="p-3.5 rounded-xl border border-slate-100 bg-slate-50/60 flex items-start gap-3">
                 <div className="w-8 h-8 rounded-lg bg-amber-100 text-amber-600 flex items-center justify-center shrink-0">
                   <Activity className="w-4 h-4" />
                 </div>
                 <div className="min-w-0">
-                  <p className="text-[11px] text-[#65748B] font-medium truncate">Avg. Dispatch Speed</p>
-                  <div className="flex items-baseline gap-1.5 mt-0.5">
-                    <p className="text-lg font-black text-[#12213A]">
-                      {kpis?.avg_dispatch_seconds ?? 42.5}s
-                    </p>
-                    <span className="text-[11px] font-bold text-emerald-600 flex items-center">
-                      ↓ 14%
-                    </span>
-                  </div>
+                  <p className="text-[11px] text-[#65748B] font-medium truncate">Dispatch Latency</p>
+                  <p className="text-lg font-black text-[#12213A] mt-0.5">
+                    {kpis?.avg_dispatch_seconds ?? 0}s
+                  </p>
+                  <p className="text-[10px] text-slate-400 mt-0.5">Match & offer cycle</p>
                 </div>
               </div>
 
-              {/* Metric 3 */}
+              {/* Metric 3: Completion Rate */}
               <div className="p-3.5 rounded-xl border border-slate-100 bg-slate-50/60 flex items-start gap-3">
                 <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0">
-                  <CheckCircle className="w-4 h-4" />
+                  <Heart className="w-4 h-4 text-emerald-600" />
                 </div>
                 <div className="min-w-0">
-                  <p className="text-[11px] text-[#65748B] font-medium truncate">Case Completion Rate</p>
-                  <div className="flex items-baseline gap-1.5 mt-0.5">
-                    <p className="text-lg font-black text-[#12213A]">
-                      {kpis?.completion_rate_pct ?? 91.5}%
-                    </p>
-                    <span className="text-[11px] font-bold text-emerald-600 flex items-center">
-                      ↑ 7%
-                    </span>
-                  </div>
+                  <p className="text-[11px] text-[#65748B] font-medium truncate">Resolution Rate</p>
+                  <p className="text-lg font-black text-[#12213A] mt-0.5">
+                    {kpis?.completion_rate_pct ?? 0}%
+                  </p>
+                  <p className="text-[10px] text-slate-400 mt-0.5">Resolved missions</p>
                 </div>
               </div>
 
-              {/* Metric 4 */}
+              {/* Metric 4: Active Responders */}
               <div className="p-3.5 rounded-xl border border-slate-100 bg-slate-50/60 flex items-start gap-3">
-                <div className="w-8 h-8 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center shrink-0">
+                <div className="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-600 flex items-center justify-center shrink-0">
                   <Users className="w-4 h-4" />
                 </div>
                 <div className="min-w-0">
-                  <p className="text-[11px] text-[#65748B] font-medium truncate">Active Responders</p>
-                  <div className="flex items-baseline gap-1.5 mt-0.5">
-                    <p className="text-lg font-black text-[#12213A]">
-                      {(Array.isArray(responders) ? responders.length : 0) || 28}
-                    </p>
-                    <span className="text-[11px] font-bold text-emerald-600 flex items-center">
-                      ↑ 4%
-                    </span>
-                  </div>
+                  <p className="text-[11px] text-[#65748B] font-medium truncate">On-Duty Fleet</p>
+                  <p className="text-lg font-black text-[#12213A] mt-0.5">
+                    {activeRespondersCount} / {responders.length}
+                  </p>
+                  <p className="text-[10px] text-slate-400 mt-0.5">Active / Registered</p>
                 </div>
               </div>
             </div>
 
-            {/* Response Time Trend Line Chart (Matching reference design) */}
+            {/* Response Time Trend Line Chart - Real Backend Grouping */}
             <div className="pt-3 border-t border-slate-100">
               <div className="flex items-center justify-between mb-2">
                 <p className="text-xs font-bold text-[#12213A]">Response Time Trend</p>
-                <span className="text-[10px] text-[#65748B]">Minutes over past 30 days</span>
+                <span className="text-[10px] text-[#65748B]">Last 30 Days Telemetry</span>
               </div>
               <div className="h-[140px] w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={trendData} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
-                    <XAxis
-                      dataKey="date"
-                      stroke="#94A3B8"
-                      fontSize={10}
-                      tickLine={false}
-                      axisLine={{ stroke: '#E2E8F0' }}
-                    />
-                    <YAxis
-                      stroke="#94A3B8"
-                      fontSize={10}
-                      domain={[0, 60]}
-                      ticks={[0, 30, 60]}
-                      tickLine={false}
-                      axisLine={false}
-                    />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: '#10243E',
-                        borderRadius: '8px',
-                        border: 'none',
-                        color: 'white',
-                        fontSize: '11px',
-                        padding: '4px 8px',
-                      }}
-                      itemStyle={{ color: 'white' }}
-                      formatter={(val: any) => [`${val} min`, 'Response Time']}
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey="minutes"
-                      stroke="#2F73D9"
-                      strokeWidth={2.5}
-                      dot={{ r: 3.5, fill: '#2F73D9', strokeWidth: 1.5, stroke: 'white' }}
-                      activeDot={{ r: 5, fill: '#2563EB', stroke: 'white', strokeWidth: 2 }}
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
+                {trendData.length === 0 ? (
+                  <div className="h-full flex items-center justify-center text-slate-400 text-xs">
+                    No historical response time telemetry available yet.
+                  </div>
+                ) : (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={trendData} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
+                      <XAxis
+                        dataKey="date"
+                        stroke="#94A3B8"
+                        fontSize={10}
+                        tickLine={false}
+                        axisLine={{ stroke: '#E2E8F0' }}
+                      />
+                      <YAxis
+                        stroke="#94A3B8"
+                        fontSize={10}
+                        tickLine={false}
+                        axisLine={false}
+                      />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: '#10243E',
+                          borderRadius: '8px',
+                          border: 'none',
+                          color: 'white',
+                          fontSize: '11px',
+                          padding: '4px 8px',
+                        }}
+                        itemStyle={{ color: 'white' }}
+                        formatter={(val: any) => [`${val} min`, 'Avg Response Time']}
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="minutes"
+                        stroke="#2F73D9"
+                        strokeWidth={2.5}
+                        dot={{ r: 3, fill: '#2F73D9', strokeWidth: 1.5, stroke: 'white' }}
+                        activeDot={{ r: 5, fill: '#2563EB', stroke: 'white', strokeWidth: 2 }}
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                )}
               </div>
             </div>
           </div>
