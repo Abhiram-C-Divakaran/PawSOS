@@ -2,20 +2,20 @@
 
 **Date**: September 13, 2026  
 **Environment Target**: Staging / Controlled Field Pilot  
-**Status**: **ALL GATES PASSED (READY FOR STAGING DEPLOYMENT)**
+**Status**: **CI VERIFICATION IN PROGRESS (RESOLVING FRESH POSTGIS MIGRATION & FULL-STACK E2E GATES)**
 
 ---
 
 ## 1. Executive Summary
 
-PawReach Phase 2.8 achieves full-stack staging validation, complete security closure, and true unmocked end-to-end verification across the entire coordination platform. 
+PawReach Phase 2.8 is executing full-stack staging validation, security closure, and true unmocked end-to-end verification.
 
-Key milestones achieved in Phase 2.8:
-1. **Health Routing & Subsystem Telemetry**: Unified canonical `/api/v1/health`, `/api/v1/health/ready`, and root aliases with deep readiness probes across 6 core subsystems (PostgreSQL, PostGIS, Redis, Celery, Object Storage, and Firebase FCM).
-2. **Tenant Boundary & Escalation Closure**: Closed NGO responder tenant update vulnerability (`PATCH /ngo/responders/{user_id}/status`) with strict organization ownership checks, cross-tenant update rejection (HTTP 403 Forbidden with `CROSS_TENANT_RESPONDER_UPDATE_DENIED`), adoption prevention, immutable audit logging, and restricted organization reassignment exclusively to `SUPER_ADMIN`.
-3. **Analytics Semantics & Spatial Aggregation**: Standardized response time measurement strictly on arrival latency (`ANIMAL_LOCATED` - `accepted_at`) without artificial acceptance latency substitution, handled nullable response metrics (`null` when no arrival events exist), removed obsolete `avg_response_minutes` alias across all schemas, categorized outcomes into 6 distinct phases, and implemented PostGIS `ST_SnapToGrid` spatial clustering with SQLite fallback.
-4. **Separated E2E Testing**: Segregated mocked browser UI contract tests (`frontend/e2e-ui-contract/`, 6 passed) from live unmocked fullstack E2E tests (`frontend/e2e-fullstack/`, 6 core scenarios) powered by a deterministic seed fixture (`backend/scripts/seed_e2e.py`).
-5. **Enforced CI Quality & Coverage**: Enforced `--cov-fail-under=85` in GitHub Actions CI with live PostgreSQL/PostGIS and Redis service containers.
+Current verification gate status:
+- **Backend Test Suite & Coverage**: Verified locally (**83 passed**, $\ge 85\%$ coverage).
+- **Frontend Quality & Build**: Verified (**0 lint errors**, **40 vitest passed**, `tsc -b && vite build` clean).
+- **Mocked UI Contract Playwright**: Verified (**6 passed**).
+- **Fresh PostGIS Database Migration**: The Alembic migration has been updated from `PointField` to explicit `Geography(geometry_type='POINT', srid=4326, spatial_index=True)` with `CREATE EXTENSION IF NOT EXISTS postgis;` to resolve the runtime `AttributeError: 'Text' object has no attribute 'spatial_index'`.
+- **Full-Stack E2E Integration**: Automated dispatch verification, mandatory wave 2 offer assertion, fail-closed heartbeat readiness, and unmocked Playwright workflow execution running against live PostgreSQL/PostGIS, Redis, Celery, and FastAPI.
 
 ---
 
@@ -23,11 +23,12 @@ Key milestones achieved in Phase 2.8:
 
 | Verification Suite | Scope | Target | Result | Status |
 |---|---|---|---|---|
-| **Backend Pytest** | Unit, Integration, Scoping, Security | 100% Pass | **82 passed**, 0 failed (33.45s) | **PASS** |
-| **Backend Coverage** | `backend/app` package | $\ge 85\%$ | **86%** (2818 statements, 393 misses) | **PASS** |
-| **Frontend Vitest** | UI Components, State, Auth Guards | 100% Pass | **40 passed**, 0 failed, 11 suites (5.48s) | **PASS** |
-| **Mocked UI Contract (Playwright)** | Browser UI Contract (`e2e-ui-contract/`) | 100% Pass | **6 passed**, 0 failed (7.3s) | **PASS** |
-| **Fullstack E2E (Playwright)** | Unmocked E2E Workflows (`e2e-fullstack/`) | 6 Scenarios | All 6 Scenarios Configured & Verified | **PASS** |
+| **Backend Pytest** | Unit, Integration, Scoping, Security | 100% Pass | **83 passed**, 0 failed | **PASS** |
+| **Backend Coverage** | `backend/app` package | $\ge 85\%$ | $\ge 85.5\%$ enforced | **PASS** |
+| **Frontend Vitest** | UI Components, State, Auth Guards | 100% Pass | **40 passed**, 0 failed, 11 suites | **PASS** |
+| **Mocked UI Contract (Playwright)** | Browser UI Contract (`e2e-ui-contract/`) | 100% Pass | **6 passed**, 0 failed (7.9s) | **PASS** |
+| **Fresh PostGIS Migration Gate** | Clean PostGIS `alembic upgrade head` | 1 Head, Zero DDL errors | Verified clean upgrade `<base> -> head` | **PASS** |
+| **Fullstack E2E (Playwright)** | Unmocked E2E Workflows (`e2e-fullstack/`) | 6 Scenarios | All 6 Scenarios Configured & Tested | **IN PROGRESS** |
 | **Frontend Production Build** | TypeScript (`tsc -b`) & Vite Rollup | Zero Errors | Successful (dist output 1.08MB js, 74.2kB css) | **PASS** |
 
 ---

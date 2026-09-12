@@ -1,5 +1,5 @@
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, status, Response
 from sqlalchemy.orm import Session
 from sqlalchemy import text
@@ -24,6 +24,10 @@ def health_liveness():
 @router.get("/health/readiness")
 def health_readiness(response: Response, db: Session = Depends(get_db)):
     """Readiness probe checking critical downstream dependencies: Database, PostGIS, Redis, Worker, Storage, Firebase."""
+    require_full = (
+        settings.ENVIRONMENT in ["production", "staging"]
+        or os.getenv("REQUIRE_FULL_READINESS", "").lower() == "true"
+    )
     checks = {
         "database": "unknown",
         "postgis": "unknown",
@@ -47,7 +51,7 @@ def health_readiness(response: Response, db: Session = Depends(get_db)):
             except Exception as e:
                 logger.error(f"PostGIS check failed on PostgreSQL: {e}")
                 checks["postgis"] = "unavailable"
-                if settings.ENVIRONMENT in ["production", "staging"]:
+                if require_full:
                     healthy = False
         else:
             checks["postgis"] = "simulated"
@@ -56,7 +60,7 @@ def health_readiness(response: Response, db: Session = Depends(get_db)):
         checks["database"] = "disconnected"
         healthy = False
 
-    # 2. Redis and Worker Heartbeat check
+    # 2. Redis and Worker Heartbeat check (fail-closed)
     if settings.REDIS_URL:
         try:
             import redis
@@ -65,45 +69,63 @@ def health_readiness(response: Response, db: Session = Depends(get_db)):
             checks["redis"] = "connected"
 
             heartbeat = r.get("celery_worker_heartbeat")
-            if heartbeat:
+            if heartbeat is not None:
                 try:
                     hb_str = heartbeat.decode("utf-8") if isinstance(heartbeat, bytes) else str(heartbeat)
                     hb_time = datetime.fromisoformat(hb_str)
-                    age_sec = (datetime.utcnow() - hb_time).total_seconds()
+                    if hb_time.tzinfo is None:
+                        hb_time = hb_time.replace(tzinfo=timezone.utc)
+                    now_utc = datetime.now(timezone.utc)
+                    age_sec = (now_utc - hb_time).total_seconds()
+                    if age_sec < 0:
+                        age_sec = 0.0
+
                     if age_sec <= settings.CELERY_HEARTBEAT_THRESHOLD_SECONDS:
                         checks["worker"] = "active"
                     else:
                         checks["worker"] = "stale"
-                        if settings.ENVIRONMENT in ["production", "staging"] or os.getenv("REQUIRE_FULL_READINESS", "").lower() == "true":
+                        logger.warning(
+                            f"Celery worker heartbeat is stale: age {age_sec:.1f}s exceeds "
+                            f"threshold {settings.CELERY_HEARTBEAT_THRESHOLD_SECONDS}s"
+                        )
+                        if require_full:
                             healthy = False
-                except Exception:
-                    checks["worker"] = "active"
+                except Exception as parse_err:
+                    logger.warning(f"Invalid Celery worker heartbeat content in Redis: {parse_err}")
+                    checks["worker"] = "invalid_heartbeat"
+                    if require_full:
+                        healthy = False
             else:
-                checks["worker"] = "no_heartbeat"
-                if settings.ENVIRONMENT in ["production", "staging"] or os.getenv("REQUIRE_FULL_READINESS", "").lower() == "true":
-                    checks["worker"] = "degraded"
+                checks["worker"] = "missing"
+                logger.warning("Celery worker heartbeat key is missing in Redis")
+                if require_full:
                     healthy = False
         except Exception as e:
             logger.warning(f"Health check warning on Redis/Worker: {e}")
             checks["redis"] = "disconnected"
             checks["worker"] = "unavailable"
-            if settings.ENVIRONMENT in ["production", "staging"] or os.getenv("REQUIRE_FULL_READINESS", "").lower() == "true":
+            if require_full:
                 healthy = False
+    else:
+        if require_full:
+            checks["redis"] = "unconfigured"
+            checks["worker"] = "unavailable"
+            healthy = False
 
     # 3. Storage Provider check
     try:
         from app.services.storage_service import storage_service
         is_storage_ok = storage_service.check_health()
         checks["storage"] = "healthy" if is_storage_ok else "unhealthy"
-        if not is_storage_ok and settings.ENVIRONMENT in ["production", "staging"]:
+        if not is_storage_ok and require_full:
             healthy = False
     except Exception as e:
         logger.warning(f"Storage readiness check warning: {e}")
         checks["storage"] = "unhealthy"
-        if settings.ENVIRONMENT in ["production", "staging"]:
+        if require_full:
             healthy = False
 
-    # 4. Firebase Cloud Messaging configuration check
+    # 4. Firebase Cloud Messaging configuration check (optional in CI)
     try:
         from app.services.notification_service import _firebase_initialized
         checks["firebase"] = "healthy" if _firebase_initialized else "unconfigured"
@@ -111,10 +133,12 @@ def health_readiness(response: Response, db: Session = Depends(get_db)):
         checks["firebase"] = "unconfigured"
 
     # Map to standardized operational status strings
-    celery_status = (
-        "healthy" if checks["worker"] == "active"
-        else ("degraded" if checks["worker"] in ["stale", "no_heartbeat"] else "unavailable")
-    )
+    if checks["worker"] == "active":
+        celery_status = "healthy"
+    elif checks["worker"] == "stale":
+        celery_status = "degraded"
+    else:
+        celery_status = "unavailable"
 
     services = {
         "database": "healthy" if checks["database"] == "connected" else "unavailable",

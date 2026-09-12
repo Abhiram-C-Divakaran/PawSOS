@@ -83,20 +83,18 @@ test.describe('Full-Stack Automatic Dispatch Escalation & Exhaustion Flow (Unmoc
     const createdCase = await createRes.json();
     const caseId = createdCase.id;
 
-    // Trigger initial dispatch wave
-    await request.post(`${API_BASE_URL}/dispatch/cases/${caseId}/trigger`, {
-      headers: { Authorization: `Bearer ${tokenCitizen.access_token}` },
-    });
-
-    // 3. Verify Initial State: radius is 5.0 km, status is SEARCHING_RESPONDER
+    // 3. Verify Initial State: Case creation automatically initiates dispatch
+    // Status is SEARCHING_RESPONDER, radius is 5.0km, dispatch_attempt is 1
     const initialRes = await request.get(`${API_BASE_URL}/rescues/${caseId}`, {
       headers: { Authorization: `Bearer ${tokenAdminA.access_token}` },
     });
+    expect(initialRes.ok()).toBeTruthy();
     const initialData = await initialRes.json();
     expect(initialData.status).toBe('SEARCHING_RESPONDER');
     expect(initialData.dispatch_radius_km).toBe(5.0);
+    expect(initialData.dispatch_attempt).toBe(1);
 
-    // Verify initial offers (Wave 1) were generated for Rescuer 1 and/or 2, but NOT Rescuer 3
+    // Verify initial offers (Wave 1) were generated for eligible responders within 5km, but NOT Rescuer 3 (at ~8.5km)
     const dossierRes1 = await request.get(`${API_BASE_URL}/ngo/cases/${caseId}`, {
       headers: { Authorization: `Bearer ${tokenAdminA.access_token}` },
     });
@@ -108,6 +106,7 @@ test.describe('Full-Stack Automatic Dispatch Escalation & Exhaustion Flow (Unmoc
       expect(off.offered_at).toBeTruthy();
       expect(off.expires_at).toBeTruthy();
       expect(off.status).toBe('PENDING');
+      expect(off.rescuer_name).not.toBe('E2E Rescuer Wave Two');
     }
 
     // 4. ALLOW OFFERS TO EXPIRE NATURALLY VIA BACKGROUND CELERY WORKER
@@ -120,6 +119,7 @@ test.describe('Full-Stack Automatic Dispatch Escalation & Exhaustion Flow (Unmoc
     const dossierRes2 = await request.get(`${API_BASE_URL}/ngo/cases/${caseId}`, {
       headers: { Authorization: `Bearer ${tokenAdminA.access_token}` },
     });
+    expect(dossierRes2.ok()).toBeTruthy();
     const dossier2 = await dossierRes2.json();
     const allOffers = dossier2.dispatch_offers || [];
 
@@ -130,13 +130,19 @@ test.describe('Full-Stack Automatic Dispatch Escalation & Exhaustion Flow (Unmoc
       expect(expOffer.expired_at).toBeTruthy();
     }
 
-    // Next wave: Rescuer 3 (at 8.5km) is now within 10km radius and should receive a new offer
-    // Rescuer 1 & 2 must NOT be duplicated
+    // Next wave: Rescuer 3 (at 8.5km) is now within 10km radius and MUST receive a new offer
     const rescuer3Offer = allOffers.find((o: any) => o.rescuer_name === 'E2E Rescuer Wave Two');
-    if (rescuer3Offer) {
-      expect(rescuer3Offer.distance_km).toBeGreaterThan(5.0);
-      expect(rescuer3Offer.distance_km).toBeLessThanOrEqual(10.0);
-    }
+    expect(rescuer3Offer).toBeDefined();
+    expect(rescuer3Offer.status).toBe('PENDING');
+    expect(rescuer3Offer.distance_km).toBeGreaterThan(5.0);
+    expect(rescuer3Offer.distance_km).toBeLessThanOrEqual(10.0);
+    expect(rescuer3Offer.offered_at).toBeTruthy();
+    expect(rescuer3Offer.expires_at).toBeTruthy();
+
+    // Verify responders already offered in Wave 1 do not receive duplicate active offers in Wave 2
+    const pendingWave2Offers = allOffers.filter((o: any) => o.status === 'PENDING');
+    expect(pendingWave2Offers.length).toBe(1);
+    expect(pendingWave2Offers[0].rescuer_name).toBe('E2E Rescuer Wave Two');
 
     // 6. PROVE DISPATCH EXHAUSTION (SEARCHING_RESPONDER -> UNRESOLVED)
     // Wait for subsequent radii (20km, 40km) to expire naturally without manual intervention

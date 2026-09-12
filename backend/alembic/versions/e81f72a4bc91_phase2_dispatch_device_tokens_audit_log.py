@@ -28,11 +28,20 @@ def upgrade() -> None:
 
     # 2. Update users table with veterinary_facility_id
     op.add_column('users', sa.Column('veterinary_facility_id', sa.Uuid(), nullable=True))
-    op.create_foreign_key(
-        'fk_users_veterinary_facility_id',
-        'users', 'veterinary_facilities',
-        ['veterinary_facility_id'], ['id']
-    )
+    bind = op.get_bind()
+    if bind and bind.dialect.name == 'sqlite':
+        with op.batch_alter_table('users') as batch_op:
+            batch_op.create_foreign_key(
+                'fk_users_veterinary_facility_id',
+                'veterinary_facilities',
+                ['veterinary_facility_id'], ['id']
+            )
+    else:
+        op.create_foreign_key(
+            'fk_users_veterinary_facility_id',
+            'users', 'veterinary_facilities',
+            ['veterinary_facility_id'], ['id']
+        )
 
     # 3. Update notifications table with data payload column
     op.add_column('notifications', sa.Column('data', sa.Text(), nullable=True))
@@ -91,7 +100,9 @@ def downgrade() -> None:
 
     op.drop_column('notifications', 'data')
 
-    op.drop_constraint('fk_users_veterinary_facility_id', 'users', type_='foreignkey')
+    bind = op.get_bind()
+    if bind and bind.dialect.name != 'sqlite':
+        op.drop_constraint('fk_users_veterinary_facility_id', 'users', type_='foreignkey')
     op.drop_column('users', 'veterinary_facility_id')
 
     op.drop_column('rescue_assignments', 'rejection_reason')

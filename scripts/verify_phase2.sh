@@ -5,13 +5,20 @@ echo "=== PawReach Phase 2.8 Local Verification Suite ==="
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 echo ""
-echo "--- 1. Backend Pytest & Coverage Enforcement (>=85%) ---"
+echo "--- 1. Alembic Migration Chain Check ---"
 cd "$REPO_ROOT/backend"
 if [ -d "venv" ]; then
     source venv/bin/activate
 elif [ -d "../venv" ]; then
     source ../venv/bin/activate
 fi
+export DATABASE_URL="sqlite:///./temp_verify.db"
+alembic upgrade head
+alembic current
+rm -f temp_verify.db
+
+echo ""
+echo "--- 2. Backend Pytest & Coverage Enforcement (>=85%) ---"
 export PYTHONPATH="."
 pytest tests --cov=app --cov-report=term-missing --cov-fail-under=85 -v -p no:warnings
 

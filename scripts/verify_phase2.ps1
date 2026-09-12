@@ -3,8 +3,19 @@ $ErrorActionPreference = "Stop"
 Write-Host "=== PawReach Phase 2.8 Local Verification Suite ===" -ForegroundColor Cyan
 $RepoRoot = Resolve-Path "$PSScriptRoot\.."
 
-Write-Host "`n--- 1. Backend Pytest & Coverage Enforcement (>=85%) ---" -ForegroundColor Yellow
+Write-Host "`n--- 1. Alembic Migration Chain Check ---" -ForegroundColor Yellow
 Push-Location "$RepoRoot\backend"
+$env:DATABASE_URL = "sqlite:///./temp_verify.db"
+if (Test-Path ".\venv\Scripts\alembic.exe") {
+    & ".\venv\Scripts\alembic.exe" upgrade head
+    & ".\venv\Scripts\alembic.exe" current
+} else {
+    alembic upgrade head
+    alembic current
+}
+Remove-Item temp_verify.db -Force -ErrorAction SilentlyContinue
+
+Write-Host "`n--- 2. Backend Pytest & Coverage Enforcement (>=85%) ---" -ForegroundColor Yellow
 $env:PYTHONPATH = "."
 if (Test-Path ".\venv\Scripts\pytest.exe") {
     & ".\venv\Scripts\pytest.exe" tests --cov=app --cov-report=term-missing --cov-fail-under=85 -v -p no:warnings

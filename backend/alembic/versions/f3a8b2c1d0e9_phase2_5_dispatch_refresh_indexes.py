@@ -21,11 +21,20 @@ def upgrade() -> None:
     op.add_column('rescue_cases', sa.Column('dispatch_attempt', sa.Integer(), nullable=False, server_default='0'))
     op.add_column('rescue_cases', sa.Column('dispatch_radius_km', sa.Float(), nullable=False, server_default='5.0'))
     op.add_column('rescue_cases', sa.Column('last_dispatch_at', sa.DateTime(), nullable=True))
-    op.create_foreign_key(
-        'fk_rescue_cases_organization_id',
-        'rescue_cases', 'organizations',
-        ['organization_id'], ['id']
-    )
+    bind = op.get_bind()
+    if bind and bind.dialect.name == 'sqlite':
+        with op.batch_alter_table('rescue_cases') as batch_op:
+            batch_op.create_foreign_key(
+                'fk_rescue_cases_organization_id',
+                'organizations',
+                ['organization_id'], ['id']
+            )
+    else:
+        op.create_foreign_key(
+            'fk_rescue_cases_organization_id',
+            'rescue_cases', 'organizations',
+            ['organization_id'], ['id']
+        )
 
     # 2. Create refresh_sessions table for token revocation
     op.create_table(
@@ -72,7 +81,9 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_refresh_sessions_user_id'), table_name='refresh_sessions')
     op.drop_table('refresh_sessions')
 
-    op.drop_constraint('fk_rescue_cases_organization_id', 'rescue_cases', type_='foreignkey')
+    bind = op.get_bind()
+    if bind and bind.dialect.name != 'sqlite':
+        op.drop_constraint('fk_rescue_cases_organization_id', 'rescue_cases', type_='foreignkey')
     op.drop_column('rescue_cases', 'last_dispatch_at')
     op.drop_column('rescue_cases', 'dispatch_radius_km')
     op.drop_column('rescue_cases', 'dispatch_attempt')

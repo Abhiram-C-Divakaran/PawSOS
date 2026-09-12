@@ -85,3 +85,68 @@ def test_refresh_token_rotation_and_cookies(client, citizen_user):
     # Logout
     logout_res = client.post("/api/v1/auth/logout")
     assert logout_res.status_code == 200
+
+
+def test_readiness_worker_heartbeat_scenarios(client, monkeypatch):
+    """Verify fail-closed worker heartbeat readiness under valid, stale, invalid, missing, and redis error states."""
+    from unittest.mock import MagicMock
+    from datetime import datetime, timezone, timedelta
+    from app.config import settings
+    import redis
+
+    # Scenario 1: Fresh valid heartbeat
+    now_iso = datetime.now(timezone.utc).isoformat()
+    mock_redis = MagicMock()
+    mock_redis.ping.return_value = True
+    mock_redis.get.return_value = now_iso.encode("utf-8")
+
+    monkeypatch.setattr(settings, "REDIS_URL", "redis://localhost:6379/0")
+    monkeypatch.setattr(redis, "from_url", lambda *args, **kwargs: mock_redis)
+
+    res = client.get("/api/v1/health/ready")
+    assert res.status_code == 200
+    data = res.json()
+    assert data["checks"]["redis"] == "connected"
+    assert data["checks"]["worker"] == "active"
+    assert data["services"]["celery"] == "healthy"
+
+    # Scenario 2: Stale heartbeat (age > threshold)
+    stale_iso = (datetime.now(timezone.utc) - timedelta(seconds=120)).isoformat()
+    mock_redis.get.return_value = stale_iso.encode("utf-8")
+    monkeypatch.setenv("REQUIRE_FULL_READINESS", "true")
+
+    res = client.get("/api/v1/health/ready")
+    assert res.status_code == 503
+    data = res.json()
+    assert data["checks"]["worker"] == "stale"
+    assert data["services"]["celery"] == "degraded"
+
+    # Scenario 3: Invalid unparseable heartbeat content
+    mock_redis.get.return_value = b"NOT_A_VALID_DATETIME_STRING"
+    res = client.get("/api/v1/health/ready")
+    assert res.status_code == 503
+    data = res.json()
+    assert data["checks"]["worker"] == "invalid_heartbeat"
+    assert data["services"]["celery"] == "unavailable"
+
+    # Scenario 4: Missing heartbeat key (None)
+    mock_redis.get.return_value = None
+    res = client.get("/api/v1/health/ready")
+    assert res.status_code == 503
+    data = res.json()
+    assert data["checks"]["worker"] == "missing"
+    assert data["services"]["celery"] == "unavailable"
+
+    # Scenario 5: Redis connection failure
+    mock_failing_redis = MagicMock()
+    mock_failing_redis.ping.side_effect = Exception("Connection refused")
+    monkeypatch.setattr(redis, "from_url", lambda *args, **kwargs: mock_failing_redis)
+
+    res = client.get("/api/v1/health/ready")
+    assert res.status_code == 503
+    data = res.json()
+    assert data["checks"]["redis"] == "disconnected"
+    assert data["checks"]["worker"] == "unavailable"
+    assert data["services"]["redis"] == "unavailable"
+    assert data["services"]["celery"] == "unavailable"
+

@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from app.tasks.celery_app import celery_app
 from app.database import SessionLocal
 from app.config import settings
@@ -12,7 +12,7 @@ def worker_heartbeat_task() -> dict:
     try:
         import redis
         r = redis.from_url(settings.REDIS_URL, socket_timeout=2)
-        now_iso = datetime.utcnow().isoformat()
+        now_iso = datetime.now(timezone.utc).isoformat()
         r.set("celery_worker_heartbeat", now_iso, ex=settings.CELERY_HEARTBEAT_TTL_SECONDS)
         return {"status": "ok", "heartbeat_at": now_iso}
     except Exception as e:
@@ -39,7 +39,7 @@ def expire_dispatch_offers_task(db_session=None) -> dict:
             "expired_offers": expired_count,
             "escalated_cases": escalated_count,
             "exhausted_unresolved_cases": failed_count,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         }
     except Exception as e:
         logger.error(f"Error executing expire_dispatch_offers_task: {e}", exc_info=True)

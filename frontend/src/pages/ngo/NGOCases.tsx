@@ -1,8 +1,14 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { Search, Filter, ArrowUpRight, Clock } from 'lucide-react';
 import api from '../../services/api';
 import type { RescueCase, RescuePriority, RescueStatus } from '../../types';
+
+function formatMinutesAgo(createdAt: string): string {
+  const diffMs = Math.max(0, Date.now() - new Date(createdAt).getTime());
+  const minutes = Math.round(diffMs / 60000);
+  return minutes < 60 ? `${minutes}m ago` : `${Math.floor(minutes / 60)}h ago`;
+}
 
 export const NGOCases: React.FC = () => {
   const [cases, setCases] = useState<RescueCase[]>([]);
@@ -13,10 +19,10 @@ export const NGOCases: React.FC = () => {
   const [page, setPage] = useState<number>(0);
   const limit = 25;
 
-  const fetchCases = async () => {
+  const fetchCases = useCallback(async () => {
     setLoading(true);
     try {
-      const params: any = { skip: page * limit, limit };
+      const params: Record<string, string | number> = { skip: page * limit, limit };
       if (search) params.search = search;
       if (priorityFilter) params.priority = priorityFilter;
       if (statusFilter) params.status = statusFilter;
@@ -28,11 +34,11 @@ export const NGOCases: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [page, limit, search, priorityFilter, statusFilter]);
 
   useEffect(() => {
     fetchCases();
-  }, [page, priorityFilter, statusFilter]);
+  }, [fetchCases]);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -173,9 +179,7 @@ export const NGOCases: React.FC = () => {
                   </td>
                 </tr>
               ) : (
-                cases.map((c) => {
-                  const minutesAgo = Math.round((Date.now() - new Date(c.created_at).getTime()) / 60000);
-                  return (
+                cases.map((c) => (
                     <tr key={c.id} className="hover:bg-blue-50/40 transition-colors">
                       <td className="py-3.5 px-4 font-mono font-bold text-slate-900">{c.case_number}</td>
                       <td className="py-3.5 px-4">
@@ -190,7 +194,7 @@ export const NGOCases: React.FC = () => {
                       <td className="py-3.5 px-4 whitespace-nowrap text-[#65748B]">
                         <span className="flex items-center gap-1">
                           <Clock className="w-3 h-3 text-slate-400" />
-                          {minutesAgo < 60 ? `${minutesAgo}m ago` : `${Math.floor(minutesAgo / 60)}h ago`}
+                          {formatMinutesAgo(c.created_at)}
                         </span>
                       </td>
                       <td className="py-3.5 px-4 text-right">
@@ -202,8 +206,7 @@ export const NGOCases: React.FC = () => {
                         </Link>
                       </td>
                     </tr>
-                  );
-                })
+                  ))
               )}
             </tbody>
           </table>
