@@ -1,3 +1,5 @@
+import os
+from pydantic import model_validator
 from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
@@ -45,6 +47,24 @@ class Settings(BaseSettings):
     COOKIE_SAMESITE: str = "lax"
     RATE_LIMIT_PER_MINUTE: int = 60
     SENTRY_DSN: str = ""
+
+    @model_validator(mode="after")
+    def validate_production_settings(self):
+        env = (self.ENVIRONMENT or "development").lower()
+        if env in ["production", "staging"]:
+            if "sqlite" in self.DATABASE_URL.lower():
+                raise ValueError("Production/staging database must use PostgreSQL with PostGIS. SQLite is prohibited.")
+            insecure_secrets = ["secret", "dev_secret_key_change_in_production", ""]
+            if self.JWT_SECRET_KEY in insecure_secrets or len(self.JWT_SECRET_KEY) < 32:
+                raise ValueError("Insecure or weak JWT_SECRET_KEY detected in production/staging environment (min 32 chars).")
+            if not self.CORS_ORIGINS:
+                raise ValueError("CORS_ORIGINS must be configured in production/staging environment.")
+            if self.STORAGE_PROVIDER.lower() == "s3":
+                if not (self.AWS_ACCESS_KEY_ID and self.AWS_SECRET_ACCESS_KEY and self.S3_BUCKET_NAME):
+                    raise ValueError("AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and S3_BUCKET_NAME are required when STORAGE_PROVIDER=s3.")
+            if self.FIREBASE_CREDENTIALS_PATH and not os.path.exists(self.FIREBASE_CREDENTIALS_PATH):
+                raise ValueError(f"FIREBASE_CREDENTIALS_PATH specified ({self.FIREBASE_CREDENTIALS_PATH}) but file not found.")
+        return self
     
     class Config:
         env_file = ".env"

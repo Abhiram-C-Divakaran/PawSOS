@@ -1,12 +1,15 @@
+import hashlib
+import uuid
+from datetime import datetime, timedelta
+from typing import Optional
+
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
-from typing import Optional
-import uuid
-from datetime import datetime
 
 from app.database import get_db
 from app.models.user import User
+from app.models.refresh_session import RefreshSession
 from app.schemas.auth import Token, RefreshRequest
 from app.schemas.user import UserCreate, UserResponse
 from app.config import settings
@@ -16,6 +19,7 @@ from app.core.security import (
     create_access_token,
     create_refresh_token,
     decode_token,
+    hash_jti,
 )
 from app.core.constants import UserRole
 from app.core.exceptions import UnauthorizedException, BadRequestException
@@ -67,25 +71,40 @@ def login(
         raise UnauthorizedException("Inactive user")
 
     user.last_login_at = datetime.utcnow()
-    db.commit()
 
     access_tok = create_access_token(user.id)
     refresh_tok = create_refresh_token(user.id)
 
-    # Set HttpOnly, Secure cookie in production
-    is_prod = settings.ENVIRONMENT == "production"
+    # Track RefreshSession in database
+    payload = decode_token(refresh_tok)
+    jti = payload.get("jti") or uuid.uuid4().hex
+    token_hash = hash_jti(jti)
+    expires_at = datetime.utcnow() + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
+
+    session = RefreshSession(
+        user_id=user.id,
+        token_hash=token_hash,
+        device_id=request.headers.get("user-agent", "Unknown Device")[:255],
+        created_at=datetime.utcnow(),
+        expires_at=expires_at,
+    )
+    db.add(session)
+    db.commit()
+
+    is_prod = settings.ENVIRONMENT in ["production", "staging"]
     response.set_cookie(
         key="refresh_token",
         value=refresh_tok,
         httponly=True,
-        secure=is_prod,
-        samesite="lax",
+        secure=is_prod or settings.COOKIE_SECURE,
+        samesite=settings.COOKIE_SAMESITE,
         max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 86400,
     )
 
+    # Requirement 23: Do not leak refresh token in response body in production
     return {
         "access_token": access_tok,
-        "refresh_token": refresh_tok,
+        "refresh_token": None if is_prod else refresh_tok,
         "token_type": "bearer",
     }
 
@@ -114,12 +133,33 @@ def refresh(
         raise UnauthorizedException("Invalid token type. Expected refresh token.")
 
     user_id = payload.get("sub")
-    if not user_id:
+    jti = payload.get("jti")
+    if not user_id or not jti:
         raise UnauthorizedException("Malformed token payload")
+
     try:
         user_uuid = uuid.UUID(str(user_id))
     except ValueError:
         raise UnauthorizedException("Malformed token payload")
+
+    # Verify session in DB and check for revocation
+    token_hash = hash_jti(jti)
+    session = db.query(RefreshSession).filter(RefreshSession.token_hash == token_hash).first()
+    if not session:
+        raise UnauthorizedException("Invalid refresh token session")
+    if session.revoked_at is not None:
+        # Replay attack detected! Invalidate the downstream token chain to prevent compromised token abuse
+        if session.replaced_by:
+            try:
+                db.query(RefreshSession).filter(
+                    RefreshSession.id == uuid.UUID(session.replaced_by)
+                ).update({"revoked_at": datetime.utcnow()}, synchronize_session=False)
+                db.commit()
+            except Exception:
+                pass
+        raise UnauthorizedException("Refresh token has been revoked")
+    if session.expires_at < datetime.utcnow():
+        raise UnauthorizedException("Refresh token has expired")
 
     user = db.query(User).filter(User.id == user_uuid).first()
     if not user:
@@ -131,27 +171,77 @@ def refresh(
     new_access = create_access_token(user.id)
     new_refresh = create_refresh_token(user.id)
 
-    is_prod = settings.ENVIRONMENT == "production"
+    new_payload = decode_token(new_refresh)
+    new_jti = new_payload.get("jti") or uuid.uuid4().hex
+    new_token_hash = hash_jti(new_jti)
+    new_expires_at = datetime.utcnow() + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
+
+    new_session = RefreshSession(
+        user_id=user.id,
+        token_hash=new_token_hash,
+        device_id=request.headers.get("user-agent", "Unknown Device")[:255],
+        created_at=datetime.utcnow(),
+        expires_at=new_expires_at,
+    )
+    db.add(new_session)
+    db.flush()
+
+    # Revoke old session and link replacement
+    session.revoked_at = datetime.utcnow()
+    session.replaced_by = str(new_session.id)
+    db.commit()
+
+    is_prod = settings.ENVIRONMENT in ["production", "staging"]
     response.set_cookie(
         key="refresh_token",
         value=new_refresh,
         httponly=True,
-        secure=is_prod,
-        samesite="lax",
+        secure=is_prod or settings.COOKIE_SECURE,
+        samesite=settings.COOKIE_SAMESITE,
         max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 86400,
     )
 
     return {
         "access_token": new_access,
-        "refresh_token": new_refresh,
+        "refresh_token": None if is_prod else new_refresh,
         "token_type": "bearer",
     }
 
 @router.post("/logout")
-def logout(response: Response):
-    """Clear the refresh token cookie on logout."""
+def logout(request: Request, response: Response, db: Session = Depends(get_db)):
+    """Revoke current device refresh session and clear cookie."""
+    raw_token = request.cookies.get("refresh_token")
+    if raw_token:
+        try:
+            payload = decode_token(raw_token)
+            jti = payload.get("jti")
+            if jti:
+                token_hash = hash_jti(jti)
+                session = db.query(RefreshSession).filter(RefreshSession.token_hash == token_hash).first()
+                if session and session.revoked_at is None:
+                    session.revoked_at = datetime.utcnow()
+                    db.commit()
+        except Exception:
+            pass
+
     response.delete_cookie(key="refresh_token")
     return {"success": True, "message": "Logged out successfully"}
+
+@router.post("/logout-all")
+def logout_all(
+    response: Response,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Revoke all active refresh sessions across all devices for the current user."""
+    db.query(RefreshSession).filter(
+        RefreshSession.user_id == current_user.id,
+        RefreshSession.revoked_at.is_(None)
+    ).update({"revoked_at": datetime.utcnow()}, synchronize_session=False)
+    db.commit()
+
+    response.delete_cookie(key="refresh_token")
+    return {"success": True, "message": "All device sessions revoked successfully"}
 
 @router.get("/me", response_model=UserResponse)
 def get_me(current_user: User = Depends(get_current_active_user)):

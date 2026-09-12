@@ -182,13 +182,21 @@ class DispatchService:
         return candidates
 
     @classmethod
-    def dispatch_case(cls, db: Session, case_id: uuid.UUID) -> List[RescueAssignment]:
+    def get_radius_levels(cls) -> List[float]:
+        if isinstance(settings.DISPATCH_RADIUS_LEVELS, str):
+            return [float(r.strip()) for r in settings.DISPATCH_RADIUS_LEVELS.split(",") if r.strip()]
+        return [float(r) for r in settings.DISPATCH_RADIUS_LEVELS]
+
+    @classmethod
+    def dispatch_case(cls, db: Session, case_id: uuid.UUID, auto_escalate: bool = False) -> List[RescueAssignment]:
         """
         Execute automatic dispatch engine for a rescue case:
         1. Ensures case is in SEARCHING_RESPONDER status.
-        2. Progressively searches expanding radii.
-        3. Generates Dispatch Offers for top ranked responders up to priority limit.
-        4. Sends real-time Push + In-App notifications.
+        2. Progressively searches expanding radii deterministically (Attempt 1 -> 5km, Attempt 2 -> 10km, etc.).
+        3. Excludes previously contacted responders across all attempts.
+        4. If all radii exhausted, transitions to UNRESOLVED with admin alert.
+        5. Generates Dispatch Offers for top ranked responders up to priority limit.
+        6. Sends real-time Push + In-App notifications.
         """
         case = db.query(RescueCase).filter(RescueCase.id == case_id).first()
         if not case:
@@ -210,7 +218,11 @@ class DispatchService:
                 notes="Automatic dispatch engine searching for responders",
             )
 
-        # Responders to exclude: already offered, or previously rejected
+        radius_levels = cls.get_radius_levels()
+        if not radius_levels:
+            radius_levels = [5.0, 10.0, 20.0, 40.0]
+
+        # Responders to exclude: already offered, pending, accepted, or rejected
         existing_assignments = (
             db.query(RescueAssignment)
             .filter(RescueAssignment.rescue_case_id == case.id)
@@ -219,44 +231,107 @@ class DispatchService:
         excluded_rescuer_ids: Set[uuid.UUID] = {
             a.rescuer_id
             for a in existing_assignments
-            if a.assignment_status in [AssignmentStatus.PENDING, AssignmentStatus.REJECTED, AssignmentStatus.ACCEPTED]
+            if a.assignment_status in [
+                AssignmentStatus.PENDING,
+                AssignmentStatus.REJECTED,
+                AssignmentStatus.ACCEPTED,
+                AssignmentStatus.EXPIRED,
+            ]
         }
 
         max_offers = PRIORITY_MAX_OFFERS.get(
             case.triage_priority, settings.DISPATCH_MAX_OFFERS_GENERAL
         )
 
-        # Progressively expanding radii
-        selected_candidates: List[Tuple[User, RescuerProfile, float, float]] = []
-        radius_levels = (
-            [float(r.strip()) for r in str(settings.DISPATCH_RADIUS_LEVELS).split(",") if r.strip()]
-            if isinstance(settings.DISPATCH_RADIUS_LEVELS, str)
-            else [float(r) for r in settings.DISPATCH_RADIUS_LEVELS]
+        # Initialize attempt and radius if not yet set
+        if not case.dispatch_attempt or case.dispatch_attempt < 1:
+            case.dispatch_attempt = 1
+            case.dispatch_radius_km = radius_levels[0]
+
+        logger.info(
+            f"[EVENT: DISPATCH_STARTED] Case {case.case_number} (ID: {case.id}) | Attempt {case.dispatch_attempt} | Radius {case.dispatch_radius_km}km | Excluded: {len(excluded_rescuer_ids)}"
         )
-        for radius in radius_levels:
+
+        selected_candidates: List[Tuple[User, RescuerProfile, float, float]] = []
+
+        if not auto_escalate:
+            # Single-tier evaluation for current attempt (does not jump to UNRESOLVED in 0ms)
+            attempt_idx = min(case.dispatch_attempt - 1, len(radius_levels) - 1)
+            current_radius = radius_levels[attempt_idx]
+            case.dispatch_radius_km = current_radius
+
             candidates = cls.find_eligible_responders(
                 db=db,
                 case=case,
-                radius_km=radius,
+                radius_km=current_radius,
                 excluded_rescuer_ids=excluded_rescuer_ids,
             )
             if candidates:
                 selected_candidates = candidates[:max_offers]
                 logger.info(
-                    f"Found {len(selected_candidates)} candidates within {radius}km for case {case.case_number}"
+                    f"[EVENT: RESPONDERS_FOUND] Found {len(selected_candidates)} candidates within {current_radius}km for case {case.case_number}"
                 )
-                break
+            else:
+                logger.info(
+                    f"No responders found within {current_radius}km for case {case.case_number}. Case remains searching; awaiting periodic worker."
+                )
+                case.last_dispatch_at = datetime.utcnow()
+                db.commit()
+                return []
+        else:
+            # Multi-tier escalation mode (used when explicitly testing exhaustion or by periodic worker)
+            while case.dispatch_attempt <= len(radius_levels):
+                current_radius = radius_levels[case.dispatch_attempt - 1]
+                case.dispatch_radius_km = current_radius
 
-        if not selected_candidates:
-            max_rad = radius_levels[-1] if radius_levels else 40.0
-            logger.info(
-                f"No eligible responders found within max radius {max_rad}km for case {case.case_number}"
-            )
-            return []
+                candidates = cls.find_eligible_responders(
+                    db=db,
+                    case=case,
+                    radius_km=current_radius,
+                    excluded_rescuer_ids=excluded_rescuer_ids,
+                )
+
+                if candidates:
+                    selected_candidates = candidates[:max_offers]
+                    logger.info(
+                        f"[EVENT: RESPONDERS_FOUND] Found {len(selected_candidates)} candidates within {current_radius}km for case {case.case_number}"
+                    )
+                    break
+                else:
+                    logger.info(
+                        f"No responders at {current_radius}km for case {case.case_number}. Advancing attempt {case.dispatch_attempt} -> {case.dispatch_attempt + 1}"
+                    )
+                    case.dispatch_attempt += 1
+                    if case.dispatch_attempt <= len(radius_levels):
+                        next_radius = radius_levels[case.dispatch_attempt - 1]
+                        logger.info(
+                            f"[EVENT: RADIUS_EXPANDED] Case {case.case_number} expanded to {next_radius}km (Attempt {case.dispatch_attempt})"
+                        )
+
+            # If all radius levels exhausted without candidates -> UNRESOLVED
+            if not selected_candidates:
+                logger.warning(
+                    f"[EVENT: DISPATCH_FAILED] All {len(radius_levels)} radius levels exhausted for case {case.case_number}. Transitioning to UNRESOLVED."
+                )
+                from app.services.rescue_service import RescueService
+                RescueService.update_status(
+                    db=db,
+                    rescue_case=case,
+                    new_status=RescueStatus.UNRESOLVED,
+                    user_id=None,
+                    notes="Automatic dispatch exhausted all radii (5-40km) without finding available responders.",
+                    system_update=True,
+                )
+                db.commit()
+
+                # Alert NGO Admins and Super Admins
+                cls._notify_dispatch_exhausted(db, case)
+                return []
 
         # Create dispatch offers
         now = datetime.utcnow()
         expires_at = now + timedelta(seconds=settings.DISPATCH_OFFER_EXPIRY_SECONDS)
+        case.last_dispatch_at = now
         created_offers: List[RescueAssignment] = []
 
         for user, profile, dist_km, score in selected_candidates:
@@ -274,6 +349,10 @@ class DispatchService:
             created_offers.append(offer)
 
         db.commit()
+
+        logger.info(
+            f"[EVENT: OFFERS_CREATED] Case {case.case_number} created {len(created_offers)} offers expiring in {settings.DISPATCH_OFFER_EXPIRY_SECONDS}s"
+        )
 
         # Distribute Push Alerts + In-App Notifications
         for offer in created_offers:
@@ -302,29 +381,68 @@ class DispatchService:
         return created_offers
 
     @classmethod
-    def expire_stale_offers(cls, db: Session) -> int:
+    def _notify_dispatch_exhausted(cls, db: Session, case: RescueCase):
+        """Send high-priority alerts to NGO Admins and Super Admins when dispatch fails."""
+        from app.models.user import User
+        query = db.query(User).filter(
+            User.role.in_([UserRole.NGO_ADMIN, UserRole.SUPER_ADMIN]),
+            User.is_active == True,
+        )
+        if case.organization_id:
+            query = query.filter(
+                (User.organization_id == case.organization_id) | (User.role == UserRole.SUPER_ADMIN)
+            )
+        admins = query.all()
+        admin_ids = [a.id for a in admins]
+
+        if admin_ids:
+            NotificationService.notify_users(
+                db=db,
+                user_ids=admin_ids,
+                title=f"⚠️ Dispatch Failed: Case {case.case_number} Unresolved",
+                message=f"No responder accepted within dispatch radius for case {case.case_number}. Manual intervention required.",
+                notification_type="DISPATCH_FAILED",
+                rescue_case_id=case.id,
+                data={
+                    "type": "DISPATCH_FAILED",
+                    "case_id": str(case.id),
+                    "case_number": case.case_number,
+                    "route": f"/ngo/cases/{case.id}",
+                },
+            )
+
+    @classmethod
+    def process_dispatch_lifecycle(cls, db: Session) -> Tuple[int, int, int]:
         """
-        Scan and expire offers past their expiry deadline.
-        Triggers radius escalation for cases still needing responders.
+        Worker routine:
+        1. Find PENDING offers where expires_at < now -> mark EXPIRED.
+        2. Check affected cases.
+        3. If no pending or accepted offers remain -> escalate to next radius level or transition to UNRESOLVED.
+        Returns: (expired_count, escalated_count, failed_count)
         """
         now = datetime.utcnow()
-        expired_offers = (
-            db.query(RescueAssignment)
-            .filter(
-                RescueAssignment.assignment_status == AssignmentStatus.PENDING,
-                RescueAssignment.expires_at <= now,
-            )
-            .all()
+        dialect_name = db.bind.dialect.name if db.bind else "sqlite"
+
+        offer_query = db.query(RescueAssignment).filter(
+            RescueAssignment.assignment_status == AssignmentStatus.PENDING,
+            RescueAssignment.expires_at <= now,
         )
+        if dialect_name == "postgresql":
+            expired_offers = offer_query.with_for_update().all()
+        else:
+            expired_offers = offer_query.all()
 
         if not expired_offers:
-            return 0
+            return 0, 0, 0
 
-        affected_case_ids = set()
+        affected_case_ids: Set[uuid.UUID] = set()
         for offer in expired_offers:
             offer.assignment_status = AssignmentStatus.EXPIRED
             offer.expired_at = now
             affected_case_ids.add(offer.rescue_case_id)
+            logger.info(
+                f"[EVENT: OFFER_EXPIRED] Offer {offer.id} for case {offer.rescue_case_id} expired"
+            )
 
         db.commit()
 
@@ -339,20 +457,73 @@ class DispatchService:
                 rescue_case_id=offer.rescue_case_id,
             )
 
-        # Attempt escalation for cases with no active pending offers
+        radius_levels = cls.get_radius_levels()
+        if not radius_levels:
+            radius_levels = [5.0, 10.0, 20.0, 40.0]
+
+        escalated_count = 0
+        failed_count = 0
+
+        # Attempt escalation for affected cases that still need a responder
         for case_id in affected_case_ids:
-            remaining_pending = (
+            case = db.query(RescueCase).filter(RescueCase.id == case_id).first()
+            if not case or case.status != RescueStatus.SEARCHING_RESPONDER:
+                continue
+
+            # Check if any active offers remain
+            active_count = (
                 db.query(RescueAssignment)
                 .filter(
-                    RescueAssignment.rescue_case_id == case_id,
-                    RescueAssignment.assignment_status == AssignmentStatus.PENDING,
+                    RescueAssignment.rescue_case_id == case.id,
+                    RescueAssignment.assignment_status.in_([
+                        AssignmentStatus.PENDING,
+                        AssignmentStatus.ACCEPTED,
+                    ]),
                 )
                 .count()
             )
-            if remaining_pending == 0:
-                cls.dispatch_case(db, case_id)
+            if active_count > 0:
+                continue
 
-        return len(expired_offers)
+            # Advance to next attempt
+            case.dispatch_attempt = (case.dispatch_attempt or 1) + 1
+
+            if case.dispatch_attempt > len(radius_levels):
+                # All radii exhausted!
+                from app.services.rescue_service import RescueService
+                RescueService.update_status(
+                    db=db,
+                    rescue_case=case,
+                    new_status=RescueStatus.UNRESOLVED,
+                    user_id=None,
+                    notes="Automatic dispatch exhausted all radii (5-40km) without acceptance.",
+                    system_update=True,
+                )
+                db.commit()
+                cls._notify_dispatch_exhausted(db, case)
+                logger.warning(
+                    f"[EVENT: DISPATCH_FAILED] Case {case.case_number} escalated to UNRESOLVED after all radius attempts"
+                )
+                failed_count += 1
+            else:
+                next_radius = radius_levels[case.dispatch_attempt - 1]
+                case.dispatch_radius_km = next_radius
+                logger.info(
+                    f"[EVENT: RADIUS_EXPANDED] Case {case.case_number} advancing to {next_radius}km (Attempt {case.dispatch_attempt})"
+                )
+                db.commit()
+
+                new_offers = cls.dispatch_case(db, case.id)
+                if new_offers:
+                    escalated_count += 1
+
+        return len(expired_offers), escalated_count, failed_count
+
+    @classmethod
+    def expire_stale_offers(cls, db: Session) -> int:
+        """Backward-compatible helper calling process_dispatch_lifecycle."""
+        expired, _, _ = cls.process_dispatch_lifecycle(db)
+        return expired
 
     @classmethod
     def accept_offer(
@@ -463,6 +634,10 @@ class DispatchService:
                 },
             )
 
+        logger.info(
+            f"[EVENT: OFFER_ACCEPTED] Offer {offer.id} accepted by rescuer {rescuer_id} for case {case.case_number}"
+        )
+
         return offer
 
     @classmethod
@@ -494,6 +669,10 @@ class DispatchService:
         offer.rejection_reason = reason
         db.commit()
         db.refresh(offer)
+
+        logger.info(
+            f"[EVENT: OFFER_REJECTED] Offer {offer.id} rejected by rescuer {rescuer_id} (Reason: {reason})"
+        )
 
         # Check if case still has remaining pending offers
         remaining_pending = (

@@ -110,6 +110,11 @@ def verify_case_access(case: RescueCase, user: User) -> None:
             RescueStatus.CLOSED
         ]:
             raise ForbiddenException("Veterinarians can only view cases referred to veterinary care.")
+
+        # Requirement 43: Enforce authorized veterinary facility scoping
+        if user.veterinary_facility_id and case.veterinary_facility_id:
+            if case.veterinary_facility_id != user.veterinary_facility_id:
+                raise ForbiddenException("Veterinarians can only view cases assigned to their authorized facility.")
         return
     raise ForbiddenException("Access denied.")
 

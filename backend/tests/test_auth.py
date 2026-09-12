@@ -49,12 +49,17 @@ def test_login_success_and_failure(client, citizen_user):
     assert res_bad.status_code == 401
 
 def test_refresh_token_valid(client, citizen_user):
-    refresh_tok = create_refresh_token(citizen_user.id)
-    response = client.post("/api/v1/auth/refresh", json={"refresh_token": refresh_tok})
+    login_res = client.post("/api/v1/auth/login", data={"username": citizen_user.email, "password": "password123"})
+    assert login_res.status_code == 200
+    refresh_tok = login_res.cookies.get("refresh_token") or login_res.json()["refresh_token"]
+    response = client.post(
+        "/api/v1/auth/refresh",
+        json={"refresh_token": refresh_tok},
+        cookies={"refresh_token": refresh_tok}
+    )
     assert response.status_code == 200
     data = response.json()
     assert "access_token" in data
-    assert "refresh_token" in data
 
 def test_refresh_token_rejects_access_token(client, citizen_user):
     # An access token must not be accepted as a refresh token

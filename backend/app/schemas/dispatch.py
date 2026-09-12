@@ -16,7 +16,7 @@ class DispatchCaseSummary(BaseModel):
     longitude: float
     address_text: Optional[str] = None
     triage_priority: RescuePriority
-    triage_score: int
+    triage_score: Optional[int] = None
     triage_reason: Optional[str] = None
     status: RescueStatus
     created_at: datetime

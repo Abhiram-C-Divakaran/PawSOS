@@ -1,3 +1,4 @@
+from typing import Optional
 from sqlalchemy.orm import Session
 from datetime import datetime
 import uuid
@@ -138,33 +139,37 @@ class RescueService:
         db: Session,
         rescue_case: RescueCase,
         new_status: RescueStatus,
-        user_id: uuid.UUID,
+        user_id: Optional[uuid.UUID] = None,
         notes: str = None,
         veterinary_facility_id: uuid.UUID = None,
+        system_update: bool = False,
     ) -> RescueCase:
         previous_status = rescue_case.status
 
         # 1. Permission Verification
-        uid = uuid.UUID(str(user_id)) if isinstance(user_id, str) else user_id
-        user = db.query(User).filter(User.id == uid).first()
-        if not user:
-            raise NotFoundException("User not found")
+        if not system_update:
+            if not user_id:
+                raise ForbiddenException("User ID is required for non-system status updates.")
+            uid = uuid.UUID(str(user_id)) if isinstance(user_id, str) else user_id
+            user = db.query(User).filter(User.id == uid).first()
+            if not user:
+                raise NotFoundException("User not found")
 
-        allowed_for_role = STATUS_ROLE_PERMISSIONS.get(user.role, [])
-        if new_status not in allowed_for_role:
-            raise ForbiddenException(
-                f"Users with role '{user.role.value}' are not permitted to set status to '{new_status.value}'."
-            )
+            allowed_for_role = STATUS_ROLE_PERMISSIONS.get(user.role, [])
+            if new_status not in allowed_for_role:
+                raise ForbiddenException(
+                    f"Users with role '{user.role.value}' are not permitted to set status to '{new_status.value}'."
+                )
 
-        # Additional domain checks
-        if user.role == UserRole.CITIZEN:
-            if rescue_case.reporter_id != user.id:
-                raise ForbiddenException("Citizens can only manage their own reported rescues.")
-            if new_status == RescueStatus.CANCELLED and previous_status not in [
-                RescueStatus.REPORTED,
-                RescueStatus.TRIAGED,
-            ]:
-                raise ConflictException("Cannot cancel a rescue once a responder has been assigned.")
+            # Additional domain checks
+            if user.role == UserRole.CITIZEN:
+                if rescue_case.reporter_id != user.id:
+                    raise ForbiddenException("Citizens can only manage their own reported rescues.")
+                if new_status == RescueStatus.CANCELLED and previous_status not in [
+                    RescueStatus.REPORTED,
+                    RescueStatus.TRIAGED,
+                ]:
+                    raise ConflictException("Cannot cancel a rescue once a responder has been assigned.")
 
         # 2. State Machine Transition Verification
         allowed_targets = ALLOWED_STATUS_TRANSITIONS.get(previous_status, [])

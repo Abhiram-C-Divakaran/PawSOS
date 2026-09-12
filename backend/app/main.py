@@ -8,6 +8,17 @@ from slowapi import _rate_limit_exceeded_handler
 from app.config import settings
 from app.core.rate_limiter import limiter
 from app.core.security_headers import SecurityHeadersMiddleware
+from app.core.middleware import RequestIDMiddleware
+
+# Sentry initialization if DSN configured (Requirement 36)
+if settings.SENTRY_DSN:
+    import sentry_sdk
+    sentry_sdk.init(
+        dsn=settings.SENTRY_DSN,
+        environment=settings.ENVIRONMENT,
+        traces_sample_rate=1.0 if settings.ENVIRONMENT == "development" else 0.1,
+    )
+
 from app.api.routes import (
     auth,
     rescues,
@@ -49,6 +60,7 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # Security Headers Middleware
 app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(RequestIDMiddleware)
 
 # CORS configuration
 if settings.CORS_ORIGINS:

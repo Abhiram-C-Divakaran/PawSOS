@@ -20,10 +20,11 @@ def health_liveness():
 
 @router.get("/health/ready")
 def health_readiness(response: Response, db: Session = Depends(get_db)):
-    """Readiness probe checking critical downstream dependencies: Database and Redis."""
+    """Readiness probe checking critical downstream dependencies: Database, Redis, and Worker."""
     checks = {
         "database": "unknown",
         "redis": "skipped",
+        "worker": "skipped",
     }
     healthy = True
 
@@ -36,17 +37,28 @@ def health_readiness(response: Response, db: Session = Depends(get_db)):
         checks["database"] = "disconnected"
         healthy = False
 
-    # 2. Redis check if configured
-    if settings.REDIS_URL and settings.ENVIRONMENT == "production":
+    # 2. Redis and Worker Heartbeat check
+    if settings.REDIS_URL:
         try:
             import redis
             r = redis.from_url(settings.REDIS_URL, socket_timeout=2)
             r.ping()
             checks["redis"] = "connected"
+
+            heartbeat = r.get("celery_worker_heartbeat")
+            if heartbeat:
+                checks["worker"] = "active"
+            else:
+                checks["worker"] = "no_heartbeat"
+                if settings.ENVIRONMENT in ["production", "staging"]:
+                    # Worker absence in production indicates degraded background processing
+                    checks["worker"] = "degraded"
         except Exception as e:
-            logger.error(f"Health check failed on Redis: {e}")
+            logger.warning(f"Health check warning on Redis/Worker: {e}")
             checks["redis"] = "disconnected"
-            healthy = False
+            checks["worker"] = "unavailable"
+            if settings.ENVIRONMENT in ["production", "staging"]:
+                healthy = False
 
     if not healthy:
         response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE

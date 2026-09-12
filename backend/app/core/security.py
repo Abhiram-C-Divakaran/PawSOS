@@ -51,3 +51,7 @@ def decode_token(token: str) -> dict:
         raise UnauthorizedException("Token has expired")
     except jwt.InvalidTokenError:
         raise UnauthorizedException("Invalid token")
+
+def hash_jti(jti: str) -> str:
+    import hashlib
+    return hashlib.sha256(jti.encode("utf-8")).hexdigest()

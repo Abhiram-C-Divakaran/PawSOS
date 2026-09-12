@@ -77,7 +77,7 @@ ALLOWED_STATUS_TRANSITIONS: Dict[RescueStatus, List[RescueStatus]] = {
     RescueStatus.ADOPTED: [RescueStatus.CLOSED],
     RescueStatus.CLOSED: [],
     RescueStatus.CANCELLED: [],
-    RescueStatus.UNRESOLVED: [RescueStatus.SEARCHING_RESPONDER, RescueStatus.CLOSED],
+    RescueStatus.UNRESOLVED: [RescueStatus.SEARCHING_RESPONDER, RescueStatus.CLOSED, RescueStatus.CANCELLED],
 }
 
 STATUS_ROLE_PERMISSIONS: Dict[UserRole, List[RescueStatus]] = {

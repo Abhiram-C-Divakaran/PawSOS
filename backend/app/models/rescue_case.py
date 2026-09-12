@@ -46,6 +46,14 @@ class RescueCase(Base):
     # Veterinary facility assignment
     veterinary_facility_id = Column(UUID, ForeignKey("veterinary_facilities.id"), nullable=True)
 
+    # Organization scoping
+    organization_id = Column(UUID, ForeignKey("organizations.id"), nullable=True, index=True)
+
+    # Dispatch progression state
+    dispatch_attempt = Column(Integer, default=0, nullable=False)
+    dispatch_radius_km = Column(Float, default=5.0, nullable=False)
+    last_dispatch_at = Column(DateTime, nullable=True)
+
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     closed_at = Column(DateTime, nullable=True)
@@ -53,6 +61,7 @@ class RescueCase(Base):
     animal = relationship("Animal", back_populates="rescue_cases")
     reporter = relationship("User", foreign_keys=[reporter_id])
     veterinary_facility = relationship("VeterinaryFacility", foreign_keys=[veterinary_facility_id])
+    organization = relationship("Organization")
     images = relationship("AnimalImage", back_populates="rescue_case")
     history = relationship("RescueStatusHistory", back_populates="rescue_case")
     assignments = relationship("RescueAssignment", back_populates="rescue_case")

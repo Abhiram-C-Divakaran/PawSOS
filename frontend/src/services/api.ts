@@ -70,20 +70,11 @@ api.interceptors.response.use(
       isRefreshing = true;
 
       const refreshToken = localStorage.getItem('refresh_token');
-      if (!refreshToken) {
-        isRefreshing = false;
-        localStorage.removeItem('access_token');
-        localStorage.removeItem('refresh_token');
-        if (window.location.pathname !== '/login') {
-          window.location.href = `/login?redirect=${encodeURIComponent(window.location.pathname)}`;
-        }
-        return Promise.reject(error);
-      }
 
       try {
         const response = await axios.post(
           `${baseURL}/auth/refresh`,
-          { refresh_token: refreshToken || undefined },
+          refreshToken ? { refresh_token: refreshToken } : {},
           { withCredentials: true }
         );
 
@@ -104,7 +95,7 @@ api.interceptors.response.use(
         processQueue(refreshErr, null);
         localStorage.removeItem('access_token');
         localStorage.removeItem('refresh_token');
-        if (window.location.pathname !== '/login') {
+        if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
           window.location.href = `/login?redirect=${encodeURIComponent(window.location.pathname)}`;
         }
         return Promise.reject(refreshErr);

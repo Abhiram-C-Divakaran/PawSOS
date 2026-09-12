@@ -10,7 +10,7 @@ from app.models.rescue_case import RescueCase
 from app.schemas.veterinary import TreatmentCreate, TreatmentUpdate, TreatmentResponse
 from app.core.permissions import RoleChecker
 from app.core.constants import UserRole, RescueStatus
-from app.core.exceptions import NotFoundException
+from app.core.exceptions import NotFoundException, ForbiddenException
 from app.services.rescue_service import RescueService
 
 router = APIRouter()
@@ -25,6 +25,13 @@ def add_treatment(
     case = db.query(RescueCase).filter(RescueCase.id == case_id).first()
     if not case:
         raise NotFoundException("Rescue case not found")
+
+    # Requirement 43: Enforce veterinary facility scoping
+    if current_user.veterinary_facility_id:
+        if case.veterinary_facility_id and case.veterinary_facility_id != current_user.veterinary_facility_id:
+            raise ForbiddenException("Access denied: Case is assigned to another veterinary facility.")
+        if treatment_in.facility_id != current_user.veterinary_facility_id:
+            raise ForbiddenException("Access denied: You can only record treatments for your authorized facility.")
         
     treatment = Treatment(
         rescue_case_id=case.id,
@@ -64,6 +71,11 @@ def get_treatments(
     db: Session = Depends(get_db),
     current_user: User = Depends(RoleChecker([UserRole.VETERINARIAN, UserRole.RESCUER, UserRole.NGO_ADMIN, UserRole.SUPER_ADMIN]))
 ):
+    if current_user.role == UserRole.VETERINARIAN and current_user.veterinary_facility_id:
+        case = db.query(RescueCase).filter(RescueCase.id == case_id).first()
+        if case and case.veterinary_facility_id and case.veterinary_facility_id != current_user.veterinary_facility_id:
+            raise ForbiddenException("Access denied: Case is assigned to another veterinary facility.")
+
     treatments = db.query(Treatment).filter(Treatment.rescue_case_id == case_id).all()
     return treatments
 
@@ -77,6 +89,9 @@ def update_treatment(
     treatment = db.query(Treatment).filter(Treatment.id == treatment_id).first()
     if not treatment:
         raise NotFoundException("Treatment not found")
+
+    if current_user.veterinary_facility_id and treatment.facility_id != current_user.veterinary_facility_id:
+        raise ForbiddenException("Access denied: Treatment belongs to another veterinary facility.")
         
     update_data = treatment_in.model_dump(exclude_unset=True)
     for key, value in update_data.items():

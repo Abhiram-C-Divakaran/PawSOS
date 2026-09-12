@@ -2,18 +2,22 @@ import { Outlet, Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { LogOut, Activity, AlertCircle, ShieldPlus } from 'lucide-react';
 import { NotificationBell } from './NotificationBell';
+import { NotificationPermissionBanner } from './NotificationPermissionBanner';
+import { ForegroundNotificationToast } from './ForegroundNotificationToast';
 
 export const Layout = () => {
   const { user, isAuthenticated, logout } = useAuth();
   const navigate = useNavigate();
 
-  const handleLogout = () => {
-    logout();
+  const handleLogout = async () => {
+    await logout();
     navigate('/login');
   };
 
   return (
     <div className="min-h-screen bg-brand-warmBg flex flex-col">
+      {isAuthenticated && <NotificationPermissionBanner />}
+      <ForegroundNotificationToast />
       <nav className="bg-brand-darkNavy text-white shadow-md sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16">

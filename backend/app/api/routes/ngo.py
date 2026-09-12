@@ -41,9 +41,12 @@ def check_org_scope(current_user: User, case: RescueCase):
     """Ensure NGO admin only accesses cases within their authorized organization if scoped."""
     if current_user.role == UserRole.SUPER_ADMIN:
         return
-    # If user belongs to an organization, verify case organization match
-    # Note: If case has no organization assigned, all NGO admins in the area can triage/manage
-    return
+    if current_user.role == UserRole.NGO_ADMIN and current_user.organization_id:
+        if case.organization_id and case.organization_id != current_user.organization_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied: Case belongs to another organization"
+            )
 
 @router.get("/analytics/overview", response_model=NGOOverviewKPIs)
 def get_ngo_overview(
@@ -51,7 +54,12 @@ def get_ngo_overview(
     current_user: User = Depends(RoleChecker([UserRole.NGO_ADMIN, UserRole.SUPER_ADMIN]))
 ):
     """Retrieve operational KPIs calculated from live rescue database data."""
-    all_cases = db.query(RescueCase).all()
+    case_query = db.query(RescueCase)
+    if current_user.role == UserRole.NGO_ADMIN and current_user.organization_id:
+        case_query = case_query.filter(
+            (RescueCase.organization_id == current_user.organization_id) | (RescueCase.organization_id.is_(None))
+        )
+    all_cases = case_query.all()
     total_cases = len(all_cases)
 
     active_statuses = [
@@ -179,6 +187,10 @@ def get_ngo_cases(
 ):
     """Retrieve filtered and searchable rescue cases for NGO case management."""
     query = db.query(RescueCase)
+    if current_user.role == UserRole.NGO_ADMIN and current_user.organization_id:
+        query = query.filter(
+            (RescueCase.organization_id == current_user.organization_id) | (RescueCase.organization_id.is_(None))
+        )
 
     if priority:
         query = query.filter(RescueCase.triage_priority == priority)
@@ -237,6 +249,11 @@ def get_ngo_case_dossier(
             "rejection_reason": a.rejection_reason,
         })
     resp["dispatch_offers"] = offers_data
+    resp["dispatch_progression"] = {
+        "attempt": case.dispatch_attempt or 1,
+        "radius_km": case.dispatch_radius_km or 5.0,
+        "last_dispatch_at": case.last_dispatch_at.isoformat() if case.last_dispatch_at else None,
+    }
 
     # Add audit logs
     audit_logs = (
@@ -270,6 +287,12 @@ def execute_ngo_case_action(
     case = db.query(RescueCase).filter(RescueCase.id == case_id).first()
     if not case:
         raise HTTPException(status_code=404, detail="Rescue case not found")
+
+    check_org_scope(current_user, case)
+
+    # Claim unassigned case to current NGO organization if applicable
+    if not case.organization_id and current_user.organization_id:
+        case.organization_id = current_user.organization_id
 
     old_status = case.status.value
     action_type = payload.action.lower()
@@ -556,7 +579,12 @@ def get_ngo_veterinary_network(
     current_user: User = Depends(RoleChecker([UserRole.NGO_ADMIN, UserRole.SUPER_ADMIN]))
 ):
     """List partner veterinary clinics with current patient intake metrics."""
-    facilities = db.query(VeterinaryFacility).all()
+    fac_query = db.query(VeterinaryFacility)
+    if current_user.role == UserRole.NGO_ADMIN and current_user.organization_id:
+        fac_query = fac_query.filter(
+            (VeterinaryFacility.organization_id == current_user.organization_id) | (VeterinaryFacility.organization_id.is_(None))
+        )
+    facilities = fac_query.all()
     results = []
     for f in facilities:
         admitted = (

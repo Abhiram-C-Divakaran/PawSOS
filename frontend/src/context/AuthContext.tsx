@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
 import api from '../services/api';
+import { unregisterDeviceTokenFromBackend } from '../services/firebase';
 import type { User } from '../types';
 
 interface AuthContextType {
@@ -7,7 +8,7 @@ interface AuthContextType {
   isAuthenticated: boolean;
   loading: boolean;
   login: (tokenData: any) => Promise<void>;
-  logout: () => void;
+  logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
 }
 
@@ -43,12 +44,30 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   const login = async (tokenData: any) => {
-    localStorage.setItem('access_token', tokenData.access_token);
-    localStorage.setItem('refresh_token', tokenData.refresh_token);
+    if (tokenData?.access_token) {
+      localStorage.setItem('access_token', tokenData.access_token);
+    }
+    if (tokenData?.refresh_token) {
+      localStorage.setItem('refresh_token', tokenData.refresh_token);
+    } else {
+      localStorage.removeItem('refresh_token');
+    }
     await refreshUser();
   };
 
-  const logout = () => {
+  const logout = async () => {
+    try {
+      await unregisterDeviceTokenFromBackend();
+    } catch (e) {
+      // Ignore unregister errors during logout
+    }
+
+    try {
+      await api.post('/auth/logout');
+    } catch (e) {
+      // Continue cleanup even if server request fails
+    }
+
     localStorage.removeItem('access_token');
     localStorage.removeItem('refresh_token');
     setUser(null);

@@ -42,6 +42,26 @@ services:
     networks:
       - pawsos_network
 
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: pawsos_worker
+    command: celery -A app.tasks.celery_app worker -B --loglevel=info
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/pawsos
+      - REDIS_URL=redis://redis:6379/0
+      - JWT_SECRET_KEY=dev_secret_key_change_in_production_32chars_long!!
+      - ENVIRONMENT=development
+      - STORAGE_PROVIDER=local
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - pawsos_network
+
   redis:
     image: redis:7-alpine
     container_name: pawsos_redis
