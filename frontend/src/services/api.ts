@@ -7,6 +7,7 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+  withCredentials: true,
 });
 
 let isRefreshing = false;
@@ -80,9 +81,11 @@ api.interceptors.response.use(
       }
 
       try {
-        const response = await axios.post(`${baseURL}/auth/refresh`, {
-          refresh_token: refreshToken,
-        });
+        const response = await axios.post(
+          `${baseURL}/auth/refresh`,
+          { refresh_token: refreshToken || undefined },
+          { withCredentials: true }
+        );
 
         const { access_token, refresh_token: newRefreshToken } = response.data;
         localStorage.setItem('access_token', access_token);

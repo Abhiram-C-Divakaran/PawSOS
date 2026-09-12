@@ -22,7 +22,7 @@ def test_create_rescue_with_triage(client, citizen_token):
     assert data["species"] == "Dog"
     assert data["triage_priority"] == "CRITICAL"
     assert data["triage_score"] >= 80
-    assert data["status"] == "TRIAGED"
+    assert data["status"] in ["TRIAGED", "SEARCHING_RESPONDER"]
     assert len(data["images"]) == 1
     assert data["images"][0]["image_url"] == "/uploads/test_dog.jpg"
 

@@ -16,6 +16,7 @@ class Notification(Base):
     message = Column(Text, nullable=False)
     
     rescue_case_id = Column(UUID, ForeignKey("rescue_cases.id"), nullable=True)
+    data = Column(Text, nullable=True)
     
     is_read = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)

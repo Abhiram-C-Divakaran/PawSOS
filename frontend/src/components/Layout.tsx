@@ -1,6 +1,7 @@
 import { Outlet, Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { LogOut, Activity, AlertCircle, ShieldPlus } from 'lucide-react';
+import { NotificationBell } from './NotificationBell';
 
 export const Layout = () => {
   const { user, isAuthenticated, logout } = useAuth();
@@ -42,12 +43,18 @@ export const Layout = () => {
                       <Activity className="w-4 h-4 mr-1" /> Vet Dashboard
                     </Link>
                   )}
+                  {(user?.role === 'NGO_ADMIN' || user?.role === 'SUPER_ADMIN') && (
+                    <Link to="/ngo" className="text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium flex items-center">
+                      <Activity className="w-4 h-4 mr-1" /> NGO Command Center
+                    </Link>
+                  )}
                 </div>
               )}
             </div>
             <div className="flex items-center">
               {isAuthenticated ? (
                 <div className="flex items-center space-x-4">
+                  <NotificationBell />
                   <span className="text-sm text-gray-300 hidden md:block">
                     {user?.full_name} ({user?.role})
                   </span>

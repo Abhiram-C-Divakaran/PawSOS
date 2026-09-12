@@ -91,3 +91,101 @@ export interface RescueTimeline {
   notes?: string;
   created_at: string;
 }
+
+export interface DispatchOffer {
+  id: string;
+  rescue_case_id: string;
+  rescuer_id: string;
+  assignment_status: 'PENDING' | 'ACCEPTED' | 'REJECTED' | 'EXPIRED' | 'CANCELLED' | 'COMPLETED';
+  distance_km?: number;
+  dispatch_score?: number;
+  offered_at?: string;
+  expires_at?: string;
+  accepted_at?: string;
+  rejected_at?: string;
+  rejection_reason?: string;
+  case?: {
+    id: string;
+    case_number: string;
+    species: string;
+    description?: string;
+    latitude: number;
+    longitude: number;
+    address_text?: string;
+    triage_priority: RescuePriority;
+    triage_score: number;
+    triage_reason?: string;
+    status: RescueStatus;
+    created_at: string;
+    image_url?: string;
+  };
+}
+
+export interface NotificationItem {
+  id: string;
+  user_id: string;
+  type: string;
+  title: string;
+  message: string;
+  rescue_case_id?: string;
+  data?: string;
+  is_read: boolean;
+  created_at: string;
+  read_at?: string;
+}
+
+export interface NGOOverviewKPIs {
+  active_cases: number;
+  critical_cases: number;
+  awaiting_responder: number;
+  responders_en_route: number;
+  under_treatment: number;
+  recovering: number;
+  avg_dispatch_seconds: number;
+  avg_response_minutes: number;
+  completion_rate_pct: number;
+  responder_availability_pct: number;
+  total_cases: number;
+}
+
+export interface HotspotItem {
+  latitude: number;
+  longitude: number;
+  area_name?: string;
+  incident_count: number;
+  critical_count: number;
+  top_species: string;
+}
+
+export interface NGOResponderSummary {
+  id: string;
+  user_id: string;
+  full_name: string;
+  phone: string;
+  email?: string;
+  is_active: boolean;
+  availability_status: 'AVAILABLE' | 'BUSY' | 'OFFLINE';
+  latitude?: number;
+  longitude?: number;
+  last_location_update?: string;
+  vehicle_available: boolean;
+  experience_level: string;
+  reliability_score: number;
+  completed_rescues: number;
+  total_offers: number;
+  accepted_offers: number;
+  acceptance_rate_pct: number;
+  active_case_number?: string;
+}
+
+export interface AuditLogItem {
+  id: string;
+  actor_id?: string;
+  action: string;
+  entity: string;
+  entity_id?: string;
+  old_value?: Record<string, any>;
+  new_value?: Record<string, any>;
+  timestamp: string;
+}
+

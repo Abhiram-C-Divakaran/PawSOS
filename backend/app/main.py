@@ -1,32 +1,54 @@
 import os
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from slowapi.errors import RateLimitExceeded
+from slowapi import _rate_limit_exceeded_handler
+
 from app.config import settings
+from app.core.rate_limiter import limiter
+from app.core.security_headers import SecurityHeadersMiddleware
 from app.api.routes import (
     auth,
     rescues,
     rescuers,
+    dispatch,
+    notifications,
+    ngo,
     veterinary,
     veterinary_facilities,
     animals,
     uploads,
+    health,
 )
 
-# Production security checks
+# Production security & database checks
 if settings.ENVIRONMENT == "production":
     insecure_keys = ["secret", "dev_secret_key_change_in_production", ""]
     if settings.JWT_SECRET_KEY in insecure_keys or len(settings.JWT_SECRET_KEY) < 32:
         raise RuntimeError("FATAL: Insecure or default JWT_SECRET_KEY detected in production environment.")
+    
+    # Requirement #35: Production database must use PostgreSQL + PostGIS. Fail startup if SQLite.
+    if "sqlite" in settings.DATABASE_URL.lower():
+        raise RuntimeError(
+            "FATAL: Production database must use PostgreSQL with PostGIS. SQLite is strictly prohibited in production."
+        )
 
 # Ensure uploads directory exists
 os.makedirs("uploads", exist_ok=True)
 
 app = FastAPI(
     title="PawReach API",
-    description="Backend API for PawReach rescue coordination platform.",
-    version="1.0.0"
+    description="Backend API for PawReach rescue coordination platform (MVP Phase 2).",
+    version="2.0.0"
 )
+
+# Rate Limiter state & handler
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# Security Headers Middleware
+app.add_middleware(SecurityHeadersMiddleware)
 
 # CORS configuration
 if settings.CORS_ORIGINS:
@@ -50,13 +72,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Mount uploads static directory for real image serving
+# Mount uploads static directory for local storage serving
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 # Include API Routers
+app.include_router(health.router, tags=["Health"])
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["Authentication"])
 app.include_router(rescues.router, prefix="/api/v1/rescues", tags=["Rescue Cases"])
 app.include_router(rescuers.router, prefix="/api/v1/rescuers", tags=["Rescuers"])
+app.include_router(dispatch.router, prefix="/api/v1/dispatch", tags=["Automatic Dispatch"])
+app.include_router(notifications.router, prefix="/api/v1/notifications", tags=["Push & In-App Notifications"])
+app.include_router(ngo.router, prefix="/api/v1/ngo", tags=["NGO Operations Command Center"])
 app.include_router(veterinary_facilities.router, prefix="/api/v1/veterinary", tags=["Veterinary Facilities"])
 app.include_router(veterinary.router, prefix="/api/v1/rescues/{case_id}/treatments", tags=["Veterinary Treatments"])
 app.include_router(uploads.router, prefix="/api/v1/uploads", tags=["Uploads"])
@@ -65,7 +91,7 @@ app.include_router(animals.router, prefix="/api/v1/animals", tags=["Animals"])
 @app.get("/")
 def root():
     return {
-        "message": "Welcome to PawReach API",
-        "version": "1.0.0",
+        "message": "Welcome to PawReach API (Phase 2)",
+        "version": "2.0.0",
         "environment": settings.ENVIRONMENT
     }

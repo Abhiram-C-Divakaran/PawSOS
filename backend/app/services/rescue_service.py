@@ -5,24 +5,32 @@ from app.models.rescue_case import RescueCase
 from app.models.rescue_status_history import RescueStatusHistory
 from app.models.animal_image import AnimalImage
 from app.models.user import User
-from app.core.constants import RescueStatus, UserRole, ALLOWED_STATUS_TRANSITIONS, STATUS_ROLE_PERMISSIONS
+from app.core.constants import (
+    RescueStatus,
+    RescuePriority,
+    UserRole,
+    ALLOWED_STATUS_TRANSITIONS,
+    STATUS_ROLE_PERMISSIONS,
+)
 from app.core.exceptions import ConflictException, ForbiddenException, NotFoundException
 from app.schemas.rescue import RescueCreate
 from app.services.triage_service import TriageService
+from app.services.notification_service import NotificationService
+
 
 class RescueService:
     @staticmethod
     def create_case(db: Session, reporter_id: uuid.UUID, case_in: RescueCreate) -> RescueCase:
         # Generate unique case number
         case_number = f"PR-{uuid.uuid4().hex[:6].upper()}"
-        
+
         # Run triage calculation
         triage_result = TriageService.calculate_triage({
             "bleeding": case_in.bleeding,
             "can_walk": case_in.can_walk,
             "conscious": case_in.conscious,
             "vehicle_accident": case_in.vehicle_accident,
-            "breathing_difficulty": case_in.breathing_difficulty
+            "breathing_difficulty": case_in.breathing_difficulty,
         })
 
         db_case = RescueCase(
@@ -41,7 +49,7 @@ class RescueService:
             triage_score=triage_result["score"],
             triage_priority=triage_result["priority"],
             triage_reason=", ".join(triage_result["reasons"]),
-            status=RescueStatus.TRIAGED # Progresses from REPORTED to TRIAGED on submission
+            status=RescueStatus.TRIAGED,
         )
         db.add(db_case)
         db.commit()
@@ -53,7 +61,7 @@ class RescueService:
                 rescue_case_id=db_case.id,
                 image_url=case_in.image_url,
                 image_type="REPORT",
-                uploaded_by=reporter_id
+                uploaded_by=reporter_id,
             )
             db.add(img)
 
@@ -62,17 +70,66 @@ class RescueService:
             rescue_case_id=db_case.id,
             new_status=RescueStatus.REPORTED,
             changed_by=reporter_id,
-            notes="Case submitted by citizen"
+            notes="Case submitted by citizen",
         )
         history2 = RescueStatusHistory(
             rescue_case_id=db_case.id,
             previous_status=RescueStatus.REPORTED,
             new_status=RescueStatus.TRIAGED,
-            notes="Auto-triaged based on reported condition"
+            notes="Auto-triaged based on reported condition",
         )
-        db.add_all([history1, history2])
+        history3 = RescueStatusHistory(
+            rescue_case_id=db_case.id,
+            previous_status=RescueStatus.TRIAGED,
+            new_status=RescueStatus.SEARCHING_RESPONDER,
+            notes="Automatic dispatch initiated",
+        )
+        db_case.status = RescueStatus.SEARCHING_RESPONDER
+        db.add_all([history1, history2, history3])
         db.commit()
         db.refresh(db_case)
+
+        # Notify Citizen reporter
+        NotificationService.notify_user(
+            db=db,
+            user_id=reporter_id,
+            title="🐾 Rescue Report Received",
+            message=f"Your report for a {db_case.species} ({db_case.case_number}) has been triaged ({db_case.triage_priority.value}) and we are locating nearby responders.",
+            notification_type="CASE_REPORTED",
+            rescue_case_id=db_case.id,
+            data={
+                "type": "CASE_REPORTED",
+                "case_id": str(db_case.id),
+                "case_number": db_case.case_number,
+                "priority": db_case.triage_priority.value,
+                "route": f"/cases/{db_case.id}",
+            },
+        )
+
+        # If CRITICAL, notify NGO Admins immediately
+        if db_case.triage_priority == RescuePriority.CRITICAL:
+            admins = (
+                db.query(User)
+                .filter(
+                    User.role.in_([UserRole.NGO_ADMIN, UserRole.SUPER_ADMIN]),
+                    User.is_active == True,
+                )
+                .all()
+            )
+            for admin in admins:
+                NotificationService.notify_user(
+                    db=db,
+                    user_id=admin.id,
+                    title=f"🚨 CRITICAL Rescue Alert: {db_case.case_number}",
+                    message=f"Critical case reported: {db_case.species} at {db_case.address_text or 'GPS Location'}. Automatic dispatch engaged.",
+                    notification_type="CRITICAL_ALERT",
+                    rescue_case_id=db_case.id,
+                    data={"case_id": str(db_case.id), "priority": "CRITICAL"},
+                )
+
+        # Automatically trigger dispatch engine
+        from app.services.dispatch_service import DispatchService
+        DispatchService.dispatch_case(db, db_case.id)
 
         return db_case
 
@@ -83,7 +140,7 @@ class RescueService:
         new_status: RescueStatus,
         user_id: uuid.UUID,
         notes: str = None,
-        veterinary_facility_id: uuid.UUID = None
+        veterinary_facility_id: uuid.UUID = None,
     ) -> RescueCase:
         previous_status = rescue_case.status
 
@@ -103,7 +160,10 @@ class RescueService:
         if user.role == UserRole.CITIZEN:
             if rescue_case.reporter_id != user.id:
                 raise ForbiddenException("Citizens can only manage their own reported rescues.")
-            if new_status == RescueStatus.CANCELLED and previous_status not in [RescueStatus.REPORTED, RescueStatus.TRIAGED]:
+            if new_status == RescueStatus.CANCELLED and previous_status not in [
+                RescueStatus.REPORTED,
+                RescueStatus.TRIAGED,
+            ]:
                 raise ConflictException("Cannot cancel a rescue once a responder has been assigned.")
 
         # 2. State Machine Transition Verification
@@ -130,9 +190,59 @@ class RescueService:
             previous_status=previous_status,
             new_status=new_status,
             changed_by=user_id,
-            notes=notes
+            notes=notes,
         )
         db.add(history)
         db.commit()
+
+        # Participant Notifications based on status update
+        status_messages = {
+            RescueStatus.RESPONDER_EN_ROUTE: ("Responder En Route", "A responder is en route to the animal's location."),
+            RescueStatus.ANIMAL_LOCATED: ("Animal Located", "The responder has arrived and located the animal."),
+            RescueStatus.RESCUED: ("Animal Rescued", "The animal has been secured safely."),
+            RescueStatus.TRANSPORTING: ("Transporting to Facility", "The animal is being transported for veterinary care."),
+            RescueStatus.AT_VETERINARY_FACILITY: ("Arrived at Clinic", "The animal has arrived safely at the veterinary facility."),
+            RescueStatus.UNDER_TREATMENT: ("Treatment Started", "Veterinary medical treatment is currently underway."),
+            RescueStatus.RECOVERING: ("Animal Recovering", "The animal is stable and recovering well under observation."),
+            RescueStatus.READY_FOR_RELEASE: ("Ready for Release", "The animal has recovered and is approved for release."),
+            RescueStatus.READY_FOR_ADOPTION: ("Ready for Adoption", "The animal is healthy and looking for a loving home."),
+            RescueStatus.RELEASED: ("Animal Released", "The animal has been safely released to its natural habitat."),
+            RescueStatus.ADOPTED: ("Animal Adopted", "The animal has found a permanent home!"),
+            RescueStatus.CLOSED: ("Rescue Case Closed", "This rescue mission has been successfully completed."),
+            RescueStatus.UNRESOLVED: ("Case Escalated", "This rescue case has been flagged as unresolved and requires NGO follow-up."),
+        }
+
+        if new_status in status_messages:
+            title_prefix, body_text = status_messages[new_status]
+            NotificationService.notify_rescue_participants(
+                db=db,
+                rescue_case_id=rescue_case.id,
+                event_type=new_status.value,
+                title=f"{title_prefix}: {rescue_case.case_number}",
+                message=f"{body_text} (Case #{rescue_case.case_number})",
+                extra_data={"status": new_status.value},
+            )
+
+        # If arriving at veterinary clinic, notify clinic veterinarians
+        if new_status in [RescueStatus.AT_VETERINARY_FACILITY, RescueStatus.TRANSPORTING] and rescue_case.veterinary_facility_id:
+            vet_users = (
+                db.query(User)
+                .filter(
+                    User.veterinary_facility_id == rescue_case.veterinary_facility_id,
+                    User.role == UserRole.VETERINARIAN,
+                    User.is_active == True,
+                )
+                .all()
+            )
+            for vet in vet_users:
+                NotificationService.notify_user(
+                    db=db,
+                    user_id=vet.id,
+                    title="Incoming Rescue Patient",
+                    message=f"Case #{rescue_case.case_number} ({rescue_case.species}) has been routed to your facility.",
+                    notification_type="INCOMING_PATIENT",
+                    rescue_case_id=rescue_case.id,
+                    data={"route": "/veterinary"},
+                )
 
         return rescue_case

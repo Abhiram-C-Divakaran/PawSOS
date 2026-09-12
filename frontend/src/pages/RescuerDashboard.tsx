@@ -1,20 +1,78 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import api from '../services/api';
-import type { RescueCase, RescueStatus, VeterinaryFacility } from '../types';
-import { MapPin, Clock, ChevronRight, Crosshair, Building2, CheckCircle } from 'lucide-react';
+import type { RescueCase, RescueStatus, VeterinaryFacility, DispatchOffer } from '../types';
+import {
+  MapPin,
+  Clock,
+  ChevronRight,
+  Crosshair,
+  Building2,
+  CheckCircle,
+  AlertTriangle,
+  ShieldAlert,
+  XCircle,
+  Navigation,
+} from 'lucide-react';
 import { MapView } from '../components/MapView';
 import { Toast, type ToastMessage } from '../components/Toast';
 
+const OfferCountdown = ({
+  expiresAt,
+  onExpired,
+}: {
+  expiresAt?: string;
+  onExpired: () => void;
+}) => {
+  const [timeLeft, setTimeLeft] = useState<number>(0);
+
+  useEffect(() => {
+    if (!expiresAt) return;
+    const calculateTime = () => {
+      const diff = Math.max(0, Math.floor((new Date(expiresAt).getTime() - Date.now()) / 1000));
+      setTimeLeft(diff);
+      if (diff <= 0) {
+        onExpired();
+      }
+    };
+    calculateTime();
+    const interval = setInterval(calculateTime, 1000);
+    return () => clearInterval(interval);
+  }, [expiresAt, onExpired]);
+
+  const minutes = Math.floor(timeLeft / 60);
+  const seconds = timeLeft % 60;
+  const formatted = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+
+  return (
+    <span
+      id="offer-countdown-timer"
+      className={`inline-flex items-center font-mono font-bold text-xs sm:text-sm px-2.5 py-1 rounded-md border ${
+        timeLeft < 30
+          ? 'bg-red-50 text-red-700 border-red-200 animate-pulse'
+          : 'bg-amber-50 text-amber-800 border-amber-200'
+      }`}
+    >
+      <Clock className="w-3.5 h-3.5 mr-1" />
+      Expires in {formatted}
+    </span>
+  );
+};
+
 export const RescuerDashboard = () => {
+  const [incomingOffers, setIncomingOffers] = useState<DispatchOffer[]>([]);
   const [nearbyCases, setNearbyCases] = useState<RescueCase[]>([]);
   const [activeCase, setActiveCase] = useState<RescueCase | null>(null);
   const [facilities, setFacilities] = useState<VeterinaryFacility[]>([]);
   const [selectedFacilityId, setSelectedFacilityId] = useState<string>('');
-  
+
   const [loading, setLoading] = useState(true);
   const [rescuerCoords, setRescuerCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [locating, setLocating] = useState(false);
   const [toast, setToast] = useState<ToastMessage | null>(null);
+
+  // Reject dialog state
+  const [rejectingOfferId, setRejectingOfferId] = useState<string | null>(null);
+  const [rejectReason, setRejectReason] = useState<string>('too_far');
 
   const fetchFacilities = async () => {
     try {
@@ -28,12 +86,19 @@ export const RescuerDashboard = () => {
     }
   };
 
+  const fetchIncomingOffers = useCallback(async () => {
+    try {
+      const res = await api.get('/rescuers/me/offers');
+      setIncomingOffers(res.data);
+    } catch {
+      // Background poll failure handled gracefully
+    }
+  }, []);
+
   const syncLocationAndFetchNearby = async (lat: number, lng: number) => {
     try {
-      // Sync rescuer operational GPS location to backend
       await api.patch('/rescuers/me/location', { latitude: lat, longitude: lng });
 
-      // Fetch nearby open cases with real spatial distance
       const response = await api.get('/rescues/nearby', {
         params: { lat, lng, radius_km: 15.0 },
       });
@@ -77,9 +142,8 @@ export const RescuerDashboard = () => {
         setToast({
           id: 'geo-denied',
           type: 'warning',
-          message: 'Location access denied. Using last known station coordinates.',
+          message: 'Location access denied. Using station coordinates.',
         });
-        // Fallback to station coordinates for demo testing if browser denies permission
         const defaultCoords = { lat: 19.0760, lng: 72.8777 };
         setRescuerCoords(defaultCoords);
         syncLocationAndFetchNearby(defaultCoords.lat, defaultCoords.lng);
@@ -91,17 +155,68 @@ export const RescuerDashboard = () => {
   useEffect(() => {
     fetchFacilities();
     detectLocation();
+    fetchIncomingOffers();
 
     const interval = setInterval(() => {
+      fetchIncomingOffers();
       if (rescuerCoords) {
         syncLocationAndFetchNearby(rescuerCoords.lat, rescuerCoords.lng);
       }
-    }, 15000);
+    }, 8000);
 
     return () => clearInterval(interval);
-  }, []);
+  }, [fetchIncomingOffers]);
 
-  const handleAccept = async (caseId: string) => {
+  const handleAcceptOffer = async (offerId: string) => {
+    try {
+      const res = await api.post(`/rescuers/offers/${offerId}/accept`);
+      setToast({
+        id: 'offer-accepted',
+        type: 'success',
+        message: 'Dispatch offer accepted! Rescue assigned to you.',
+      });
+      // Load active case
+      if (res.data.rescue_case_id) {
+        const caseRes = await api.get(`/rescues/${res.data.rescue_case_id}`);
+        setActiveCase(caseRes.data);
+      }
+      setIncomingOffers((prev) => prev.filter((o) => o.id !== offerId));
+      if (rescuerCoords) {
+        syncLocationAndFetchNearby(rescuerCoords.lat, rescuerCoords.lng);
+      }
+    } catch (err: any) {
+      setToast({
+        id: 'accept-fail',
+        type: 'error',
+        message: err.response?.data?.detail || 'This offer expired or was claimed by another responder.',
+      });
+      fetchIncomingOffers();
+    }
+  };
+
+  const handleRejectOffer = async () => {
+    if (!rejectingOfferId) return;
+    try {
+      await api.post(`/rescuers/offers/${rejectingOfferId}/reject`, {
+        reason: rejectReason,
+      });
+      setToast({
+        id: 'offer-rejected',
+        type: 'info',
+        message: 'Rescue offer declined.',
+      });
+      setIncomingOffers((prev) => prev.filter((o) => o.id !== rejectingOfferId));
+      setRejectingOfferId(null);
+    } catch (err: any) {
+      setToast({
+        id: 'reject-fail',
+        type: 'error',
+        message: err.response?.data?.detail || 'Failed to decline offer.',
+      });
+    }
+  };
+
+  const handleDirectAccept = async (caseId: string) => {
     try {
       await api.post(`/rescues/${caseId}/accept`);
       const caseRes = await api.get(`/rescues/${caseId}`);
@@ -164,18 +279,18 @@ export const RescuerDashboard = () => {
   };
 
   const nextValidStatuses: Record<string, RescueStatus[]> = {
-    'RESPONDER_ASSIGNED': ['RESPONDER_EN_ROUTE'],
-    'RESPONDER_EN_ROUTE': ['ANIMAL_LOCATED'],
-    'ANIMAL_LOCATED': ['RESCUED'],
-    'RESCUED': ['TRANSPORTING'],
-    'TRANSPORTING': ['AT_VETERINARY_FACILITY'],
+    RESPONDER_ASSIGNED: ['RESPONDER_EN_ROUTE'],
+    RESPONDER_EN_ROUTE: ['ANIMAL_LOCATED'],
+    ANIMAL_LOCATED: ['RESCUED'],
+    RESCUED: ['TRANSPORTING'],
+    TRANSPORTING: ['AT_VETERINARY_FACILITY'],
   };
 
-  if (loading && nearbyCases.length === 0 && !activeCase) {
+  if (loading && nearbyCases.length === 0 && !activeCase && incomingOffers.length === 0) {
     return (
       <div className="max-w-4xl mx-auto py-16 text-center">
         <div className="inline-block w-8 h-8 border-4 border-brand-teal border-t-transparent rounded-full animate-spin mb-4" />
-        <p className="text-gray-600 font-medium">Synchronizing responder GPS & locating emergencies...</p>
+        <p className="text-gray-600 font-medium">Synchronizing responder dispatch & GPS...</p>
       </div>
     );
   }
@@ -211,6 +326,167 @@ export const RescuerDashboard = () => {
           {locating ? 'Updating GPS...' : 'Refresh GPS'}
         </button>
       </div>
+
+      {/* SECTION: Incoming Dispatch Alerts */}
+      {incomingOffers.length > 0 && (
+        <div id="incoming-dispatch-alerts" className="space-y-3">
+          <div className="flex items-center gap-2">
+            <span className="flex h-3 w-3 relative">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+            </span>
+            <h2 className="text-lg font-bold text-stone-900 tracking-tight">
+              Incoming Rescue Alerts ({incomingOffers.length})
+            </h2>
+          </div>
+
+          <div className="grid gap-4">
+            {incomingOffers.map((offer) => {
+              const c = offer.case;
+              const isCritical = c?.triage_priority === 'CRITICAL';
+              return (
+                <div
+                  key={offer.id}
+                  id={`dispatch-offer-${offer.id}`}
+                  className={`p-5 rounded-2xl border-2 transition-all shadow-md bg-white ${
+                    isCritical
+                      ? 'border-red-500 ring-2 ring-red-100'
+                      : 'border-amber-400'
+                  }`}
+                >
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pb-3 border-b border-stone-100">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span
+                        className={`text-xs font-black px-2.5 py-1 rounded-full uppercase tracking-wider flex items-center gap-1 ${
+                          isCritical
+                            ? 'bg-red-600 text-white animate-pulse'
+                            : 'bg-amber-100 text-amber-900'
+                        }`}
+                      >
+                        <ShieldAlert className="w-3.5 h-3.5" />
+                        {c?.triage_priority || 'EMERGENCY'} ALERT
+                      </span>
+                      <span className="text-xs font-mono font-bold text-stone-600 bg-stone-100 px-2 py-0.5 rounded">
+                        {c?.case_number}
+                      </span>
+                      {offer.distance_km !== undefined && (
+                        <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 flex items-center gap-1">
+                          <Navigation className="w-3 h-3" />
+                          {offer.distance_km} km away
+                        </span>
+                      )}
+                    </div>
+
+                    <OfferCountdown
+                      expiresAt={offer.expires_at}
+                      onExpired={() => fetchIncomingOffers()}
+                    />
+                  </div>
+
+                  <div className="py-4 space-y-2">
+                    <div className="flex items-baseline justify-between">
+                      <h3 className="text-lg font-extrabold text-stone-900">
+                        {c?.species || 'Animal'} in Distress
+                      </h3>
+                      {offer.dispatch_score && (
+                        <span className="text-xs font-semibold text-stone-500">
+                          Match Score: <span className="text-stone-800 font-bold">{offer.dispatch_score}%</span>
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-sm text-stone-700 bg-stone-50 p-3 rounded-xl border border-stone-200/60 font-medium">
+                      {c?.triage_reason || c?.description || 'Emergency intervention required.'}
+                    </p>
+                    <div className="flex items-center text-xs text-stone-500 pt-1">
+                      <MapPin className="w-3.5 h-3.5 mr-1 text-red-500 shrink-0" />
+                      <span className="truncate">{c?.address_text || 'Location captured via GPS'}</span>
+                    </div>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex flex-col sm:flex-row gap-2.5 pt-2">
+                    <button
+                      id={`accept-offer-btn-${offer.id}`}
+                      onClick={() => handleAcceptOffer(offer.id)}
+                      className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 px-4 rounded-xl shadow transition-colors flex items-center justify-center gap-2"
+                    >
+                      <CheckCircle className="w-4 h-4" />
+                      Accept Rescue
+                    </button>
+                    <button
+                      id={`decline-offer-btn-${offer.id}`}
+                      onClick={() => setRejectingOfferId(offer.id)}
+                      className="px-4 py-3 border border-stone-300 hover:bg-stone-100 text-stone-700 font-semibold rounded-xl transition-colors flex items-center justify-center gap-1.5"
+                    >
+                      <XCircle className="w-4 h-4 text-stone-400" />
+                      Decline
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Decline Reason Modal */}
+      {rejectingOfferId && (
+        <div className="fixed inset-0 z-50 bg-stone-900/50 flex items-center justify-center p-4 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-stone-200">
+            <h3 className="text-base font-bold text-stone-900 mb-2 flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-amber-500" />
+              Decline Rescue Offer
+            </h3>
+            <p className="text-xs text-stone-600 mb-4">
+              Help us re-route this emergency quickly by specifying why you cannot respond:
+            </p>
+
+            <div className="space-y-2 mb-5">
+              {[
+                { id: 'too_far', label: 'Too far away' },
+                { id: 'already_busy', label: 'Already attending another rescue' },
+                { id: 'vehicle_unavailable', label: 'Vehicle or transport unavailable' },
+                { id: 'unsafe_conditions', label: 'Unsafe conditions / terrain' },
+                { id: 'other', label: 'Other operational constraint' },
+              ].map((r) => (
+                <label
+                  key={r.id}
+                  className={`flex items-center p-2.5 rounded-lg border cursor-pointer text-xs font-medium transition-colors ${
+                    rejectReason === r.id
+                      ? 'bg-amber-50 border-amber-400 text-amber-900'
+                      : 'border-stone-200 hover:bg-stone-50'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="rejectReason"
+                    value={r.id}
+                    checked={rejectReason === r.id}
+                    onChange={(e) => setRejectReason(e.target.value)}
+                    className="mr-2 text-amber-600 focus:ring-amber-500"
+                  />
+                  {r.label}
+                </label>
+              ))}
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                onClick={handleRejectOffer}
+                className="flex-1 bg-red-600 hover:bg-red-700 text-white font-bold py-2.5 px-4 rounded-xl text-xs transition-colors"
+              >
+                Confirm Decline
+              </button>
+              <button
+                onClick={() => setRejectingOfferId(null)}
+                className="px-4 py-2.5 border border-stone-300 hover:bg-stone-100 text-stone-700 font-semibold rounded-xl text-xs"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Active Rescue Mission Section */}
       {activeCase ? (
@@ -382,7 +658,7 @@ export const RescuerDashboard = () => {
 
                   <button
                     type="button"
-                    onClick={() => handleAccept(rescue.id)}
+                    onClick={() => handleDirectAccept(rescue.id)}
                     className="w-full md:w-auto bg-brand-darkNavy hover:bg-brand-deepNavy text-white px-5 py-2.5 rounded-lg text-sm font-semibold shadow-sm transition-colors flex items-center justify-center flex-shrink-0"
                   >
                     Accept Rescue Mission

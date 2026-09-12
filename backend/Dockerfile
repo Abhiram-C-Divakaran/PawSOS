@@ -7,9 +7,12 @@ RUN apt-get update && apt-get install -y \
     libpq-dev \
     gdal-bin \
     libgdal-dev \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Set working directory
+# Create non-root user
+RUN groupadd -r appuser && useradd -r -g appuser -d /app appuser
+
 WORKDIR /app
 
 # Copy requirements and install
@@ -18,9 +21,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
 COPY . .
+RUN mkdir -p /app/uploads && chown -R appuser:appuser /app
 
-# Expose the FastAPI port
+USER appuser
+
 EXPOSE 8000
 
-# Start the application
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+# Production server configuration (non-reload, multiple workers)
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]

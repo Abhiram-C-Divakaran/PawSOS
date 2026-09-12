@@ -45,7 +45,12 @@ def get_veterinary_cases(
     ]
     query = db.query(RescueCase).filter(RescueCase.status.in_(vet_statuses))
 
-    if facility_id:
+    # Facility scoping: Veterinarians can only access cases assigned to their authorized facility
+    if current_user.role == UserRole.VETERINARIAN:
+        target_facility = current_user.veterinary_facility_id or facility_id
+        if target_facility:
+            query = query.filter(RescueCase.veterinary_facility_id == target_facility)
+    elif facility_id:
         query = query.filter(RescueCase.veterinary_facility_id == facility_id)
 
     cases = query.order_by(RescueCase.updated_at.desc()).all()

@@ -12,3 +12,5 @@ from .treatment import Treatment
 from .foster_home import FosterHome
 from .foster_assignment import FosterAssignment
 from .notification import Notification
+from .device_token import DeviceToken
+from .audit_log import AuditLog

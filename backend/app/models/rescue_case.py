@@ -57,3 +57,7 @@ class RescueCase(Base):
     history = relationship("RescueStatusHistory", back_populates="rescue_case")
     assignments = relationship("RescueAssignment", back_populates="rescue_case")
     treatments = relationship("Treatment", back_populates="rescue_case")
+
+    @property
+    def image_url(self):
+        return self.images[0].image_url if self.images else None

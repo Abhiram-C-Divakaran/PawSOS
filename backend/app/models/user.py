@@ -18,6 +18,7 @@ class User(Base):
     
     # Organization link
     organization_id = Column(UUID, ForeignKey("organizations.id"), nullable=True)
+    veterinary_facility_id = Column(UUID, ForeignKey("veterinary_facilities.id"), nullable=True)
     is_active = Column(Boolean, default=True)
     is_verified = Column(Boolean, default=False)
     
@@ -26,4 +27,5 @@ class User(Base):
     last_login_at = Column(DateTime, nullable=True)
 
     organization = relationship("Organization", back_populates="users")
+    veterinary_facility = relationship("VeterinaryFacility")
     rescuer_profile = relationship("RescuerProfile", back_populates="user", uselist=False)
