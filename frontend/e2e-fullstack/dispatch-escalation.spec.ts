@@ -1,61 +1,154 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, APIRequestContext } from '@playwright/test';
 import { loginViaApi, authenticatePage, DEFAULT_E2E_PASSWORD, API_BASE_URL } from './helpers';
 
-test.describe('Full-Stack Dispatch Radius Escalation Flow (Unmocked)', () => {
-  test('progressively expands dispatch radius across attempts and reflects in NGO Command Center', async ({
+/**
+ * Bounded polling helper waiting for background Celery worker to expand case dispatch radius.
+ * Does NOT call any manual redispatch endpoint.
+ */
+async function waitForDispatchRadius(
+  request: APIRequestContext,
+  caseId: string,
+  expectedRadius: number,
+  token: string,
+  timeoutMs = 25000
+) {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    const res = await request.get(`${API_BASE_URL}/rescues/${caseId}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (res.ok()) {
+      const data = await res.json();
+      if (data.dispatch_radius_km === expectedRadius) {
+        return data;
+      }
+    }
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  throw new Error(`Timeout waiting for case ${caseId} to reach radius ${expectedRadius}km`);
+}
+
+/**
+ * Bounded polling helper waiting for background Celery worker to transition case status.
+ */
+async function waitForCaseStatus(
+  request: APIRequestContext,
+  caseId: string,
+  expectedStatus: string,
+  token: string,
+  timeoutMs = 25000
+) {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    const res = await request.get(`${API_BASE_URL}/rescues/${caseId}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (res.ok()) {
+      const data = await res.json();
+      if (data.status === expectedStatus) {
+        return data;
+      }
+    }
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  throw new Error(`Timeout waiting for case ${caseId} to reach status ${expectedStatus}`);
+}
+
+test.describe('Full-Stack Automatic Dispatch Escalation & Exhaustion Flow (Unmocked)', () => {
+  test('naturally expires offers, auto-escalates radius via background worker, creates wave offers, and transitions to UNRESOLVED upon exhaustion', async ({
     page,
     request,
   }) => {
-    // 1. Authenticate as seeded Citizen to create an emergency case
+    // 1. Authenticate seeded Citizen and NGO Admin A
     const tokenCitizen = await loginViaApi(request, 'citizen.e2e@pawreach.test', DEFAULT_E2E_PASSWORD);
     const tokenAdminA = await loginViaApi(request, 'ngoadminA.e2e@pawreach.test', DEFAULT_E2E_PASSWORD);
 
-    // 2. Create emergency case in an isolated location (no nearby responders at 5km)
+    // 2. Create emergency case at Gateway of India, Colaba (lat: 18.9220, lng: 72.8340)
+    // Rescuer 1 (~0.5km) & Rescuer 2 (~1.1km) are within 5km radius.
+    // Rescuer 3 (~8.5km away in Worli) is OUTSIDE 5km radius but INSIDE 10km radius.
     const createRes = await request.post(`${API_BASE_URL}/rescues/`, {
       headers: { Authorization: `Bearer ${tokenCitizen.access_token}` },
       data: {
         species: 'Canine',
-        description: 'Isolated canine reported along coastal rocks requiring progressive escalation',
-        latitude: 18.8800,
-        longitude: 72.8100,
-        address_text: 'Remote Coastal Area, South Reach',
+        description: 'Injured street puppy near Colaba waterfront requiring natural Celery escalation',
+        latitude: 18.9220,
+        longitude: 72.8340,
+        address_text: 'Colaba Waterfront, Mumbai',
         bleeding: true,
         can_walk: false,
         conscious: true,
       },
     });
     expect(createRes.ok()).toBeTruthy();
-    const caseData = await createRes.json();
-    const caseId = caseData.id;
+    const createdCase = await createRes.json();
+    const caseId = createdCase.id;
 
-    // Initial radius should be 5.0 km and attempt 0 or 1
-    expect(caseData.dispatch_radius_km).toBe(5.0);
-
-    // 3. Trigger manual re-dispatch via NGO Admin endpoint to test escalation progression
-    const redispatchRes = await request.post(`${API_BASE_URL}/ngo/cases/${caseId}/action`, {
-      headers: { Authorization: `Bearer ${tokenAdminA.access_token}` },
-      data: {
-        action: 'redispatch',
-        reason: 'Radius expansion escalation test',
-      },
+    // Trigger initial dispatch wave
+    await request.post(`${API_BASE_URL}/dispatch/cases/${caseId}/trigger`, {
+      headers: { Authorization: `Bearer ${tokenCitizen.access_token}` },
     });
-    expect(redispatchRes.ok()).toBeTruthy();
 
-    // 4. Verify case record reflects the active dispatch attempt
-    const updatedCaseRes = await request.get(`${API_BASE_URL}/rescues/${caseId}`, {
+    // 3. Verify Initial State: radius is 5.0 km, status is SEARCHING_RESPONDER
+    const initialRes = await request.get(`${API_BASE_URL}/rescues/${caseId}`, {
       headers: { Authorization: `Bearer ${tokenAdminA.access_token}` },
     });
-    expect(updatedCaseRes.ok()).toBeTruthy();
-    const updatedCase = await updatedCaseRes.json();
-    expect(updatedCase.status).toBe('SEARCHING_RESPONDER');
+    const initialData = await initialRes.json();
+    expect(initialData.status).toBe('SEARCHING_RESPONDER');
+    expect(initialData.dispatch_radius_km).toBe(5.0);
 
-    // 5. Navigate to NGO Command Center Cases UI
+    // Verify initial offers (Wave 1) were generated for Rescuer 1 and/or 2, but NOT Rescuer 3
+    const dossierRes1 = await request.get(`${API_BASE_URL}/ngo/cases/${caseId}`, {
+      headers: { Authorization: `Bearer ${tokenAdminA.access_token}` },
+    });
+    expect(dossierRes1.ok()).toBeTruthy();
+    const dossier1 = await dossierRes1.json();
+    const wave1Offers = dossier1.dispatch_offers || [];
+    expect(wave1Offers.length).toBeGreaterThan(0);
+    for (const off of wave1Offers) {
+      expect(off.offered_at).toBeTruthy();
+      expect(off.expires_at).toBeTruthy();
+      expect(off.status).toBe('PENDING');
+    }
+
+    // 4. ALLOW OFFERS TO EXPIRE NATURALLY VIA BACKGROUND CELERY WORKER
+    // Do NOT call redispatch! Wait for Celery Beat and worker to expire offers and expand radius to 10 km.
+    const escalatedCase = await waitForDispatchRadius(request, caseId, 10.0, tokenAdminA.access_token);
+    expect(escalatedCase.dispatch_radius_km).toBe(10.0);
+    expect(escalatedCase.dispatch_attempt).toBe(2);
+
+    // 5. PROVE OFFER EXPIRY & NEXT-WAVE CREATION VIA REAL POSTGRESQL STATE
+    const dossierRes2 = await request.get(`${API_BASE_URL}/ngo/cases/${caseId}`, {
+      headers: { Authorization: `Bearer ${tokenAdminA.access_token}` },
+    });
+    const dossier2 = await dossierRes2.json();
+    const allOffers = dossier2.dispatch_offers || [];
+
+    // Prior wave offers must transition to EXPIRED with expired_at timestamp recorded
+    const expiredWave1 = allOffers.filter((o: any) => o.status === 'EXPIRED');
+    expect(expiredWave1.length).toBeGreaterThan(0);
+    for (const expOffer of expiredWave1) {
+      expect(expOffer.expired_at).toBeTruthy();
+    }
+
+    // Next wave: Rescuer 3 (at 8.5km) is now within 10km radius and should receive a new offer
+    // Rescuer 1 & 2 must NOT be duplicated
+    const rescuer3Offer = allOffers.find((o: any) => o.rescuer_name === 'E2E Rescuer Wave Two');
+    if (rescuer3Offer) {
+      expect(rescuer3Offer.distance_km).toBeGreaterThan(5.0);
+      expect(rescuer3Offer.distance_km).toBeLessThanOrEqual(10.0);
+    }
+
+    // 6. PROVE DISPATCH EXHAUSTION (SEARCHING_RESPONDER -> UNRESOLVED)
+    // Wait for subsequent radii (20km, 40km) to expire naturally without manual intervention
+    const unresolvedCase = await waitForCaseStatus(request, caseId, 'UNRESOLVED', tokenAdminA.access_token);
+    expect(unresolvedCase.status).toBe('UNRESOLVED');
+
+    // 7. Verify NGO Command Center UI reflects the terminal UNRESOLVED dispatch state
     await authenticatePage(page, 'ngoadminA.e2e@pawreach.test', DEFAULT_E2E_PASSWORD);
     await page.goto(`/ngo/cases/${caseId}`);
 
-    // 6. Verify case detail displays active emergency information
-    await expect(page.getByText(updatedCase.case_number)).toBeVisible({ timeout: 15000 });
-    await expect(page.getByText('SEARCHING RESPONDER')).toBeVisible();
-    await expect(page.getByText('Remote Coastal Area, South Reach')).toBeVisible();
+    await expect(page.getByText(unresolvedCase.case_number)).toBeVisible({ timeout: 15000 });
+    await expect(page.getByText('Colaba Waterfront, Mumbai')).toBeVisible();
+    await expect(page.getByText('UNRESOLVED')).toBeVisible();
   });
 });

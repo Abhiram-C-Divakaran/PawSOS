@@ -432,9 +432,6 @@ class DispatchService:
         else:
             expired_offers = offer_query.all()
 
-        if not expired_offers:
-            return 0, 0, 0
-
         affected_case_ids: Set[uuid.UUID] = set()
         for offer in expired_offers:
             offer.assignment_status = AssignmentStatus.EXPIRED
@@ -443,6 +440,36 @@ class DispatchService:
             logger.info(
                 f"[EVENT: OFFER_EXPIRED] Offer {offer.id} for case {offer.rescue_case_id} expired"
             )
+
+        # Also find cases in SEARCHING_RESPONDER with no active offers whose attempt window expired
+        expiry_threshold = now - timedelta(seconds=settings.DISPATCH_OFFER_EXPIRY_SECONDS)
+        stale_searching_cases = (
+            db.query(RescueCase.id)
+            .filter(
+                RescueCase.status == RescueStatus.SEARCHING_RESPONDER,
+                (RescueCase.last_dispatch_at <= expiry_threshold) | (
+                    (RescueCase.last_dispatch_at == None) & (RescueCase.created_at <= expiry_threshold)
+                ),
+            )
+            .all()
+        )
+        for (c_id,) in stale_searching_cases:
+            active_count = (
+                db.query(RescueAssignment)
+                .filter(
+                    RescueAssignment.rescue_case_id == c_id,
+                    RescueAssignment.assignment_status.in_([
+                        AssignmentStatus.PENDING,
+                        AssignmentStatus.ACCEPTED,
+                    ]),
+                )
+                .count()
+            )
+            if active_count == 0:
+                affected_case_ids.add(c_id)
+
+        if not expired_offers and not affected_case_ids:
+            return 0, 0, 0
 
         db.commit()
 
@@ -508,14 +535,14 @@ class DispatchService:
             else:
                 next_radius = radius_levels[case.dispatch_attempt - 1]
                 case.dispatch_radius_km = next_radius
+                case.last_dispatch_at = now
                 logger.info(
                     f"[EVENT: RADIUS_EXPANDED] Case {case.case_number} advancing to {next_radius}km (Attempt {case.dispatch_attempt})"
                 )
                 db.commit()
 
-                new_offers = cls.dispatch_case(db, case.id)
-                if new_offers:
-                    escalated_count += 1
+                cls.dispatch_case(db, case.id)
+                escalated_count += 1
 
         return len(expired_offers), escalated_count, failed_count
 

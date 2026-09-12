@@ -1,3 +1,5 @@
+import os
+from datetime import datetime
 from fastapi import APIRouter, Depends, status, Response
 from sqlalchemy.orm import Session
 from sqlalchemy import text
@@ -64,17 +66,28 @@ def health_readiness(response: Response, db: Session = Depends(get_db)):
 
             heartbeat = r.get("celery_worker_heartbeat")
             if heartbeat:
-                checks["worker"] = "active"
+                try:
+                    hb_str = heartbeat.decode("utf-8") if isinstance(heartbeat, bytes) else str(heartbeat)
+                    hb_time = datetime.fromisoformat(hb_str)
+                    age_sec = (datetime.utcnow() - hb_time).total_seconds()
+                    if age_sec <= settings.CELERY_HEARTBEAT_THRESHOLD_SECONDS:
+                        checks["worker"] = "active"
+                    else:
+                        checks["worker"] = "stale"
+                        if settings.ENVIRONMENT in ["production", "staging"] or os.getenv("REQUIRE_FULL_READINESS", "").lower() == "true":
+                            healthy = False
+                except Exception:
+                    checks["worker"] = "active"
             else:
                 checks["worker"] = "no_heartbeat"
-                if settings.ENVIRONMENT in ["production", "staging"]:
+                if settings.ENVIRONMENT in ["production", "staging"] or os.getenv("REQUIRE_FULL_READINESS", "").lower() == "true":
                     checks["worker"] = "degraded"
                     healthy = False
         except Exception as e:
             logger.warning(f"Health check warning on Redis/Worker: {e}")
             checks["redis"] = "disconnected"
             checks["worker"] = "unavailable"
-            if settings.ENVIRONMENT in ["production", "staging"]:
+            if settings.ENVIRONMENT in ["production", "staging"] or os.getenv("REQUIRE_FULL_READINESS", "").lower() == "true":
                 healthy = False
 
     # 3. Storage Provider check
@@ -91,12 +104,26 @@ def health_readiness(response: Response, db: Session = Depends(get_db)):
             healthy = False
 
     # 4. Firebase Cloud Messaging configuration check
-    # Policy: Missing Firebase is considered 'degraded' rather than fatal to allow offline/local rescue dispatch
     try:
         from app.services.notification_service import _firebase_initialized
-        checks["firebase"] = "configured" if _firebase_initialized else "unconfigured"
+        checks["firebase"] = "healthy" if _firebase_initialized else "unconfigured"
     except Exception:
         checks["firebase"] = "unconfigured"
+
+    # Map to standardized operational status strings
+    celery_status = (
+        "healthy" if checks["worker"] == "active"
+        else ("degraded" if checks["worker"] in ["stale", "no_heartbeat"] else "unavailable")
+    )
+
+    services = {
+        "database": "healthy" if checks["database"] == "connected" else "unavailable",
+        "postgis": "healthy" if checks["postgis"] in ["available", "simulated"] else "unavailable",
+        "redis": "healthy" if checks["redis"] == "connected" else "unavailable",
+        "celery": celery_status,
+        "storage": checks["storage"] if checks["storage"] == "healthy" else "unavailable",
+        "firebase": checks["firebase"],
+    }
 
     if not healthy:
         response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
@@ -104,15 +131,6 @@ def health_readiness(response: Response, db: Session = Depends(get_db)):
     overall_status = "ready" if healthy else "degraded"
     if checks["database"] == "disconnected":
         overall_status = "offline"
-
-    services = {
-        "database": "healthy" if checks["database"] == "connected" else "unhealthy",
-        "postgis": checks["postgis"],
-        "redis": "healthy" if checks["redis"] == "connected" else checks["redis"],
-        "celery": "healthy" if checks["worker"] == "active" else checks["worker"],
-        "storage": checks["storage"],
-        "firebase": checks["firebase"],
-    }
 
     return {
         "status": overall_status,

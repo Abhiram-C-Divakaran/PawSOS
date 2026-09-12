@@ -69,6 +69,8 @@ def build_rescue_response(case: RescueCase, distance_km: Optional[float] = None)
         updated_at=case.updated_at,
         closed_at=case.closed_at,
         distance_km=distance_km,
+        dispatch_radius_km=case.dispatch_radius_km,
+        dispatch_attempt=case.dispatch_attempt,
         images=images,
         assigned_responder=assigned_responder
     )

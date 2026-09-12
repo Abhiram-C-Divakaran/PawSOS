@@ -82,5 +82,13 @@ test.describe('Full-Stack Responder Flow (Unmocked)', () => {
 
     // 9. Verify case is successfully handed off and active mission clears
     await expect(page.getByText(/Status updated: AT VETERINARY FACILITY/i)).toBeVisible({ timeout: 10000 });
+
+    // 10. Verify authoritative backend database state via API
+    const finalCaseRes = await page.request.get(`${API_BASE_URL}/rescues/${createdCase.id}`, {
+      headers: { Authorization: `Bearer ${authData.access_token}` },
+    });
+    expect(finalCaseRes.ok()).toBeTruthy();
+    const finalCase = await finalCaseRes.json();
+    expect(finalCase.status).toBe('AT_VETERINARY_FACILITY');
   });
 });

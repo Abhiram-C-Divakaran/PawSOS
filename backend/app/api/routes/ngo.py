@@ -639,6 +639,7 @@ def get_ngo_case_dossier(
             "dispatch_score": a.dispatch_score,
             "offered_at": a.offered_at.isoformat() if a.offered_at else None,
             "expires_at": a.expires_at.isoformat() if a.expires_at else None,
+            "expired_at": a.expired_at.isoformat() if a.expired_at else None,
             "accepted_at": a.accepted_at.isoformat() if a.accepted_at else None,
             "rejected_at": a.rejected_at.isoformat() if a.rejected_at else None,
             "rejection_reason": a.rejection_reason,

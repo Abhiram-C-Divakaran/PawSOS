@@ -12,12 +12,16 @@ from datetime import datetime, timedelta
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from app.database import SessionLocal, engine, Base
+from app.config import settings
 from app.models.organization import Organization
 from app.models.veterinary_facility import VeterinaryFacility
 from app.models.user import User
 from app.models.rescuer_profile import RescuerProfile
 from app.models.rescue_case import RescueCase
 from app.models.rescue_assignment import RescueAssignment
+from app.models.notification import Notification
+from app.models.device_token import DeviceToken
+from app.models.refresh_session import RefreshSession
 from app.core.security import get_password_hash
 from app.core.constants import (
     UserRole,
@@ -32,7 +36,11 @@ E2E_PASSWORD = "E2ETestPassword123!"
 
 def seed_e2e():
     print("Seeding PawReach E2E fullstack test database...")
-    Base.metadata.create_all(bind=engine)
+    # Base.metadata.create_all is only used on SQLite dev databases.
+    # Production/Staging/CI environments use Alembic migrations.
+    if "sqlite" in settings.DATABASE_URL.lower():
+        Base.metadata.create_all(bind=engine)
+
     db = SessionLocal()
 
     try:
@@ -41,7 +49,10 @@ def seed_e2e():
             "citizen.e2e@pawreach.test",
             "rescuer1.e2e@pawreach.test",
             "rescuer2.e2e@pawreach.test",
+            "rescuer3.e2e@pawreach.test",
+            "rescuerB.e2e@pawreach.test",
             "vet.e2e@pawreach.test",
+            "vetB.e2e@pawreach.test",
             "ngoadminA.e2e@pawreach.test",
             "ngoadminB.e2e@pawreach.test",
             "superadmin.e2e@pawreach.test",
@@ -49,7 +60,10 @@ def seed_e2e():
         existing_users = db.query(User).filter(User.email.in_(e2e_emails)).all()
         user_ids = [u.id for u in existing_users]
         if user_ids:
-            # Clean dependent assignments and profiles
+            # Clean dependent entities
+            db.query(Notification).filter(Notification.user_id.in_(user_ids)).delete(synchronize_session=False)
+            db.query(DeviceToken).filter(DeviceToken.user_id.in_(user_ids)).delete(synchronize_session=False)
+            db.query(RefreshSession).filter(RefreshSession.user_id.in_(user_ids)).delete(synchronize_session=False)
             db.query(RescueAssignment).filter(RescueAssignment.rescuer_id.in_(user_ids)).delete(synchronize_session=False)
             db.query(RescueCase).filter(RescueCase.reporter_id.in_(user_ids)).delete(synchronize_session=False)
             db.query(RescuerProfile).filter(RescuerProfile.user_id.in_(user_ids)).delete(synchronize_session=False)
@@ -85,10 +99,11 @@ def seed_e2e():
             db.add(org_b)
             db.flush()
 
-        # 3. Veterinary Facility for Org A
-        vet_facility = db.query(VeterinaryFacility).filter(VeterinaryFacility.name == "South Mumbai Animal Hospital").first()
-        if not vet_facility:
-            vet_facility = VeterinaryFacility(
+        # 3. Veterinary Facilities
+        # 3.1 Facility A for Org A (South Mumbai)
+        vet_facility_a = db.query(VeterinaryFacility).filter(VeterinaryFacility.name == "South Mumbai Animal Hospital").first()
+        if not vet_facility_a:
+            vet_facility_a = VeterinaryFacility(
                 organization_id=org_a.id,
                 name="South Mumbai Animal Hospital",
                 phone="+919833333333",
@@ -100,13 +115,31 @@ def seed_e2e():
                 is_24_hours=True,
                 is_verified=True,
             )
-            db.add(vet_facility)
+            db.add(vet_facility_a)
+            db.flush()
+
+        # 3.2 Facility B for Org B (North Mumbai)
+        vet_facility_b = db.query(VeterinaryFacility).filter(VeterinaryFacility.name == "North Mumbai Animal Hospital").first()
+        if not vet_facility_b:
+            vet_facility_b = VeterinaryFacility(
+                organization_id=org_b.id,
+                name="North Mumbai Animal Hospital",
+                phone="+919844444444",
+                email="vetfacilityb@pawreach.test",
+                latitude=19.1180,
+                longitude=72.8450,
+                address="SV Road, Andheri West, Mumbai 400058",
+                supports_emergency=True,
+                is_24_hours=True,
+                is_verified=True,
+            )
+            db.add(vet_facility_b)
             db.flush()
 
         # 4. Create Deterministic Accounts
         pwd_hash = get_password_hash(E2E_PASSWORD)
 
-        # 4.1 Citizen
+        # 4.1 Citizen Reporter
         citizen = User(
             email="citizen.e2e@pawreach.test",
             phone="+919800000001",
@@ -118,7 +151,7 @@ def seed_e2e():
         )
         db.add(citizen)
 
-        # 4.2 Rescuer 1 (Org A, Colaba location)
+        # 4.2 Rescuer 1 (Responder A - Org A, Colaba location ~0.5km)
         rescuer1 = User(
             email="rescuer1.e2e@pawreach.test",
             phone="+919800000002",
@@ -131,7 +164,7 @@ def seed_e2e():
         )
         db.add(rescuer1)
 
-        # 4.3 Rescuer 2 (Org A, near Colaba location)
+        # 4.3 Rescuer 2 (Responder B - Org A, Colaba location ~1.1km)
         rescuer2 = User(
             email="rescuer2.e2e@pawreach.test",
             phone="+919800000003",
@@ -144,21 +177,61 @@ def seed_e2e():
         )
         db.add(rescuer2)
 
-        # 4.4 Vet (South Mumbai Hospital)
-        vet = User(
-            email="vet.e2e@pawreach.test",
-            phone="+919800000004",
-            full_name="Dr. E2E Veterinarian",
+        # 4.4 Rescuer 3 (Responder at second radius wave - Org A, Worli location ~8.5km from Colaba)
+        rescuer3 = User(
+            email="rescuer3.e2e@pawreach.test",
+            phone="+919800000008",
+            full_name="E2E Rescuer Wave Two",
             password_hash=pwd_hash,
-            role=UserRole.VETERINARIAN,
+            role=UserRole.RESCUER,
             organization_id=org_a.id,
-            veterinary_facility_id=vet_facility.id,
             is_active=True,
             is_verified=True,
         )
-        db.add(vet)
+        db.add(rescuer3)
 
-        # 4.5 NGO Admin Org A
+        # 4.5 Rescuer B (Responder for Org B, Andheri location)
+        rescuerB = User(
+            email="rescuerB.e2e@pawreach.test",
+            phone="+919800000010",
+            full_name="E2E Rescuer Org B",
+            password_hash=pwd_hash,
+            role=UserRole.RESCUER,
+            organization_id=org_b.id,
+            is_active=True,
+            is_verified=True,
+        )
+        db.add(rescuerB)
+
+        # 4.5 Veterinarian A (Org A, South Mumbai Hospital)
+        vet_a = User(
+            email="vet.e2e@pawreach.test",
+            phone="+919800000004",
+            full_name="Dr. E2E Veterinarian A",
+            password_hash=pwd_hash,
+            role=UserRole.VETERINARIAN,
+            organization_id=org_a.id,
+            veterinary_facility_id=vet_facility_a.id,
+            is_active=True,
+            is_verified=True,
+        )
+        db.add(vet_a)
+
+        # 4.6 Veterinarian B (Org B, North Mumbai Hospital)
+        vet_b = User(
+            email="vetB.e2e@pawreach.test",
+            phone="+919800000009",
+            full_name="Dr. E2E Veterinarian B",
+            password_hash=pwd_hash,
+            role=UserRole.VETERINARIAN,
+            organization_id=org_b.id,
+            veterinary_facility_id=vet_facility_b.id,
+            is_active=True,
+            is_verified=True,
+        )
+        db.add(vet_b)
+
+        # 4.7 NGO Admin Org A
         ngo_admin_a = User(
             email="ngoadminA.e2e@pawreach.test",
             phone="+919800000005",
@@ -171,7 +244,7 @@ def seed_e2e():
         )
         db.add(ngo_admin_a)
 
-        # 4.6 NGO Admin Org B
+        # 4.8 NGO Admin Org B
         ngo_admin_b = User(
             email="ngoadminB.e2e@pawreach.test",
             phone="+919800000006",
@@ -184,7 +257,7 @@ def seed_e2e():
         )
         db.add(ngo_admin_b)
 
-        # 4.7 Super Admin
+        # 4.9 Super Admin
         super_admin = User(
             email="superadmin.e2e@pawreach.test",
             phone="+919800000007",
@@ -198,6 +271,7 @@ def seed_e2e():
         db.flush()
 
         # 5. Create Rescuer Profiles
+        # Rescuer 1 (Colaba)
         profile1 = RescuerProfile(
             user_id=rescuer1.id,
             organization_id=org_a.id,
@@ -212,6 +286,7 @@ def seed_e2e():
         )
         db.add(profile1)
 
+        # Rescuer 2 (Colaba)
         profile2 = RescuerProfile(
             user_id=rescuer2.id,
             organization_id=org_a.id,
@@ -226,10 +301,47 @@ def seed_e2e():
         )
         db.add(profile2)
 
-        # 6. Pre-staged Rescue Cases for Scenarios
-        # Scenario Case: Org B incident (for Cross-Tenant check: Org A Admin must NOT be able to access or assign)
-        db.query(RescueCase).filter(RescueCase.case_number.in_(["E2E-CASE-ORGB-001", "E2E-CASE-CONCURRENT-001", "E2E-CASE-VET-001"])).delete(synchronize_session=False)
+        # Rescuer 3 (Worli / Lower Parel ~8.5km from Colaba)
+        profile3 = RescuerProfile(
+            user_id=rescuer3.id,
+            organization_id=org_a.id,
+            availability_status=RescuerAvailability.AVAILABLE,
+            latitude=18.9950,
+            longitude=72.8250,
+            service_radius_km=15.0,
+            vehicle_available=True,
+            experience_level="Expert",
+            last_location_update=datetime.utcnow(),
+            reliability_score=97.0,
+        )
+        db.add(profile3)
 
+        # Rescuer B (Org B - Andheri)
+        profile_b = RescuerProfile(
+            user_id=rescuerB.id,
+            organization_id=org_b.id,
+            availability_status=RescuerAvailability.AVAILABLE,
+            latitude=19.1197,
+            longitude=72.8464,
+            service_radius_km=15.0,
+            vehicle_available=True,
+            experience_level="Expert",
+            last_location_update=datetime.utcnow(),
+            reliability_score=96.0,
+        )
+        db.add(profile_b)
+
+        # 6. Pre-staged Rescue Cases for E2E Scenarios
+        db.query(RescueCase).filter(
+            RescueCase.case_number.in_([
+                "E2E-CASE-ORGB-001",
+                "E2E-CASE-CONCURRENT-001",
+                "E2E-CASE-VET-001",
+                "E2E-CASE-VETB-001",
+            ])
+        ).delete(synchronize_session=False)
+
+        # 6.1 Org B incident (for Cross-Tenant check: Org A Admin cannot access or mutate)
         case_org_b = RescueCase(
             case_number="E2E-CASE-ORGB-001",
             reporter_id=citizen.id,
@@ -246,7 +358,7 @@ def seed_e2e():
         )
         db.add(case_org_b)
 
-        # Scenario Case: Concurrent Acceptance Case (with offers sent to both rescuer1 and rescuer2)
+        # 6.2 Concurrent Acceptance Case (with offers sent to both rescuer1 and rescuer2)
         case_concurrent = RescueCase(
             case_number="E2E-CASE-CONCURRENT-001",
             reporter_id=citizen.id,
@@ -282,31 +394,50 @@ def seed_e2e():
         )
         db.add_all([offer1, offer2])
 
-        # Scenario Case: Animal at facility ready for veterinary intake
-        case_vet = RescueCase(
+        # 6.3 Animal at Facility A ready for Vet A clinical intake
+        case_vet_a = RescueCase(
             case_number="E2E-CASE-VET-001",
             reporter_id=citizen.id,
             organization_id=org_a.id,
             species="Feline",
-            description="Injured cat transported to hospital",
+            description="Injured cat admitted to South Mumbai hospital",
             latitude=18.9215,
             longitude=72.8335,
             address_text="Colaba Animal Hospital Intake",
             status=RescueStatus.AT_VETERINARY_FACILITY,
             triage_priority=RescuePriority.URGENT,
             triage_score=75,
-            veterinary_facility_id=vet_facility.id,
+            veterinary_facility_id=vet_facility_a.id,
             created_at=datetime.utcnow() - timedelta(hours=1),
         )
-        db.add(case_vet)
+        db.add(case_vet_a)
+
+        # 6.4 Animal at Facility B for testing Vet A cross-facility isolation
+        case_vet_b = RescueCase(
+            case_number="E2E-CASE-VETB-001",
+            reporter_id=citizen.id,
+            organization_id=org_b.id,
+            species="Canine",
+            description="Injured dog admitted to North Mumbai hospital",
+            latitude=19.1180,
+            longitude=72.8450,
+            address_text="Andheri Animal Hospital Intake",
+            status=RescueStatus.AT_VETERINARY_FACILITY,
+            triage_priority=RescuePriority.MODERATE,
+            triage_score=50,
+            veterinary_facility_id=vet_facility_b.id,
+            created_at=datetime.utcnow() - timedelta(hours=2),
+        )
+        db.add(case_vet_b)
 
         db.commit()
         print("E2E seed completed successfully:")
         print(f"  Org A: {org_a.name} ({org_a.id})")
         print(f"  Org B: {org_b.name} ({org_b.id})")
-        print(f"  Vet Facility: {vet_facility.name} ({vet_facility.id})")
+        print(f"  Vet Facility A: {vet_facility_a.name} ({vet_facility_a.id})")
+        print(f"  Vet Facility B: {vet_facility_b.name} ({vet_facility_b.id})")
         print(f"  Users seeded: {len(e2e_emails)} accounts (Password: {E2E_PASSWORD})")
-        print("  Pre-staged cases: E2E-CASE-ORGB-001, E2E-CASE-CONCURRENT-001, E2E-CASE-VET-001")
+        print("  Pre-staged cases: E2E-CASE-ORGB-001, E2E-CASE-CONCURRENT-001, E2E-CASE-VET-001, E2E-CASE-VETB-001")
 
     except Exception as e:
         db.rollback()

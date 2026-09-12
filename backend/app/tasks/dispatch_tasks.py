@@ -13,7 +13,7 @@ def worker_heartbeat_task() -> dict:
         import redis
         r = redis.from_url(settings.REDIS_URL, socket_timeout=2)
         now_iso = datetime.utcnow().isoformat()
-        r.set("celery_worker_heartbeat", now_iso, ex=60)
+        r.set("celery_worker_heartbeat", now_iso, ex=settings.CELERY_HEARTBEAT_TTL_SECONDS)
         return {"status": "ok", "heartbeat_at": now_iso}
     except Exception as e:
         logger.warning(f"Could not record worker heartbeat in Redis: {e}")

@@ -65,6 +65,8 @@ class RescueResponse(BaseModel):
     closed_at: datetime | None = None
 
     distance_km: float | None = None
+    dispatch_radius_km: float | None = None
+    dispatch_attempt: int | None = None
     images: List[AnimalImageResponse] = []
     assigned_responder: Optional[AssignedResponderResponse] = None
 
