@@ -569,11 +569,14 @@ class DispatchService:
         - Citizen & NGO notified
         """
         try:
-            dialect_name = db.bind.dialect.name if db.bind else "sqlite"
-
-            # 1. Non-locking lookup to determine the parent rescue case
+            # 1. Non-locking scalar lookup to determine the parent rescue case
             offer_lookup = (
-                db.query(RescueAssignment)
+                db.query(
+                    RescueAssignment.id,
+                    RescueAssignment.rescue_case_id,
+                    RescueAssignment.assignment_status,
+                    RescueAssignment.expires_at,
+                )
                 .filter(
                     RescueAssignment.id == offer_id,
                     RescueAssignment.rescuer_id == rescuer_id,
@@ -591,33 +594,42 @@ class DispatchService:
 
             now = datetime.utcnow()
             if offer_lookup.expires_at and offer_lookup.expires_at < now:
-                offer_lookup.assignment_status = AssignmentStatus.EXPIRED
-                offer_lookup.expired_at = now
+                db.query(RescueAssignment).filter(RescueAssignment.id == offer_id).update({
+                    "assignment_status": AssignmentStatus.EXPIRED,
+                    "expired_at": now,
+                })
                 db.commit()
                 raise ConflictException("Dispatch offer has expired")
 
-            # 2. Concurrency row-locking on RescueCase FIRST to enforce a single global lock acquisition order
-            case_query = db.query(RescueCase).filter(RescueCase.id == offer_lookup.rescue_case_id)
-            if dialect_name == "postgresql":
-                case = case_query.with_for_update().first()
-            else:
-                case = case_query.first()
+            # 2. Concurrency row-locking on RescueCase FIRST to enforce a single global lock acquisition order.
+            # with_for_update() with populate_existing() ensures fresh database state across concurrent transactions.
+            case = (
+                db.query(RescueCase)
+                .filter(RescueCase.id == offer_lookup.rescue_case_id)
+                .with_for_update()
+                .populate_existing()
+                .first()
+            )
 
             if not case:
                 raise NotFoundException("Rescue case not found")
 
             if case.status not in [RescueStatus.TRIAGED, RescueStatus.SEARCHING_RESPONDER]:
-                offer_lookup.assignment_status = AssignmentStatus.CANCELLED
+                db.query(RescueAssignment).filter(RescueAssignment.id == offer_id).update({
+                    "assignment_status": AssignmentStatus.CANCELLED,
+                })
                 db.commit()
                 raise ConflictException("This rescue has already been assigned to another responder or closed.")
 
-            # 3. Retrieve the offer to mutate within the locked case critical section
+            # 3. Retrieve the offer to mutate within the locked case critical section with populate_existing
             offer = (
                 db.query(RescueAssignment)
                 .filter(
                     RescueAssignment.id == offer_id,
                     RescueAssignment.rescuer_id == rescuer_id,
                 )
+                .with_for_update()
+                .populate_existing()
                 .first()
             )
             if not offer or offer.assignment_status != AssignmentStatus.PENDING:

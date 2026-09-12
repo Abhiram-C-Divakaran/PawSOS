@@ -158,6 +158,20 @@ export const NGOCaseDetail = () => {
               >
                 {caseData.triage_priority}
               </span>
+              <span
+                data-testid="case-status-badge"
+                className={`text-[10px] font-black px-2 py-0.5 rounded-full uppercase ${
+                  caseData.status === 'UNRESOLVED'
+                    ? 'bg-red-100 text-red-800'
+                    : caseData.status === 'CLOSED'
+                    ? 'bg-emerald-100 text-emerald-800'
+                    : caseData.status === 'RESPONDER_ASSIGNED'
+                    ? 'bg-teal-100 text-teal-800'
+                    : 'bg-blue-100 text-blue-800'
+                }`}
+              >
+                {caseData.status}
+              </span>
             </div>
             <h1 className="text-xl font-black text-[#12213A] mt-0.5">
               {caseData.species} Emergency Dossier
