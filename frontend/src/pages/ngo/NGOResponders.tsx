@@ -12,6 +12,7 @@ import {
   Activity
 } from 'lucide-react';
 import api from '../../services/api';
+import { formatApiError } from '../../utils/error';
 import type { NGOResponderSummary } from '../../types';
 
 export const NGOResponders: React.FC = () => {
@@ -32,7 +33,7 @@ export const NGOResponders: React.FC = () => {
       setResponders(res.data || []);
     } catch (err: any) {
       console.error('Error fetching responders', err);
-      setError(err.response?.data?.detail || 'Failed to load field responders');
+      setError(formatApiError(err, 'Failed to load field responders'));
     } finally {
       setLoading(false);
     }
@@ -61,7 +62,7 @@ export const NGOResponders: React.FC = () => {
       setTimeout(() => setActionSuccess(null), 4000);
     } catch (err: any) {
       console.error('Failed to update responder status', err);
-      setError(err.response?.data?.detail || 'Failed to update responder status');
+      setError(formatApiError(err, 'Failed to update responder status'));
     } finally {
       setUpdatingId(null);
     }

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
+import { formatApiError } from '../utils/error';
 import { AlertCircle } from 'lucide-react';
 
 export const Login = () => {
@@ -35,7 +36,7 @@ export const Login = () => {
       // We will route based on role later, or just go to `from`
       navigate(from, { replace: true });
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to login. Please check credentials.');
+      setError(formatApiError(err, 'Failed to login. Please check credentials.'));
     } finally {
       setLoading(false);
     }

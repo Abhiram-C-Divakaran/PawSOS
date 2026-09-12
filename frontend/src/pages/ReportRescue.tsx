@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
+import { formatApiError } from '../utils/error';
 import { Camera, AlertTriangle, CheckCircle, UploadCloud, Loader2 } from 'lucide-react';
 import { MapPicker } from '../components/MapPicker';
 import { Toast, type ToastMessage } from '../components/Toast';
@@ -94,7 +95,7 @@ export const ReportRescue = () => {
       setToast({
         id: 'img-upload-fail',
         type: 'error',
-        message: err.response?.data?.detail || 'Failed to upload photo. Please try again.',
+        message: formatApiError(err, 'Failed to upload photo. Please try again.'),
       });
       setPhotoPreview(null);
       setPhotoUrl(null);
@@ -136,7 +137,7 @@ export const ReportRescue = () => {
       setToast({
         id: 'submit-fail',
         type: 'error',
-        message: err.response?.data?.detail || 'Failed to submit report. Please try again.',
+        message: formatApiError(err, 'Failed to submit report. Please try again.'),
       });
     } finally {
       setLoading(false);

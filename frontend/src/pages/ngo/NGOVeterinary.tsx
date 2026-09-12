@@ -14,6 +14,7 @@ import {
   ExternalLink
 } from 'lucide-react';
 import api from '../../services/api';
+import { formatApiError } from '../../utils/error';
 
 interface VeterinaryPartner {
   id: string;
@@ -45,7 +46,7 @@ export const NGOVeterinary: React.FC = () => {
       setFacilities(res.data || []);
     } catch (err: any) {
       console.error('Error fetching partner veterinary clinics', err);
-      setError(err.response?.data?.detail || 'Failed to load veterinary partner network');
+      setError(formatApiError(err, 'Failed to load veterinary partner network'));
     } finally {
       setLoading(false);
     }

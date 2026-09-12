@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import api from '../services/api';
+import { formatApiError } from '../utils/error';
 import { AlertCircle } from 'lucide-react';
 
 export const Register = () => {
@@ -43,7 +44,7 @@ export const Register = () => {
       // Auto redirect to login
       navigate('/login', { state: { message: 'Registration successful! Please log in.' } });
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to register. Please try again.');
+      setError(formatApiError(err, 'Failed to register. Please try again.'));
     } finally {
       setLoading(false);
     }

@@ -11,6 +11,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import api from '../../services/api';
+import { formatApiError } from '../../utils/error';
 import { MapView } from '../../components/MapView';
 import { Toast, type ToastMessage } from '../../components/Toast';
 
@@ -37,7 +38,7 @@ export const NGOCaseDetail: React.FC = () => {
       setToast({
         id: 'dossier-err',
         type: 'error',
-        message: err.response?.data?.detail || 'Failed to load case dossier.',
+        message: formatApiError(err, 'Failed to load case dossier.'),
       });
     } finally {
       setLoading(false);
@@ -87,7 +88,7 @@ export const NGOCaseDetail: React.FC = () => {
       setToast({
         id: 'action-fail',
         type: 'error',
-        message: err.response?.data?.detail || 'Failed to execute administrative action.',
+        message: formatApiError(err, 'Failed to execute administrative action.'),
       });
     }
   };

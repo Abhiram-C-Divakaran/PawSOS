@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import api from '../services/api';
+import { formatApiError } from '../utils/error';
 import type { RescueCase, RescueStatus, VeterinaryFacility, DispatchOffer } from '../types';
 import {
   MapPin,
@@ -107,7 +108,7 @@ export const RescuerDashboard = () => {
       setToast({
         id: 'nearby-err',
         type: 'error',
-        message: err.response?.data?.detail || 'Failed to fetch nearby emergencies.',
+        message: formatApiError(err, 'Failed to fetch nearby emergencies.'),
       });
     } finally {
       setLoading(false);
@@ -188,7 +189,7 @@ export const RescuerDashboard = () => {
       setToast({
         id: 'accept-fail',
         type: 'error',
-        message: err.response?.data?.detail || 'This offer expired or was claimed by another responder.',
+        message: formatApiError(err, 'This offer expired or was claimed by another responder.'),
       });
       fetchIncomingOffers();
     }
@@ -211,7 +212,7 @@ export const RescuerDashboard = () => {
       setToast({
         id: 'reject-fail',
         type: 'error',
-        message: err.response?.data?.detail || 'Failed to decline offer.',
+        message: formatApiError(err, 'Failed to decline offer.'),
       });
     }
   };
@@ -233,7 +234,7 @@ export const RescuerDashboard = () => {
       setToast({
         id: 'accept-fail',
         type: 'error',
-        message: err.response?.data?.detail || 'This rescue was claimed by another responder or is closed.',
+        message: formatApiError(err, 'This rescue was claimed by another responder or is closed.'),
       });
       if (rescuerCoords) {
         syncLocationAndFetchNearby(rescuerCoords.lat, rescuerCoords.lng);
@@ -273,7 +274,7 @@ export const RescuerDashboard = () => {
       setToast({
         id: 'status-fail',
         type: 'error',
-        message: err.response?.data?.detail || 'Failed to update rescue status.',
+        message: formatApiError(err, 'Failed to update rescue status.'),
       });
     }
   };

@@ -82,6 +82,44 @@ describe('Authentication Flow', () => {
         );
       });
     });
+
+    it('safely displays structured API error without crashing React child renderer', async () => {
+      (api.post as any).mockRejectedValueOnce({
+        response: {
+          status: 401,
+          data: {
+            detail: {
+              success: false,
+              error: {
+                code: 'UNAUTHORIZED',
+                message: 'Incorrect email/phone or password',
+              },
+            },
+          },
+        },
+      });
+
+      render(
+        <BrowserRouter>
+          <AuthProvider>
+            <Login />
+          </AuthProvider>
+        </BrowserRouter>
+      );
+
+      fireEvent.change(screen.getByLabelText(/Email or Phone/i), {
+        target: { value: 'wrong@example.com' },
+      });
+      fireEvent.change(screen.getByLabelText(/Password/i), {
+        target: { value: 'badpass' },
+      });
+
+      fireEvent.click(screen.getByRole('button', { name: /Sign In/i }));
+
+      await waitFor(() => {
+        expect(screen.getByText('Incorrect email/phone or password')).toBeInTheDocument();
+      });
+    });
   });
 
   describe('Register Component', () => {

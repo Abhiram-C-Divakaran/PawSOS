@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import api from '../services/api';
+import { formatApiError } from '../utils/error';
 import type { RescueCase, RescueStatus, VeterinaryFacility } from '../types';
 import { Stethoscope, PlusCircle, CheckCircle, HeartPulse } from 'lucide-react';
 import { Toast, type ToastMessage } from '../components/Toast';
@@ -39,7 +40,7 @@ export const VetDashboard = () => {
       setToast({
         id: 'vet-cases-err',
         type: 'error',
-        message: err.response?.data?.detail || 'Failed to load veterinary inbox cases.',
+        message: formatApiError(err, 'Failed to load veterinary inbox cases.'),
       });
     } finally {
       setLoading(false);
@@ -101,7 +102,7 @@ export const VetDashboard = () => {
       setToast({
         id: 'treatment-err',
         type: 'error',
-        message: err.response?.data?.detail || 'Failed to submit treatment record.',
+        message: formatApiError(err, 'Failed to submit treatment record.'),
       });
     } finally {
       setSubmitting(false);
@@ -129,7 +130,7 @@ export const VetDashboard = () => {
       setToast({
         id: 'adv-status-err',
         type: 'error',
-        message: err.response?.data?.detail || 'Failed to advance case status.',
+        message: formatApiError(err, 'Failed to advance case status.'),
       });
     }
   };

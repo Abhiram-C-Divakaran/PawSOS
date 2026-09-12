@@ -1,4 +1,5 @@
 import axios, { AxiosError, type InternalAxiosRequestConfig } from 'axios';
+import { formatApiError } from '../utils/error';
 
 const baseURL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
 
@@ -41,6 +42,14 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
+    // Normalize structured error response bodies to ensure clean string messages
+    if (error.response?.data && typeof error.response.data === 'object') {
+      const data: any = error.response.data;
+      if (data.detail && typeof data.detail === 'object') {
+        data.detail = formatApiError(error);
+      }
+    }
+
     const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
 
     // Do not attempt refresh on login or refresh endpoints
@@ -108,4 +117,5 @@ api.interceptors.response.use(
   }
 );
 
+export { formatApiError };
 export default api;

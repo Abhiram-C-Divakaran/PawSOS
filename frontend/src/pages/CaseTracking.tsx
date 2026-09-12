@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import api from '../services/api';
+import { formatApiError } from '../utils/error';
 import type { RescueCase, RescueTimeline } from '../types';
 import { MapPin, AlertTriangle, Clock, CheckCircle, UserCheck, ShieldAlert } from 'lucide-react';
 import { MapView } from '../components/MapView';
@@ -21,7 +22,7 @@ export const CaseTracking = () => {
       setRescueCase(caseRes.data);
       setTimeline(timelineRes.data);
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to load rescue case.');
+      setError(formatApiError(err, 'Failed to load rescue case.'));
     } finally {
       setLoading(false);
     }
