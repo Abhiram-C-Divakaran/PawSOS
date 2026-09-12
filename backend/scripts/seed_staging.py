@@ -28,12 +28,11 @@ def seed_staging_database():
         if not ngo:
             ngo = Organization(
                 name="Cochin Animal Rescue Network",
-                type=OrganizationType.NGO,
+                organization_type=OrganizationType.NGO,
                 address="Marine Drive, Ernakulam, Kerala 682031",
-                contact_email="contact@staging.pawsos.org",
-                contact_phone="+919876543200",
-                is_active=True,
-                is_verified=True,
+                email="contact@staging.pawsos.org",
+                phone="+919876543200",
+                verification_status=True,
             )
             db.add(ngo)
             db.flush()
