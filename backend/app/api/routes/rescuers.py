@@ -92,6 +92,7 @@ def get_my_dispatch_offers(
     return offers
 
 @router.post("/offers/{offer_id}/accept", response_model=DispatchOfferResponse)
+@router.post("/me/offers/{offer_id}/accept", response_model=DispatchOfferResponse)
 def accept_dispatch_offer(
     offer_id: uuid.UUID,
     db: Session = Depends(get_db),
@@ -101,6 +102,7 @@ def accept_dispatch_offer(
     return DispatchService.accept_offer(db, offer_id, current_user.id)
 
 @router.post("/offers/{offer_id}/reject", response_model=DispatchOfferResponse)
+@router.post("/me/offers/{offer_id}/reject", response_model=DispatchOfferResponse)
 def reject_dispatch_offer(
     offer_id: uuid.UUID,
     payload: DispatchRejectRequest = DispatchRejectRequest(),

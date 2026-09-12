@@ -36,10 +36,10 @@ test.describe('Full-Stack Concurrent Acceptance Conflict Protection (Unmocked)',
     // 3. Fire simultaneous acceptance requests against PostgreSQL using Promise.all
     // Atomic row locking in backend ensures exactly one winner
     const [res1, res2] = await Promise.all([
-      request.post(`${API_BASE_URL}/rescuers/me/offers/${offer1.id}/accept`, {
+      request.post(`${API_BASE_URL}/rescuers/offers/${offer1.id}/accept`, {
         headers: { Authorization: `Bearer ${tokenRescuer1.access_token}` },
       }),
-      request.post(`${API_BASE_URL}/rescuers/me/offers/${offer2.id}/accept`, {
+      request.post(`${API_BASE_URL}/rescuers/offers/${offer2.id}/accept`, {
         headers: { Authorization: `Bearer ${tokenRescuer2.access_token}` },
       }),
     ]);

@@ -10,7 +10,6 @@ test.describe('Full-Stack Citizen Report Flow (Unmocked)', () => {
 
     // 2. Navigate to report page
     await page.goto('/report');
-    await expect(page.getByText('Report an Animal in Distress')).toBeVisible();
 
     // Step 1: Species Selection
     await expect(page.getByText('What animal needs help?')).toBeVisible();

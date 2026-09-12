@@ -977,27 +977,6 @@ def update_responder_status(
     # Cross-tenant boundary check: NGO_ADMIN can only modify responders belonging to their organization
     if current_user.role == UserRole.NGO_ADMIN:
         attempted = payload.model_dump(mode="json", exclude_unset=True)
-        if not current_user.organization_id or responder_org != current_user.organization_id:
-            audit = AuditLog(
-                actor_id=current_user.id,
-                action="CROSS_TENANT_RESPONDER_UPDATE_DENIED",
-                entity="user",
-                entity_id=user.id,
-                old_value={"organization_id": str(responder_org) if responder_org else None},
-                new_value={
-                    "actor_organization_id": str(current_user.organization_id) if current_user.organization_id else None,
-                    "target_responder_id": str(user.id),
-                    "target_organization_id": str(responder_org) if responder_org else None,
-                    "attempted_fields": attempted,
-                },
-                timestamp=datetime.utcnow()
-            )
-            db.add(audit)
-            db.commit()
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Access denied: Responder belongs to another organization or is unaffiliated"
-            )
 
         # Block NGO admin from adopting or reassigning responder organization_id
         if payload.organization_id is not None and payload.organization_id != responder_org:
@@ -1020,6 +999,28 @@ def update_responder_status(
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Organization reassignment is restricted to super administrators"
+            )
+
+        if not current_user.organization_id or responder_org != current_user.organization_id:
+            audit = AuditLog(
+                actor_id=current_user.id,
+                action="CROSS_TENANT_RESPONDER_UPDATE_DENIED",
+                entity="user",
+                entity_id=user.id,
+                old_value={"organization_id": str(responder_org) if responder_org else None},
+                new_value={
+                    "actor_organization_id": str(current_user.organization_id) if current_user.organization_id else None,
+                    "target_responder_id": str(user.id),
+                    "target_organization_id": str(responder_org) if responder_org else None,
+                    "attempted_fields": attempted,
+                },
+                timestamp=datetime.utcnow()
+            )
+            db.add(audit)
+            db.commit()
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied: Responder belongs to another organization or is unaffiliated"
             )
 
     old_val = {"is_active": user.is_active, "organization_id": str(user.organization_id) if user.organization_id else None}

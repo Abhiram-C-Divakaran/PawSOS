@@ -129,11 +129,15 @@ class DispatchService:
         if dialect_name == "postgresql":
             # Native PostGIS spatial query
             point_geom = func.ST_SetSRID(func.ST_MakePoint(case.longitude, case.latitude), 4326)
+            rescuer_geom = func.coalesce(
+                RescuerProfile.current_location,
+                func.ST_SetSRID(func.ST_MakePoint(RescuerProfile.longitude, RescuerProfile.latitude), 4326),
+            )
             query = (
                 db.query(
                     User,
                     RescuerProfile,
-                    (func.ST_Distance(RescuerProfile.current_location, point_geom) / 1000.0).label("dist_km"),
+                    (func.ST_Distance(rescuer_geom, point_geom) / 1000.0).label("dist_km"),
                 )
                 .join(RescuerProfile, RescuerProfile.user_id == User.id)
                 .filter(
@@ -143,7 +147,7 @@ class DispatchService:
                     RescuerProfile.latitude.isnot(None),
                     RescuerProfile.longitude.isnot(None),
                     RescuerProfile.last_location_update >= stale_threshold,
-                    func.ST_DWithin(RescuerProfile.current_location, point_geom, radius_km * 1000.0),
+                    func.ST_DWithin(rescuer_geom, point_geom, radius_km * 1000.0),
                 )
                 .all()
             )

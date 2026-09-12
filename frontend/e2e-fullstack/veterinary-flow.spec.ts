@@ -55,23 +55,23 @@ test.describe('Full-Stack Veterinary Facility Scoping & Clinical Workflow (Unmoc
     // 5. Browser UI: Vet A logs in and records medical treatment on authorized case
     await authenticatePage(page, 'vet.e2e@pawreach.test', DEFAULT_E2E_PASSWORD);
     await page.goto('/vet');
-    await expect(page.getByText('Veterinary Emergency & Treatment Portal')).toBeVisible();
+    await expect(page.getByText('Veterinary Care & Clinical Inpatient Registry')).toBeVisible();
 
     await expect(page.getByText('E2E-CASE-VET-001')).toBeVisible({ timeout: 15000 });
     await page.getByText('E2E-CASE-VET-001').click();
 
-    await expect(page.getByText('Clinical Diagnosis & Medical Treatment')).toBeVisible();
+    await expect(page.getByText(/Medical Record: E2E-CASE-VET-001/)).toBeVisible();
 
-    const diagInput = page.getByPlaceholder('e.g. Compound fracture of left tibia, hypovolemic shock');
+    const diagInput = page.getByPlaceholder('e.g. Femur fracture, dehydration, laceration');
     await diagInput.fill('Severe dehydration and hind-limb laceration');
 
-    const medsInput = page.getByPlaceholder('e.g. Cefazolin 25mg/kg IV, Meloxicam 0.2mg/kg SC, Tramadol');
-    await medsInput.fill('Meloxicam 0.2mg/kg SC, Amoxicillin-Clavulanate 20mg/kg, Ringer Lactate IV');
+    const medsInput = page.getByPlaceholder(/Meloxicam 0.2mg\/kg/);
+    await medsInput.fill('Meloxicam 0.2mg/kg, Amoxicillin-Clavulanate 20mg/kg, Ringer Lactate IV');
 
-    const notesInput = page.getByPlaceholder('Describe clinical observations, surgical interventions, prognosis...');
+    const notesInput = page.getByPlaceholder(/Enter examination findings/);
     await notesInput.fill('Wound debrided and sutured under sedation. Animal recovering peacefully in kennel.');
 
-    const submitBtn = page.getByRole('button', { name: 'Record Medical Treatment' });
+    const submitBtn = page.getByRole('button', { name: /Log Medical Assessment & Start Treatment/i });
     await expect(submitBtn).toBeVisible();
     await submitBtn.click();
 

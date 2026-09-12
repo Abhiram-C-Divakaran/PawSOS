@@ -41,6 +41,7 @@ class RescueService:
             description=case_in.description,
             latitude=case_in.latitude,
             longitude=case_in.longitude,
+            location=f"POINT({case_in.longitude} {case_in.latitude})",
             address_text=case_in.address_text,
             bleeding=case_in.bleeding,
             can_walk=case_in.can_walk,
