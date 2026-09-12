@@ -247,3 +247,120 @@ def test_cross_tenant_facility_assignment_blocked(client, db, org_test_setup):
     ).first()
     assert audit is not None
     assert audit.actor_id == org_test_setup["admin_a"].id
+
+def test_ngo_admin_update_own_responder_allowed(client, db, org_test_setup):
+    """Verify NGO Admin can update responders belonging to their organization."""
+    # Create responder in Org A
+    rescuer_a = User(
+        full_name="Kochi Volunteer Alpha",
+        email=f"vol_a_{uuid.uuid4().hex[:6]}@test.com",
+        phone=f"+9199{uuid.uuid4().hex[:8]}",
+        password_hash=get_password_hash("pass"),
+        role=UserRole.RESCUER,
+        organization_id=org_test_setup["org_a"].id,
+        is_active=True,
+    )
+    db.add(rescuer_a)
+    db.commit()
+
+    token_a = org_test_setup["token_a"]
+    resp = client.patch(
+        f"/api/v1/ngo/responders/{rescuer_a.id}/status",
+        json={"is_active": False},
+        headers={"Authorization": f"Bearer {token_a}"},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["success"] is True
+
+    db.refresh(rescuer_a)
+    assert rescuer_a.is_active is False
+
+def test_cross_tenant_responder_update_denied(client, db, org_test_setup):
+    """Verify NGO Admin cannot update responder belonging to another organization."""
+    # Create responder in Org B
+    rescuer_b = User(
+        full_name="Calicut Volunteer Beta",
+        email=f"vol_b_{uuid.uuid4().hex[:6]}@test.com",
+        phone=f"+9199{uuid.uuid4().hex[:8]}",
+        password_hash=get_password_hash("pass"),
+        role=UserRole.RESCUER,
+        organization_id=org_test_setup["org_b"].id,
+        is_active=True,
+    )
+    db.add(rescuer_b)
+    db.commit()
+
+    token_a = org_test_setup["token_a"]
+    resp = client.patch(
+        f"/api/v1/ngo/responders/{rescuer_b.id}/status",
+        json={"is_active": False},
+        headers={"Authorization": f"Bearer {token_a}"},
+    )
+    assert resp.status_code == 403
+    assert "Responder belongs to another organization" in resp.json()["detail"]
+
+    # Verify audit log was recorded
+    audit = db.query(AuditLog).filter(
+        AuditLog.action == "CROSS_TENANT_RESPONDER_UPDATE_DENIED",
+        AuditLog.entity_id == rescuer_b.id,
+    ).first()
+    assert audit is not None
+    assert audit.actor_id == org_test_setup["admin_a"].id
+
+def test_ngo_admin_cannot_adopt_or_reassign_responder_organization(client, db, org_test_setup):
+    """Verify NGO Admin cannot adopt or reassign another organization's responder."""
+    rescuer_b = User(
+        full_name="Calicut Volunteer Gamma",
+        email=f"vol_g_{uuid.uuid4().hex[:6]}@test.com",
+        phone=f"+9199{uuid.uuid4().hex[:8]}",
+        password_hash=get_password_hash("pass"),
+        role=UserRole.RESCUER,
+        organization_id=org_test_setup["org_b"].id,
+        is_active=True,
+    )
+    db.add(rescuer_b)
+    db.commit()
+
+    # Admin A attempts to change rescuer_b's organization_id to Org A
+    token_a = org_test_setup["token_a"]
+    resp = client.patch(
+        f"/api/v1/ngo/responders/{rescuer_b.id}/status",
+        json={"organization_id": str(org_test_setup["org_a"].id)},
+        headers={"Authorization": f"Bearer {token_a}"},
+    )
+    assert resp.status_code == 403
+
+def test_super_admin_can_reassign_responder_organization(client, db, org_test_setup):
+    """Verify SUPER_ADMIN can legitimately reassign a responder's organization."""
+    super_admin = User(
+        full_name="Platform Overseer",
+        email=f"super_{uuid.uuid4().hex[:6]}@test.com",
+        phone=f"+9199{uuid.uuid4().hex[:8]}",
+        password_hash=get_password_hash("pass"),
+        role=UserRole.SUPER_ADMIN,
+        is_active=True,
+    )
+    db.add(super_admin)
+
+    rescuer_b = User(
+        full_name="Calicut Volunteer Delta",
+        email=f"vol_d_{uuid.uuid4().hex[:6]}@test.com",
+        phone=f"+9199{uuid.uuid4().hex[:8]}",
+        password_hash=get_password_hash("pass"),
+        role=UserRole.RESCUER,
+        organization_id=org_test_setup["org_b"].id,
+        is_active=True,
+    )
+    db.add(rescuer_b)
+    db.commit()
+
+    super_token = create_access_token(super_admin.id)
+    resp = client.patch(
+        f"/api/v1/ngo/responders/{rescuer_b.id}/status",
+        json={"organization_id": str(org_test_setup["org_a"].id)},
+        headers={"Authorization": f"Bearer {super_token}"},
+    )
+    assert resp.status_code == 200
+
+    db.refresh(rescuer_b)
+    assert rescuer_b.organization_id == org_test_setup["org_a"].id

@@ -154,13 +154,12 @@ def get_ngo_overview(
                     acceptance_latencies_sec.append(acc_diff)
 
             # Arrival time from RescueStatusHistory (ANIMAL_LOCATED - accepted_at)
+            # Strictly measures responder transit to arrival; excludes cases without arrival events
             hist = status_map.get(a.rescue_case_id, {})
             if RescueStatus.ANIMAL_LOCATED in hist and a.accepted_at:
                 arr_diff = (hist[RescueStatus.ANIMAL_LOCATED] - a.accepted_at).total_seconds() / 60.0
                 if arr_diff >= 0:
                     arrival_times_min.append(arr_diff)
-            elif a.accepted_at and start_time:
-                arrival_times_min.append(acc_diff / 60.0)
 
         # Dispatch latency (first offer - reported) & rescue durations
         first_offers = (
@@ -191,9 +190,9 @@ def get_ngo_overview(
                 if comp_diff >= 0:
                     completion_times_min.append(comp_diff)
 
-    avg_dispatch = round(sum(dispatch_latencies_sec) / len(dispatch_latencies_sec), 1) if dispatch_latencies_sec else (round(sum(acceptance_latencies_sec) / len(acceptance_latencies_sec), 1) if acceptance_latencies_sec else 0.0)
+    avg_dispatch = round(sum(dispatch_latencies_sec) / len(dispatch_latencies_sec), 1) if dispatch_latencies_sec else None
     avg_acceptance_sec = round(sum(acceptance_latencies_sec) / len(acceptance_latencies_sec), 1) if acceptance_latencies_sec else None
-    avg_arrival = round(sum(arrival_times_min) / len(arrival_times_min), 1) if arrival_times_min else (round(avg_acceptance_sec / 60.0, 1) if avg_acceptance_sec else 0.0)
+    avg_arrival = round(sum(arrival_times_min) / len(arrival_times_min), 1) if arrival_times_min else None
     avg_completion = round(sum(completion_times_min) / len(completion_times_min), 1) if completion_times_min else 0.0
     avg_rescue = round(sum(rescue_durations_min) / len(rescue_durations_min), 1) if rescue_durations_min else None
 
@@ -210,9 +209,8 @@ def get_ngo_overview(
         recovering=recovering,
         unresolved_cases=unresolved_count,
         closed_today=closed_today,
-        avg_dispatch_seconds=avg_dispatch,
+        avg_dispatch_seconds=avg_dispatch or 0.0,
         average_response_minutes=avg_arrival,
-        avg_response_minutes=avg_arrival,
         avg_completion_minutes=avg_completion,
         completion_rate_pct=completion_rate,
         responder_availability_pct=availability_pct,
@@ -259,29 +257,24 @@ def get_response_time_analytics(
             .all()
         )
         for a in assignments:
-            start_time = a.offered_at or a.assigned_at
-            if a.accepted_at and start_time:
+            if a.accepted_at:
                 date_key = a.accepted_at.strftime("%Y-%m-%d")
                 hist = status_map.get(a.rescue_case_id, {})
                 if RescueStatus.ANIMAL_LOCATED in hist:
                     diff_min = max(0.0, (hist[RescueStatus.ANIMAL_LOCATED] - a.accepted_at).total_seconds() / 60.0)
-                else:
-                    diff_min = max(0.0, (a.accepted_at - start_time).total_seconds() / 60.0)
-
-                if date_key in daily_stats:
-                    daily_stats[date_key]["total_minutes"] += diff_min
-                    daily_stats[date_key]["cases"] += 1
-                else:
-                    daily_stats[date_key] = {"total_minutes": diff_min, "cases": 1}
+                    if date_key in daily_stats:
+                        daily_stats[date_key]["total_minutes"] += diff_min
+                        daily_stats[date_key]["cases"] += 1
+                    else:
+                        daily_stats[date_key] = {"total_minutes": diff_min, "cases": 1}
 
     results = []
     for d_str in sorted(daily_stats.keys()):
         item = daily_stats[d_str]
-        avg_m = round(item["total_minutes"] / item["cases"], 1) if item["cases"] > 0 else 0.0
+        avg_m = round(item["total_minutes"] / item["cases"], 1) if item["cases"] > 0 else None
         results.append(ResponseTimeDataPoint(
             date=d_str,
             average_response_minutes=avg_m,
-            avg_response_minutes=avg_m,
             cases=item["cases"]
         ))
 
@@ -389,6 +382,7 @@ def get_rescue_outcomes(
         medical_care_count=medical_care,
         post_care_count=post_care,
         successful_terminal_count=successful_terminal,
+        failure_exception_count=failure_exception,
         failure_count=failure_exception,
     )
 
@@ -407,8 +401,23 @@ def get_incident_hotspots(
         case_query = case_query.filter(
             (RescueCase.organization_id == current_user.organization_id) | (RescueCase.organization_id.is_(None))
         )
-    cases = case_query.all()
-    case_ids = [c.id for c in cases]
+
+    dialect_name = db.bind.dialect.name if db.bind else "sqlite"
+    if dialect_name == "postgresql":
+        # PostGIS ST_SnapToGrid for spatial grouping
+        grid_cases = (
+            case_query.with_entities(
+                RescueCase,
+                func.ST_Y(func.ST_SnapToGrid(func.ST_SetSRID(func.ST_MakePoint(RescueCase.longitude, RescueCase.latitude), 4326), 0.01)).label("grid_lat"),
+                func.ST_X(func.ST_SnapToGrid(func.ST_SetSRID(func.ST_MakePoint(RescueCase.longitude, RescueCase.latitude), 4326), 0.01)).label("grid_lng"),
+            ).all()
+        )
+        cases_with_coords = [(row[0], float(row[1]) if row[1] is not None else round(row[0].latitude, 2), float(row[2]) if row[2] is not None else round(row[0].longitude, 2)) for row in grid_cases]
+    else:
+        cases = case_query.all()
+        cases_with_coords = [(c, round(c.latitude, 2), round(c.longitude, 2)) for c in cases]
+
+    case_ids = [item[0].id for item in cases_with_coords]
     status_map = get_case_status_history_map(db, case_ids)
 
     assignments = (
@@ -424,9 +433,7 @@ def get_incident_hotspots(
 
     clusters: Dict[tuple, Dict[str, Any]] = {}
 
-    for c in cases:
-        grid_lat = round(c.latitude, 2)
-        grid_lng = round(c.longitude, 2)
+    for c, grid_lat, grid_lng in cases_with_coords:
         key = (grid_lat, grid_lng)
 
         if key not in clusters:
@@ -465,7 +472,6 @@ def get_incident_hotspots(
         top_sp = max(data["species_count"].items(), key=lambda x: x[1])[0] if data["species_count"] else "Canine"
         avg_acc = round(sum(data["acceptance_times"]) / len(data["acceptance_times"]), 1) if data["acceptance_times"] else None
         avg_arr = round(sum(data["arrival_times"]) / len(data["arrival_times"]), 1) if data["arrival_times"] else None
-        avg_resp = avg_arr if avg_arr is not None else (avg_acc if avg_acc is not None else 0.0)
 
         results.append(
             HotspotItem(
@@ -476,8 +482,7 @@ def get_incident_hotspots(
                 critical_count=data["critical_count"],
                 urgent_count=data["urgent_count"],
                 top_species=top_sp,
-                average_response_minutes=avg_resp,
-                avg_response_minutes=avg_resp,
+                average_response_minutes=avg_arr,
                 average_acceptance_minutes=avg_acc,
                 average_arrival_minutes=avg_arr,
             )
@@ -966,6 +971,55 @@ def update_responder_status(
         raise HTTPException(status_code=404, detail="Responder not found")
 
     profile = db.query(RescuerProfile).filter(RescuerProfile.user_id == user.id).first()
+    responder_org = user.organization_id or (profile.organization_id if profile else None)
+
+    # Cross-tenant boundary check: NGO_ADMIN can only modify responders belonging to their organization
+    if current_user.role == UserRole.NGO_ADMIN:
+        attempted = payload.model_dump(mode="json", exclude_unset=True)
+        if not current_user.organization_id or responder_org != current_user.organization_id:
+            audit = AuditLog(
+                actor_id=current_user.id,
+                action="CROSS_TENANT_RESPONDER_UPDATE_DENIED",
+                entity="user",
+                entity_id=user.id,
+                old_value={"organization_id": str(responder_org) if responder_org else None},
+                new_value={
+                    "actor_organization_id": str(current_user.organization_id) if current_user.organization_id else None,
+                    "target_responder_id": str(user.id),
+                    "target_organization_id": str(responder_org) if responder_org else None,
+                    "attempted_fields": attempted,
+                },
+                timestamp=datetime.utcnow()
+            )
+            db.add(audit)
+            db.commit()
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied: Responder belongs to another organization or is unaffiliated"
+            )
+
+        # Block NGO admin from adopting or reassigning responder organization_id
+        if payload.organization_id is not None and payload.organization_id != responder_org:
+            audit = AuditLog(
+                actor_id=current_user.id,
+                action="CROSS_TENANT_RESPONDER_UPDATE_DENIED",
+                entity="user",
+                entity_id=user.id,
+                old_value={"organization_id": str(responder_org) if responder_org else None},
+                new_value={
+                    "actor_organization_id": str(current_user.organization_id) if current_user.organization_id else None,
+                    "target_responder_id": str(user.id),
+                    "target_organization_id": str(responder_org) if responder_org else None,
+                    "attempted_target_org": str(payload.organization_id),
+                },
+                timestamp=datetime.utcnow()
+            )
+            db.add(audit)
+            db.commit()
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Organization reassignment is restricted to super administrators"
+            )
 
     old_val = {"is_active": user.is_active, "organization_id": str(user.organization_id) if user.organization_id else None}
     new_val = {}
@@ -975,6 +1029,7 @@ def update_responder_status(
         new_val["is_active"] = payload.is_active
 
     if payload.organization_id is not None:
+        # Permitted for SUPER_ADMIN
         user.organization_id = payload.organization_id
         if profile:
             profile.organization_id = payload.organization_id

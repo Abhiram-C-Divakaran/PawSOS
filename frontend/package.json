@@ -8,7 +8,9 @@
     "build": "tsc -b && vite build",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
-    "test:e2e": "playwright test",
+    "test:e2e": "playwright test --config=playwright.ui-contract.config.ts",
+    "test:e2e:ui-contract": "playwright test --config=playwright.ui-contract.config.ts",
+    "test:e2e:fullstack": "playwright test --config=playwright.fullstack.config.ts",
     "test:e2e:ui": "playwright test --ui",
     "lint": "oxlint",
     "preview": "vite preview"

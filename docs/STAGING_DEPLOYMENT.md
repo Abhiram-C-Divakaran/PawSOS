@@ -32,7 +32,7 @@ Create a production-grade `.env` in the root of the backend deployment. **Never 
 ENVIRONMENT=staging
 PROJECT_NAME="PawReach Staging"
 DEBUG=false
-SECRET_KEY="<GENERATE_SECURE_64_CHAR_HEX_KEY>"
+JWT_SECRET_KEY="<GENERATE_SECURE_64_CHAR_HEX_KEY_MIN_32_CHARS>"
 ACCESS_TOKEN_EXPIRE_MINUTES=30
 REFRESH_TOKEN_EXPIRE_DAYS=7
 
@@ -45,36 +45,32 @@ DATABASE_URL="postgresql://pawreach_user:<STRONG_PASSWORD>@db.staging.internal:5
 # Redis & Celery Task Queue
 # ==========================================
 REDIS_URL="redis://:redis_password@redis.staging.internal:6379/0"
-CELERY_BROKER_URL="redis://:redis_password@redis.staging.internal:6379/1"
-CELERY_RESULT_BACKEND="redis://:redis_password@redis.staging.internal:6379/2"
 
 # ==========================================
 # CORS & Allowed Origins
 # ==========================================
-BACKEND_CORS_ORIGINS='["https://staging.pawreach.org","https://admin.staging.pawreach.org"]'
+CORS_ORIGINS="https://staging.pawreach.org,https://admin.staging.pawreach.org"
 
 # ==========================================
 # Cloud Object Storage (S3 / MinIO)
 # Note: In 'staging' and 'production', S3 credentials are strictly verified.
 # ==========================================
-USE_S3=true
+STORAGE_PROVIDER=s3
+AWS_ACCESS_KEY_ID="<AWS_IAM_ACCESS_KEY>"
+AWS_SECRET_ACCESS_KEY="<AWS_IAM_SECRET_KEY>"
+AWS_REGION="ap-south-1"
 S3_BUCKET_NAME="pawreach-staging-media"
-S3_REGION="ap-south-1"
-S3_ACCESS_KEY="<AWS_IAM_ACCESS_KEY>"
-S3_SECRET_KEY="<AWS_IAM_SECRET_KEY>"
-S3_ENDPOINT_URL="" # Optional: set only if using MinIO or Cloudflare R2
 
 # ==========================================
 # Firebase Cloud Messaging (Web Push Alerts)
 # ==========================================
-FIREBASE_SERVICE_ACCOUNT_KEY_PATH="/etc/secrets/pawreach-firebase-admin.json"
-FIREBASE_CREDENTIALS_JSON="" # Optional alternative to file path
+FIREBASE_CREDENTIALS_PATH="/etc/secrets/pawreach-firebase-admin.json"
+FIREBASE_PROJECT_ID="pawreach-staging"
 
 # ==========================================
 # Monitoring & Telemetry (Sentry)
 # ==========================================
 SENTRY_DSN="https://<public_key>@o0.ingest.sentry.io/<project_id>"
-SENTRY_TRACES_SAMPLE_RATE=0.2
 ```
 
 ---
@@ -147,14 +143,16 @@ Response:
 {
   "status": "healthy",
   "environment": "staging",
-  "version": "0.1.0"
+  "version": "2.0.0"
 }
 ```
 
-### B. Deep Readiness Probe (Verifies 5 Subsystems)
+### B. Deep Readiness Probe (Verifies 6 Subsystems)
 ```http
 GET /api/v1/health/readiness
 ```
+Alias: `GET /api/v1/health/ready`
+
 Response:
 ```json
 {
@@ -164,11 +162,12 @@ Response:
     "spatial_postgis": "available",
     "redis": "connected",
     "celery": "ready",
-    "storage": "connected"
+    "storage": "connected",
+    "firebase": "configured"
   }
 }
 ```
-*If any service fails (e.g., Celery worker offline, PostGIS extension missing), HTTP 503 is returned with specific error details.*
+*If any required service fails (e.g., Celery worker offline, PostGIS extension missing), HTTP 503 is returned with specific error details.*
 
 ---
 

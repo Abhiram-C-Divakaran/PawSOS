@@ -1,4 +1,4 @@
-# PawReach Pilot Checklist: Phase 2.7 Integration Correctness & Staging Operations
+# PawReach Pilot Checklist: Phase 2.8 Full-Stack Staging Validation & Security Closure
 
 This checklist defines the sign-off criteria required before opening the PawReach pilot to real field responders, citizens, and partner veterinary clinics.
 
@@ -9,15 +9,15 @@ This checklist defines the sign-off criteria required before opening the PawReac
 These checks are verified via automated CI pipelines and local command execution. All tests must pass before deploying to staging.
 
 ### 1. Backend Automated Testing & Coverage (Goal: >= 85%)
-- [x] **Pytest Unit & Integration Suite**: 76 passed, 0 failures.
-- [x] **Backend Coverage Bar**: 86% achieved across `backend/app` (2777 statements, 377 misses).
-- [x] **API Contract Tests** (`test_api_contracts.py`): 5 tests validating frontend schema compatibility (`average_response_minutes`, outcome category classification breakdown, period filters, and non-mocked data payloads).
-- [x] **Tenant Scoping & Cross-Tenant Security Tests** (`test_scoping_security.py`, `test_ngo_organization.py`): Cross-organization data leak prevention verified; cross-tenant responder and private veterinary clinic reassignment strictly blocked with HTTP 403 Forbidden and audit logging.
-- [x] **NGO Analytics Tests** (`test_ngo_analytics.py`): Tenant-isolated metrics, trend calculations, outcomes, spatial hotspot metrics with time-window filtering (7d, 30d, 90d).
+- [x] **Pytest Unit & Integration Suite**: 82 passed, 0 failures.
+- [x] **Backend Coverage Bar**: **86%** achieved across `backend/app` package (2818 statements, 393 misses) — enforced via `--cov-fail-under=85`.
+- [x] **API Contract Tests** (`test_api_contracts.py`): Validating canonical `average_response_minutes`, outcome category classification breakdown, period filters, and non-mocked data payloads.
+- [x] **Tenant Scoping & Cross-Tenant Security Tests** (`test_scoping_security.py`, `test_ngo_organization.py`): Cross-organization data leak prevention verified; cross-tenant responder status mutation (`PATCH /ngo/responders/{user_id}/status`) and adoption/reassignment strictly blocked with HTTP 403 Forbidden (`CROSS_TENANT_RESPONDER_UPDATE_DENIED`) and immutable audit logging; organization reassignment restricted exclusively to `SUPER_ADMIN`.
+- [x] **NGO Analytics Tests** (`test_ngo_analytics.py`): Tenant-isolated metrics, trend calculations, outcomes, spatial hotspot metrics with time-window filtering (7d, 30d, 90d), PostGIS `ST_SnapToGrid` aggregation with SQLite fallback, strict arrival latency measurement without acceptance fallback, and nullable response time.
 - [x] **NGO Organization & Settings Tests** (`test_ngo_organization.py`, `test_ngo_settings.py`): Profile editing, immutable field enforcement, audit log generation, notification preferences.
-- [x] **Storage & Image Security Pipeline Tests** (`test_storage_service.py`): Pillow EXIF orientation, Lanczos downscaling <= 2048px, 10MB file limit, MIME enforcement, S3 environment validation, decompression bomb limit (`MAX_IMAGE_PIXELS = 25,000,000`), format vs MIME mismatch detection, corrupt byte stream rejection.
+- [x] **Storage & Image Security Pipeline Tests** (`test_storage_service.py`): Pillow EXIF orientation, Lanczos downscaling <= 2048px, 10MB file limit, MIME enforcement, S3 bucket non-destructive health checks, decompression bomb limit (`MAX_IMAGE_PIXELS = 25,000,000`), format vs MIME mismatch detection, corrupt byte stream rejection.
 - [x] **Background Dispatch & Radius Escalation** (`test_background_dispatch.py`, `test_dispatch_engine.py`): 5 km → 10 km → 20 km → 40 km expansion and `UNRESOLVED` fallback.
-- [x] **Token Revocation & Session Security** (`test_token_revocation.py`): Single logout, global logout, replay attack rejection.
+- [x] **Token Revocation & Session Security** (`test_token_revocation.py`, `test_health_and_security.py`): Single logout, global logout, refresh-token rotation, replay attack rejection, cookie security.
 
 ### 2. Frontend Automated Testing & Build Validation
 - [x] **Vitest Unit & Integration Suite**: 11 test suites, 40 tests passing (0 failures).
@@ -27,13 +27,22 @@ These checks are verified via automated CI pipelines and local command execution
 - [x] **Authentication & Role Guarding** (`Auth.test.tsx`): JWT storage, role routing, unauthorized redirection.
 - [x] **Production Bundle Build (`npm run build`)**: TypeScript check (`tsc -b`) and Vite production bundle generated without errors.
 
-### 3. Browser End-to-End Suite (Playwright)
-- [x] **Citizen Emergency Reporting** (`e2e/citizen-report.spec.ts`): Species selection, geolocation, critical triage evaluation, case creation confirmation.
-- [x] **Responder Field Workflow** (`e2e/responder-flow.spec.ts`): Dispatch offer alert reception, acceptance, and status advancement (`EN_ROUTE` -> `ANIMAL_LOCATED`).
-- [x] **NGO Command Center Operations** (`e2e/ngo-operations.spec.ts`): Command Center KPI cards, case dossier drilldown, audit trail inspection, manual responder reassignment override.
-- [x] **Veterinary Clinical Workflow** (`e2e/veterinary-flow.spec.ts`): Inpatient queue, patient intake, and clinical treatment plan recording.
-- [x] **Multi-Tenant Security & Isolation** (`e2e/cross-tenant.spec.ts`): Cross-tenant case access denial, `#case-error-state` UI boundary, safe recovery navigation.
-- [x] **Concurrent Dispatch Acceptance Protection** (`e2e/concurrent-acceptance.spec.ts`): Dispatch race condition conflict handling, claim rejection notification.
+### 3. Browser Mocked UI Contract Suite (Playwright `e2e-ui-contract/`)
+- [x] **Citizen Emergency Reporting** (`e2e-ui-contract/citizen-report.spec.ts`): Species selection, geolocation, critical triage evaluation, case creation confirmation.
+- [x] **Responder Field Workflow** (`e2e-ui-contract/responder-flow.spec.ts`): Dispatch offer alert reception, acceptance, and status advancement (`EN_ROUTE` -> `ANIMAL_LOCATED`).
+- [x] **NGO Command Center Operations** (`e2e-ui-contract/ngo-operations.spec.ts`): Command Center KPI cards, case dossier drilldown, audit trail inspection, manual responder reassignment override.
+- [x] **Veterinary Clinical Workflow** (`e2e-ui-contract/veterinary-flow.spec.ts`): Inpatient queue, patient intake, and clinical treatment plan recording.
+- [x] **Multi-Tenant Security & Isolation** (`e2e-ui-contract/cross-tenant.spec.ts`): Cross-tenant case access denial, `#case-error-state` UI boundary, safe recovery navigation.
+- [x] **Concurrent Dispatch Acceptance Protection** (`e2e-ui-contract/concurrent-acceptance.spec.ts`): Dispatch race condition conflict handling, claim rejection notification.
+
+### 4. True Unmocked Full-Stack E2E Suite (Playwright `e2e-fullstack/`)
+- [x] **Deterministic E2E Seed Fixture** (`backend/scripts/seed_e2e.py`): Fixed test organizations (Org A, Org B), South Mumbai Hospital facility, 7 deterministic test accounts, pre-staged concurrency and cross-tenant scenarios.
+- [x] **Live Citizen Emergency Reporting** (`e2e-fullstack/citizen-report.spec.ts`): Unmocked report submission, database persistence, live case tracking page verification.
+- [x] **Live Responder Field Workflow** (`e2e-fullstack/responder-flow.spec.ts`): Live dispatch trigger, real offer receipt, atomic acceptance, full lifecycle progression to veterinary handoff.
+- [x] **Live Concurrent Acceptance Conflict** (`e2e-fullstack/concurrent-acceptance.spec.ts`): Real concurrent claim race condition; first responder claims successfully, second receives HTTP 409 Conflict.
+- [x] **Live Veterinary Care Flow** (`e2e-fullstack/veterinary-flow.spec.ts`): Real patient intake, medical diagnosis, medications, treatment notes, and status advancement.
+- [x] **Live Cross-Tenant Defense** (`e2e-fullstack/cross-tenant.spec.ts`): Real boundary defense; Org A Admin denied access and mutation to Org B responders and confidential cases.
+- [x] **Live Dispatch Radius Escalation** (`e2e-fullstack/dispatch-escalation.spec.ts`): Emergency case creation, progressive escalation, and NGO Command Center visibility.
 
 ---
 

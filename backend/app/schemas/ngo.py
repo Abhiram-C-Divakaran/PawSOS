@@ -20,8 +20,7 @@ class NGOOverviewKPIs(BaseModel):
     unresolved_cases: int = 0
     closed_today: int = 0
     avg_dispatch_seconds: float
-    average_response_minutes: float
-    avg_response_minutes: Optional[float] = None
+    average_response_minutes: Optional[float] = None
     avg_completion_minutes: float = 0.0
     completion_rate_pct: float
     responder_availability_pct: float
@@ -34,8 +33,7 @@ class NGOOverviewKPIs(BaseModel):
 
 class ResponseTimeDataPoint(BaseModel):
     date: str
-    average_response_minutes: float
-    avg_response_minutes: Optional[float] = None
+    average_response_minutes: Optional[float] = None
     cases: int
 
 class RescueOutcomesData(BaseModel):
@@ -49,6 +47,7 @@ class RescueOutcomesData(BaseModel):
     medical_care_count: int = 0
     post_care_count: int = 0
     successful_terminal_count: int = 0
+    failure_exception_count: int = 0
     failure_count: int = 0
 
 class NGOInsightsData(BaseModel):
@@ -103,8 +102,7 @@ class HotspotItem(BaseModel):
     critical_count: int
     urgent_count: int = 0
     top_species: str
-    average_response_minutes: float = 0.0
-    avg_response_minutes: Optional[float] = None
+    average_response_minutes: Optional[float] = None
     average_acceptance_minutes: Optional[float] = None
     average_arrival_minutes: Optional[float] = None
 

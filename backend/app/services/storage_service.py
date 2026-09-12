@@ -102,6 +102,10 @@ class BaseStorageProvider(ABC):
     def delete_image(self, url: str) -> bool:
         pass
 
+    @abstractmethod
+    def check_health(self) -> bool:
+        pass
+
 class LocalStorageProvider(BaseStorageProvider):
     def __init__(self, upload_dir: str = "uploads"):
         self.upload_dir = upload_dir
@@ -143,6 +147,9 @@ class LocalStorageProvider(BaseStorageProvider):
             return True
         return False
 
+    def check_health(self) -> bool:
+        return os.path.exists(self.upload_dir) and os.access(self.upload_dir, os.W_OK)
+
 class S3StorageProvider(BaseStorageProvider):
     def __init__(self):
         import boto3
@@ -153,6 +160,14 @@ class S3StorageProvider(BaseStorageProvider):
             aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
         )
         self.bucket = settings.S3_BUCKET_NAME
+
+    def check_health(self) -> bool:
+        try:
+            self.s3_client.head_bucket(Bucket=self.bucket)
+            return True
+        except Exception as e:
+            logger.warning(f"S3 health check failed: {e}")
+            return False
 
     async def upload_image(self, file: UploadFile) -> str:
         content_type = file.content_type

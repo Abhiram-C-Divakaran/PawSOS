@@ -71,7 +71,7 @@ export const NGOAnalytics: React.FC = () => {
 
   const chartData = responseTimes.map((item) => ({
     date: item.date.length > 5 ? item.date.slice(5) : item.date,
-    minutes: item.average_response_minutes ?? item.avg_response_minutes ?? 0,
+    minutes: item.average_response_minutes ?? 0,
     cases: item.cases,
   }));
 
@@ -160,7 +160,11 @@ export const NGOAnalytics: React.FC = () => {
             </span>
           </div>
           <p className="text-3xl font-black text-[#12213A] mt-2">
-            {loading ? '—' : (overview?.average_response_minutes ?? overview?.avg_response_minutes ?? 0)} <span className="text-sm font-semibold text-slate-500">min</span>
+            {loading ? '—' : (overview?.average_response_minutes != null ? (
+              <>
+                {overview.average_response_minutes} <span className="text-sm font-semibold text-slate-500">min</span>
+              </>
+            ) : 'N/A')}
           </p>
           <p className="text-[11px] text-[#65748B] mt-1">Acceptance to scene arrival</p>
         </div>

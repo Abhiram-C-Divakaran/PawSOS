@@ -124,10 +124,6 @@ def test_contract_overview_kpis(client, contract_setup):
         assert field in data, f"Missing expected contract field: {field}"
         assert isinstance(data[field], exp_type), f"Field '{field}' expected {exp_type}, got {type(data[field])}"
 
-    # Also verify backward compatibility alias exists
-    assert "avg_response_minutes" in data
-    assert data["average_response_minutes"] == data["avg_response_minutes"]
-
 def test_contract_response_times(client, contract_setup):
     headers = {"Authorization": f"Bearer {contract_setup['token']}"}
     resp = client.get("/api/v1/ngo/analytics/response-times?period=30d", headers=headers)
@@ -139,8 +135,7 @@ def test_contract_response_times(client, contract_setup):
     # Validate ResponseTimeDataPoint contract
     sample = data[0]
     assert "date" in sample and isinstance(sample["date"], str)
-    assert "average_response_minutes" in sample and isinstance(sample["average_response_minutes"], (float, int))
-    assert "avg_response_minutes" in sample  # Backwards compatibility alias
+    assert "average_response_minutes" in sample and (sample["average_response_minutes"] is None or isinstance(sample["average_response_minutes"], (float, int)))
     assert "cases" in sample and isinstance(sample["cases"], int)
 
 def test_contract_outcomes(client, contract_setup):

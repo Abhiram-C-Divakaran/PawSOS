@@ -23,7 +23,7 @@ import clsx from 'clsx';
 import { useAuth } from '../../context/AuthContext';
 import { NotificationBell } from '../../components/NotificationBell';
 import api from '../../services/api';
-import type { OrganizationProfile } from '../../types';
+import type { OrganizationProfile, HealthReadinessResponse } from '../../types';
 
 export const NGOLayout: React.FC = () => {
   const { user, logout } = useAuth();
@@ -32,7 +32,7 @@ export const NGOLayout: React.FC = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState<boolean>(false);
   const [orgProfile, setOrgProfile] = useState<OrganizationProfile | null>(null);
   const [systemStatus, setSystemStatus] = useState<'online' | 'degraded' | 'offline'>('online');
-  const [healthData, setHealthData] = useState<any>(null);
+  const [healthData, setHealthData] = useState<HealthReadinessResponse | null>(null);
   const [showHealthModal, setShowHealthModal] = useState<boolean>(false);
 
   useEffect(() => {
@@ -49,13 +49,15 @@ export const NGOLayout: React.FC = () => {
     };
     const checkHealth = async () => {
       try {
-        const res = await api.get('/health/ready');
+        const res = await api.get<HealthReadinessResponse>('/health/ready');
         if (isMounted) {
           setHealthData(res.data);
           if (res.data?.status === 'ready') {
             setSystemStatus('online');
-          } else {
+          } else if (res.data?.status === 'degraded') {
             setSystemStatus('degraded');
+          } else {
+            setSystemStatus('offline');
           }
         }
       } catch {
@@ -367,7 +369,13 @@ export const NGOLayout: React.FC = () => {
                     name: 'PostgreSQL Database',
                     icon: Database,
                     status: healthData?.services?.database || (systemStatus === 'online' ? 'healthy' : 'unknown'),
-                    desc: 'Relational data store & PostGIS spatial engine',
+                    desc: 'Primary relational data store',
+                  },
+                  {
+                    name: 'PostGIS Spatial Engine',
+                    icon: Database,
+                    status: healthData?.services?.postgis || (systemStatus === 'online' ? 'available' : 'unknown'),
+                    desc: 'Geospatial indexing & proximity query engine',
                   },
                   {
                     name: 'Redis Message Broker',

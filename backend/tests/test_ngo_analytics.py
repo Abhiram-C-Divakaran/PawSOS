@@ -175,6 +175,16 @@ def analytics_test_setup(db):
         distance_km=2.3,
     )
     db.add(assign_a1)
+
+    # Status history for Case A1 reaching ANIMAL_LOCATED 15 min after accepted_at
+    from app.models.rescue_status_history import RescueStatusHistory
+    hist_a1 = RescueStatusHistory(
+        rescue_case_id=case_a1.id,
+        previous_status=RescueStatus.RESPONDER_EN_ROUTE,
+        new_status=RescueStatus.ANIMAL_LOCATED,
+        created_at=case_a1.created_at + timedelta(minutes=30),
+    )
+    db.add(hist_a1)
     db.commit()
 
     return {
@@ -184,8 +194,8 @@ def analytics_test_setup(db):
         "token_b": create_access_token(admin_b.id),
     }
 
-def test_ngo_overview_kpis_calculation_and_scoping(client, analytics_test_setup):
-    """Verify overview KPIs are strictly tenant-scoped with real calculations and zero fake fallbacks."""
+def test_ngo_overview_kpis_tenant_isolated(client, analytics_test_setup):
+    """Verify Overview KPIs are strictly isolated by tenant and compute correct formulas."""
     token_a = analytics_test_setup["token_a"]
     res_a = client.get("/api/v1/ngo/analytics/overview", headers={"Authorization": f"Bearer {token_a}"})
     assert res_a.status_code == 200
@@ -199,7 +209,7 @@ def test_ngo_overview_kpis_calculation_and_scoping(client, analytics_test_setup)
     assert data_a["under_treatment"] == 1
     assert data_a["responders_available"] == 1
     assert data_a["completion_rate_pct"] == 50.0  # 1 closed out of 2 non-cancelled = 50%
-    assert data_a["avg_response_minutes"] == 15.0  # 15 minutes latency on case A1
+    assert data_a["average_response_minutes"] == 15.0  # 15 minutes arrival duration on case A1
     assert data_a["unresolved_cases"] == 0  # Org B's unresolved case must NOT leak here
 
     # Org B Admin should only see their own 1 case

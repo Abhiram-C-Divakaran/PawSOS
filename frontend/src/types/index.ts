@@ -148,17 +148,16 @@ export interface NGOOverviewKPIs {
   unresolved_cases?: number;
   closed_today?: number;
   avg_dispatch_seconds: number;
-  average_response_minutes: number;
-  avg_response_minutes?: number;
+  average_response_minutes: number | null;
   avg_completion_minutes?: number;
   completion_rate_pct: number;
   responder_availability_pct: number;
   total_cases: number;
-  average_dispatch_latency_seconds?: number;
-  average_acceptance_latency_seconds?: number;
-  average_arrival_minutes?: number;
-  average_rescue_duration_minutes?: number;
-  average_case_completion_minutes?: number;
+  average_dispatch_latency_seconds?: number | null;
+  average_acceptance_latency_seconds?: number | null;
+  average_arrival_minutes?: number | null;
+  average_rescue_duration_minutes?: number | null;
+  average_case_completion_minutes?: number | null;
 }
 
 export interface HotspotItem {
@@ -169,16 +168,14 @@ export interface HotspotItem {
   critical_count: number;
   urgent_count?: number;
   top_species: string;
-  average_response_minutes: number;
-  avg_response_minutes?: number;
-  average_acceptance_minutes?: number;
-  average_arrival_minutes?: number;
+  average_response_minutes: number | null;
+  average_acceptance_minutes?: number | null;
+  average_arrival_minutes?: number | null;
 }
 
 export interface ResponseTimeDataPoint {
   date: string;
-  average_response_minutes: number;
-  avg_response_minutes?: number;
+  average_response_minutes: number | null;
   cases: number;
 }
 
@@ -273,6 +270,22 @@ export interface AuditLogItem {
   old_value?: Record<string, any>;
   new_value?: Record<string, any>;
   timestamp: string;
+}
+
+export interface ServiceHealth {
+  database: string;
+  postgis?: string;
+  redis: string;
+  celery: string;
+  storage: string;
+  firebase: string;
+}
+
+export interface HealthReadinessResponse {
+  status: 'ready' | 'degraded' | 'offline';
+  environment: string;
+  services: ServiceHealth;
+  checks?: Record<string, string>;
 }
 
 
