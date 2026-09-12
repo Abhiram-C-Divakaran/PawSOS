@@ -1,18 +1,18 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel
 from uuid import UUID
 from datetime import datetime
 from app.core.constants import UserRole
 
 class UserCreate(BaseModel):
     full_name: str
-    email: EmailStr | None = None
+    email: str | None = None
     phone: str
     password: str
 
 class UserResponse(BaseModel):
     id: UUID
     full_name: str
-    email: EmailStr | None = None
+    email: str | None = None
     phone: str
     role: UserRole
     is_active: bool

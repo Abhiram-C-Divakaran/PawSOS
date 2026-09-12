@@ -28,15 +28,8 @@ test.describe('Full-Stack Responder Flow (Unmocked)', () => {
     expect(caseRes.ok()).toBeTruthy();
     const createdCase = await caseRes.json();
 
-    // 3. Trigger dispatch engine to generate offer for nearby rescuer 1
-    const dispatchRes = await page.request.post(`${API_BASE_URL}/dispatch/cases/${createdCase.id}/trigger`, {
-      headers: {
-        Authorization: `Bearer ${authData.access_token}`,
-      },
-    });
-    expect(dispatchRes.ok()).toBeTruthy();
-
-    // 4. Navigate to Rescuer Dashboard
+    // 3. Case creation automatically initiated dispatch.
+    // Navigate to Rescuer Dashboard
     await page.goto('/rescuer');
     await expect(page.getByText('Responder Operations Dashboard')).toBeVisible();
 

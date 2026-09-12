@@ -50,6 +50,7 @@ class Settings(BaseSettings):
     COOKIE_SECURE: bool = False
     COOKIE_SAMESITE: str = "lax"
     RATE_LIMIT_PER_MINUTE: int = 60
+    DISABLE_RATE_LIMITING: bool = False
     SENTRY_DSN: str = ""
 
     @model_validator(mode="after")

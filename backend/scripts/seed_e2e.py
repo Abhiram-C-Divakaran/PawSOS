@@ -381,6 +381,7 @@ def seed_e2e():
             rescuer_id=rescuer1.id,
             assignment_status=AssignmentStatus.PENDING,
             offered_at=datetime.utcnow(),
+            expires_at=datetime.utcnow() + timedelta(minutes=30),
             dispatch_score=95.0,
             distance_km=0.5,
         )
@@ -389,6 +390,7 @@ def seed_e2e():
             rescuer_id=rescuer2.id,
             assignment_status=AssignmentStatus.PENDING,
             offered_at=datetime.utcnow(),
+            expires_at=datetime.utcnow() + timedelta(minutes=30),
             dispatch_score=90.0,
             distance_km=1.1,
         )

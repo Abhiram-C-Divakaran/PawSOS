@@ -269,6 +269,7 @@ jobs:
           CELERY_HEARTBEAT_TTL_SECONDS: '60'
           CELERY_HEARTBEAT_THRESHOLD_SECONDS: '60'
           REQUIRE_FULL_READINESS: 'true'
+          DISABLE_RATE_LIMITING: 'true'
           ENVIRONMENT: development
         run: |
           nohup python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --app-dir backend > backend.log 2>&1 &

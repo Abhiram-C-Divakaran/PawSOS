@@ -83,7 +83,7 @@ def get_my_dispatch_offers(
     if status.upper() == "PENDING":
         query = query.filter(
             RescueAssignment.assignment_status == AssignmentStatus.PENDING,
-            RescueAssignment.expires_at > datetime.utcnow()
+            (RescueAssignment.expires_at.is_(None)) | (RescueAssignment.expires_at > datetime.utcnow())
         )
     elif status.upper() != "ALL":
         query = query.filter(RescueAssignment.assignment_status == status)
