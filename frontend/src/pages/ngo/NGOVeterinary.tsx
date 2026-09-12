@@ -78,65 +78,64 @@ export const NGOVeterinary: React.FC = () => {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-black text-stone-900 tracking-tight flex items-center gap-2.5">
-            <Building2 className="w-7 h-7 text-emerald-600" />
-            Partner Veterinary Network
+          <h1 className="text-xl font-extrabold text-[#12213A] tracking-tight">
+            Veterinary Partner Network
           </h1>
-          <p className="text-sm text-stone-600 mt-1">
-            Authorized clinics, 24/7 trauma centers, and live patient intake across your jurisdiction.
+          <p className="text-xs text-[#65748B] mt-0.5">
+            Authorized clinic network, trauma center capacities, and live patient admissions.
           </p>
         </div>
         <button
           onClick={fetchFacilities}
           disabled={loading}
-          className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-xl bg-white border border-stone-200 text-stone-700 hover:bg-stone-50 hover:border-stone-300 transition shadow-sm"
+          className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-semibold rounded-xl bg-white border border-[#E4EAF2] text-slate-700 hover:bg-slate-50 transition shadow-2xs"
         >
-          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+          <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
           Refresh Clinics
         </button>
       </div>
 
       {error && (
-        <div className="p-4 rounded-xl bg-red-50 border border-red-200 text-red-800 text-sm flex items-center gap-2">
-          <AlertCircle className="w-5 h-5 flex-shrink-0 text-red-600" />
+        <div className="p-4 rounded-xl bg-red-50 border border-red-200 text-red-800 text-xs flex items-center gap-2">
+          <AlertCircle className="w-4 h-4 shrink-0 text-red-600" />
           <span>{error}</span>
         </div>
       )}
 
       {/* Network KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-white p-4 rounded-2xl border border-stone-200/80 shadow-sm">
-          <div className="text-xs font-semibold text-stone-500 uppercase tracking-wider">Partner Clinics</div>
-          <div className="text-2xl font-black text-stone-900 mt-1">{totalFacilities}</div>
-          <div className="text-xs text-stone-500 mt-1">Network facilities</div>
+        <div className="bg-white p-4 rounded-2xl border border-[#E4EAF2] shadow-2xs">
+          <div className="text-[11px] font-semibold text-[#65748B] uppercase tracking-wider">Partner Clinics</div>
+          <div className="text-2xl font-black text-[#12213A] mt-1">{totalFacilities}</div>
+          <div className="text-[11px] text-[#65748B] mt-1">Network facilities</div>
         </div>
-        <div className="bg-white p-4 rounded-2xl border border-stone-200/80 shadow-sm">
-          <div className="text-xs font-semibold text-stone-500 uppercase tracking-wider">Emergency Trauma</div>
+        <div className="bg-white p-4 rounded-2xl border border-[#E4EAF2] shadow-2xs">
+          <div className="text-[11px] font-semibold text-[#65748B] uppercase tracking-wider">Emergency Trauma</div>
           <div className="text-2xl font-black text-red-600 mt-1">{emergencyReady}</div>
-          <div className="text-xs text-stone-500 mt-1">Surgical / critical ready</div>
+          <div className="text-[11px] text-[#65748B] mt-1">Surgical / critical ready</div>
         </div>
-        <div className="bg-white p-4 rounded-2xl border border-stone-200/80 shadow-sm">
-          <div className="text-xs font-semibold text-stone-500 uppercase tracking-wider">24/7 Round the Clock</div>
-          <div className="text-2xl font-black text-indigo-600 mt-1">{roundTheClock}</div>
-          <div className="text-xs text-stone-500 mt-1">Always open</div>
+        <div className="bg-white p-4 rounded-2xl border border-[#E4EAF2] shadow-2xs">
+          <div className="text-[11px] font-semibold text-[#65748B] uppercase tracking-wider">24/7 Service</div>
+          <div className="text-2xl font-black text-blue-600 mt-1">{roundTheClock}</div>
+          <div className="text-[11px] text-[#65748B] mt-1">Round-the-clock emergency</div>
         </div>
-        <div className="bg-white p-4 rounded-2xl border border-stone-200/80 shadow-sm">
-          <div className="text-xs font-semibold text-stone-500 uppercase tracking-wider">Admitted Patients</div>
+        <div className="bg-white p-4 rounded-2xl border border-[#E4EAF2] shadow-2xs">
+          <div className="text-[11px] font-semibold text-[#65748B] uppercase tracking-wider">Admitted Patients</div>
           <div className="text-2xl font-black text-purple-600 mt-1">{totalAdmitted}</div>
-          <div className="text-xs text-stone-500 mt-1">Active animal recoveries</div>
+          <div className="text-[11px] text-[#65748B] mt-1">Active animal recoveries</div>
         </div>
       </div>
 
       {/* Search & Filters */}
-      <div className="bg-white p-4 rounded-2xl border border-stone-200/80 shadow-sm flex flex-col md:flex-row gap-3 items-center justify-between">
+      <div className="bg-white p-4 rounded-2xl border border-[#E4EAF2] shadow-2xs flex flex-col md:flex-row gap-3 items-center justify-between">
         <div className="relative flex-1 w-full">
-          <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-400" />
+          <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
             type="text"
-            placeholder="Search clinics by name, area, or street..."
+            placeholder="Search clinics by name, district, or address..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 text-sm bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+            className="w-full pl-10 pr-4 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
         </div>
         <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
@@ -145,7 +144,7 @@ export const NGOVeterinary: React.FC = () => {
             className={`px-3 py-1.5 text-xs font-bold rounded-xl border transition ${
               filterEmergency === true
                 ? 'bg-red-50 border-red-300 text-red-700'
-                : 'bg-stone-50 border-stone-200 text-stone-600 hover:bg-stone-100'
+                : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
             }`}
           >
             Emergency Trauma
@@ -154,8 +153,8 @@ export const NGOVeterinary: React.FC = () => {
             onClick={() => setFilter247((prev) => (prev === true ? null : true))}
             className={`px-3 py-1.5 text-xs font-bold rounded-xl border transition ${
               filter247 === true
-                ? 'bg-indigo-50 border-indigo-300 text-indigo-700'
-                : 'bg-stone-50 border-stone-200 text-stone-600 hover:bg-stone-100'
+                ? 'bg-blue-50 border-blue-300 text-blue-700'
+                : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
             }`}
           >
             24/7 Service
@@ -167,7 +166,7 @@ export const NGOVeterinary: React.FC = () => {
                 setFilter247(null);
                 setSearch('');
               }}
-              className="text-xs text-stone-500 underline hover:text-stone-800 ml-1"
+              className="text-xs text-slate-500 underline hover:text-slate-800 ml-1 font-medium"
             >
               Reset
             </button>
@@ -177,15 +176,15 @@ export const NGOVeterinary: React.FC = () => {
 
       {/* Facilities Cards Grid */}
       {loading ? (
-        <div className="bg-white rounded-2xl border border-stone-200/80 p-12 text-center text-stone-500 shadow-sm">
-          <RefreshCw className="w-8 h-8 animate-spin mx-auto text-emerald-600 mb-3" />
-          <p className="text-sm font-medium">Loading partner network...</p>
+        <div className="bg-white rounded-2xl border border-[#E4EAF2] p-12 text-center text-slate-400 shadow-sm">
+          <RefreshCw className="w-6 h-6 animate-spin mx-auto text-blue-600 mb-2" />
+          <p className="text-xs font-medium">Loading partner network...</p>
         </div>
       ) : filteredFacilities.length === 0 ? (
-        <div className="bg-white rounded-2xl border border-stone-200/80 p-12 text-center text-stone-500 shadow-sm">
-          <Building2 className="w-10 h-10 mx-auto text-stone-300 mb-2" />
-          <p className="text-base font-bold text-stone-800">No partner clinics match your filters</p>
-          <p className="text-xs text-stone-500 mt-1">Try clearing filters or adding clinic partners.</p>
+        <div className="bg-white rounded-2xl border border-[#E4EAF2] p-12 text-center text-slate-400 shadow-sm">
+          <Building2 className="w-8 h-8 mx-auto text-slate-300 mb-2" />
+          <p className="text-sm font-bold text-[#12213A]">No partner clinics match your filters</p>
+          <p className="text-xs text-[#65748B] mt-1">Try clearing filters or adding clinic partners.</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
@@ -197,60 +196,60 @@ export const NGOVeterinary: React.FC = () => {
             return (
               <div
                 key={f.id}
-                className="bg-white rounded-2xl border border-stone-200/80 shadow-sm hover:shadow-md transition-shadow p-5 flex flex-col justify-between"
+                className="bg-white rounded-2xl border border-[#E4EAF2] shadow-sm hover:shadow-md transition-shadow p-5 flex flex-col justify-between"
               >
                 <div>
                   {/* Top Badges */}
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex flex-wrap items-center gap-1.5">
                       {f.is_verified && (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-bold rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-bold rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200">
                           <ShieldCheck className="w-3 h-3" /> Verified
                         </span>
                       )}
                       {f.is_24_7 && (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-bold rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-bold rounded-md bg-blue-50 text-blue-700 border border-blue-200">
                           <Clock className="w-3 h-3" /> 24/7
                         </span>
                       )}
                       {f.emergency_support && (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-bold rounded-full bg-red-50 text-red-700 border border-red-200">
-                          <HeartPulse className="w-3 h-3" /> Trauma
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-bold rounded-md bg-red-50 text-red-700 border border-red-200">
+                          <HeartPulse className="w-3 h-3" /> Trauma Ready
                         </span>
                       )}
                     </div>
                   </div>
 
                   {/* Title & Info */}
-                  <h2 className="text-base font-bold text-stone-900 mt-3">{f.name}</h2>
+                  <h2 className="text-base font-bold text-[#12213A] mt-3">{f.name}</h2>
                   
                   {f.address_text && (
-                    <div className="flex items-start gap-1.5 text-xs text-stone-600 mt-2">
-                      <MapPin className="w-3.5 h-3.5 flex-shrink-0 text-stone-400 mt-0.5" />
+                    <div className="flex items-start gap-1.5 text-xs text-[#65748B] mt-2">
+                      <MapPin className="w-3.5 h-3.5 shrink-0 text-slate-400 mt-0.5" />
                       <span>{f.address_text}</span>
                     </div>
                   )}
 
                   {f.phone && (
-                    <div className="flex items-center gap-1.5 text-xs text-stone-600 mt-1.5">
-                      <Phone className="w-3.5 h-3.5 flex-shrink-0 text-stone-400" />
-                      <a href={`tel:${f.phone}`} className="hover:underline hover:text-emerald-700">
+                    <div className="flex items-center gap-1.5 text-xs text-[#65748B] mt-1.5">
+                      <Phone className="w-3.5 h-3.5 shrink-0 text-slate-400" />
+                      <a href={`tel:${f.phone}`} className="hover:underline hover:text-blue-700">
                         {f.phone}
                       </a>
                     </div>
                   )}
 
                   {/* Patient Intake Bar */}
-                  <div className="mt-4 pt-3 border-t border-stone-100">
+                  <div className="mt-4 pt-3 border-t border-slate-100">
                     <div className="flex items-center justify-between text-xs mb-1.5">
-                      <span className="text-stone-500 font-medium flex items-center gap-1">
-                        <BedDouble className="w-3.5 h-3.5 text-stone-400" /> Patient Intake
+                      <span className="text-[#65748B] font-medium flex items-center gap-1">
+                        <BedDouble className="w-3.5 h-3.5 text-slate-400" /> Patient Intake
                       </span>
-                      <span className="font-bold text-stone-800">
+                      <span className="font-bold text-[#12213A]">
                         {admitted} / {capacity} beds
                       </span>
                     </div>
-                    <div className="w-full bg-stone-100 rounded-full h-2 overflow-hidden">
+                    <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
                       <div
                         className={`h-full rounded-full ${
                           occupancyPct >= 90
@@ -266,13 +265,13 @@ export const NGOVeterinary: React.FC = () => {
                 </div>
 
                 {/* Footer Action */}
-                <div className="mt-5 pt-3 border-t border-stone-100 flex items-center justify-between">
-                  <span className="text-xs text-stone-400 font-medium">
-                    {occupancyPct}% Capacity
+                <div className="mt-5 pt-3 border-t border-slate-100 flex items-center justify-between">
+                  <span className="text-xs text-[#65748B] font-medium">
+                    {occupancyPct}% Occupancy
                   </span>
                   <Link
                     to={`/ngo/cases`}
-                    className="inline-flex items-center gap-1 text-xs font-bold text-emerald-700 hover:text-emerald-800 hover:underline"
+                    className="inline-flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-700"
                   >
                     View Cases <ExternalLink className="w-3 h-3" />
                   </Link>

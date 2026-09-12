@@ -4,7 +4,12 @@ import { Bell, CheckCheck, ShieldAlert, HeartHandshake, Stethoscope } from 'luci
 import api from '../services/api';
 import type { NotificationItem } from '../types';
 
-export const NotificationBell: React.FC = () => {
+interface NotificationBellProps {
+  variant?: 'light' | 'dark';
+  className?: string;
+}
+
+export const NotificationBell: React.FC<NotificationBellProps> = ({ variant = 'light', className = '' }) => {
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [unreadCount, setUnreadCount] = useState<number>(0);
   const [isOpen, setIsOpen] = useState<boolean>(false);
@@ -101,7 +106,11 @@ export const NotificationBell: React.FC = () => {
         id="notification-bell-btn"
         aria-label="View notifications"
         onClick={() => setIsOpen(!isOpen)}
-        className="relative p-2 text-stone-600 hover:text-stone-900 rounded-full hover:bg-stone-100 transition-colors focus:outline-none focus:ring-2 focus:ring-amber-500"
+        className={`relative p-2.5 rounded-full transition-all focus:outline-none ${
+          variant === 'dark'
+            ? 'text-gray-300 hover:text-white hover:bg-white/10'
+            : 'text-slate-600 hover:text-slate-900 bg-slate-100/70 hover:bg-slate-200/70 border border-slate-200'
+        } ${className}`}
       >
         <Bell className="w-5 h-5" />
         {unreadCount > 0 && (
@@ -117,14 +126,14 @@ export const NotificationBell: React.FC = () => {
       {isOpen && (
         <div
           id="notification-dropdown"
-          className="absolute right-0 mt-2 w-80 sm:w-96 bg-white rounded-xl shadow-2xl border border-stone-200 z-50 overflow-hidden"
+          className="absolute right-0 mt-2 w-80 sm:w-96 bg-white rounded-xl shadow-2xl border border-slate-200 z-50 overflow-hidden"
         >
           {/* Header */}
-          <div className="flex items-center justify-between px-4 py-3 bg-stone-50 border-b border-stone-200">
+          <div className="flex items-center justify-between px-4 py-3 bg-slate-50 border-b border-slate-200">
             <div className="flex items-center gap-2">
-              <span className="font-semibold text-stone-900 text-sm">Notifications</span>
+              <span className="font-semibold text-slate-900 text-sm">Notifications</span>
               {unreadCount > 0 && (
-                <span className="px-1.5 py-0.5 text-xs font-semibold bg-amber-100 text-amber-800 rounded-full">
+                <span className="px-1.5 py-0.5 text-xs font-semibold bg-blue-100 text-blue-800 rounded-full">
                   {unreadCount} new
                 </span>
               )}
@@ -132,7 +141,7 @@ export const NotificationBell: React.FC = () => {
             {unreadCount > 0 && (
               <button
                 onClick={handleMarkAllRead}
-                className="flex items-center gap-1 text-xs text-stone-600 hover:text-amber-700 font-medium transition-colors"
+                className="flex items-center gap-1 text-xs text-slate-600 hover:text-blue-700 font-medium transition-colors"
               >
                 <CheckCheck className="w-3.5 h-3.5" />
                 Mark all read
@@ -151,11 +160,11 @@ export const NotificationBell: React.FC = () => {
                 <div
                   key={n.id}
                   onClick={() => handleNotificationClick(n)}
-                  className={`px-4 py-3 cursor-pointer hover:bg-amber-50/50 transition-colors flex items-start gap-3 ${
-                    !n.is_read ? 'bg-amber-50/25 font-medium' : 'text-stone-700'
+                  className={`px-4 py-3 cursor-pointer hover:bg-blue-50/50 transition-colors flex items-start gap-3 ${
+                    !n.is_read ? 'bg-blue-50/30 font-medium' : 'text-slate-700'
                   }`}
                 >
-                  <div className="mt-0.5 p-1 rounded-full bg-stone-100">
+                  <div className="mt-0.5 p-1 rounded-full bg-slate-100">
                     {getEventIcon(n.type)}
                   </div>
                   <div className="flex-1 min-w-0">

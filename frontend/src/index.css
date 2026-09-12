@@ -36,3 +36,33 @@ body {
   border: 3px solid white;
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
 }
+
+/* Polished NGO Operations Map Pin Styles */
+.ngo-pin-marker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform 0.2s ease;
+}
+.ngo-pin-marker:hover {
+  transform: scale(1.15) translateY(-2px);
+  z-index: 1000 !important;
+}
+
+.leaflet-popup-content-wrapper {
+  padding: 0 !important;
+  border-radius: 14px !important;
+  box-shadow: 0 10px 25px -5px rgba(16, 36, 62, 0.15), 0 8px 10px -6px rgba(16, 36, 62, 0.1) !important;
+  border: 1px solid #E4EAF2 !important;
+  overflow: hidden !important;
+}
+
+.leaflet-popup-content {
+  margin: 0 !important;
+  line-height: inherit !important;
+}
+
+.leaflet-popup-tip {
+  background: white !important;
+}

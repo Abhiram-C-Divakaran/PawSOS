@@ -15,6 +15,21 @@ export default {
           coral: "#F06445",
           warmBg: "#FCFAF7",
           softMint: "#F0FAF7",
+        },
+        ngo: {
+          sidebar: "#10243E",
+          deepNavy: "#0C1D34",
+          primary: "#2F73D9",
+          brightBlue: "#3B82F6",
+          critical: "#EF4444",
+          urgent: "#F59E0B",
+          treatment: "#8B5CF6",
+          recovery: "#22A65A",
+          bg: "#F5F8FC",
+          card: "#FFFFFF",
+          border: "#E4EAF2",
+          text: "#12213A",
+          muted: "#65748B",
         }
       },
       fontFamily: {

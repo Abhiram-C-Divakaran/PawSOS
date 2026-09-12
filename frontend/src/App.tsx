@@ -71,22 +71,22 @@ function App() {
             
             {/* Vet Routes */}
             <Route path="vet" element={<ProtectedRoute allowedRoles={['VETERINARIAN', 'NGO_ADMIN']}><VetDashboard /></ProtectedRoute>} />
+          </Route>
 
-            {/* NGO Command Center Routes */}
-            <Route
-              path="ngo"
-              element={
-                <ProtectedRoute allowedRoles={['NGO_ADMIN', 'SUPER_ADMIN']}>
-                  <NGOLayout />
-                </ProtectedRoute>
-              }
-            >
-              <Route index element={<NGOOverview />} />
-              <Route path="cases" element={<NGOCases />} />
-              <Route path="cases/:id" element={<NGOCaseDetail />} />
-              <Route path="responders" element={<NGOResponders />} />
-              <Route path="veterinary" element={<NGOVeterinary />} />
-            </Route>
+          {/* Standalone NGO Command Center Application Shell */}
+          <Route
+            path="/ngo"
+            element={
+              <ProtectedRoute allowedRoles={['NGO_ADMIN', 'SUPER_ADMIN']}>
+                <NGOLayout />
+              </ProtectedRoute>
+            }
+          >
+            <Route index element={<NGOOverview />} />
+            <Route path="cases" element={<NGOCases />} />
+            <Route path="cases/:id" element={<NGOCaseDetail />} />
+            <Route path="responders" element={<NGOResponders />} />
+            <Route path="veterinary" element={<NGOVeterinary />} />
           </Route>
         </Routes>
       </BrowserRouter>
