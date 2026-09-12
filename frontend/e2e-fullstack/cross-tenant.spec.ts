@@ -82,7 +82,7 @@ test.describe('Full-Stack Cross-Tenant Boundary Defense & Security (Unmocked)', 
     // 9. Browser verification: Open Org A Command Center and verify Org B case is NOT displayed
     await authenticatePage(page, 'ngoadminA.e2e@pawreach.test', DEFAULT_E2E_PASSWORD);
     await page.goto('/ngo/cases');
-    await expect(page.getByText('Rescue Mission Log')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Rescue Cases' })).toBeVisible();
 
     await page.waitForTimeout(1000);
     const orgBCaseCell = page.getByText('E2E-CASE-ORGB-001');

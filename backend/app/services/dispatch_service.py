@@ -6,6 +6,7 @@ from typing import List, Optional, Set, Tuple
 
 from sqlalchemy.orm import Session
 from sqlalchemy import func
+from sqlalchemy.exc import DBAPIError, OperationalError
 
 from app.config import settings
 from app.core.constants import (
@@ -567,109 +568,128 @@ class DispatchService:
         - Case transitions to RESPONDER_ASSIGNED
         - Citizen & NGO notified
         """
-        # Lock offer
-        dialect_name = db.bind.dialect.name if db.bind else "sqlite"
-        offer_query = db.query(RescueAssignment).filter(
-            RescueAssignment.id == offer_id, RescueAssignment.rescuer_id == rescuer_id
-        )
-        if dialect_name == "postgresql":
-            offer = offer_query.with_for_update().first()
-        else:
-            offer = offer_query.first()
+        try:
+            dialect_name = db.bind.dialect.name if db.bind else "sqlite"
 
-        if not offer:
-            raise NotFoundException("Dispatch offer not found for this rescuer")
-
-        if offer.assignment_status != AssignmentStatus.PENDING:
-            raise ConflictException(
-                f"Offer is no longer pending (current status: {offer.assignment_status.value})"
+            # 1. Non-locking lookup to determine the parent rescue case
+            offer_lookup = (
+                db.query(RescueAssignment)
+                .filter(
+                    RescueAssignment.id == offer_id,
+                    RescueAssignment.rescuer_id == rescuer_id,
+                )
+                .first()
             )
 
-        now = datetime.utcnow()
-        if offer.expires_at and offer.expires_at < now:
-            offer.assignment_status = AssignmentStatus.EXPIRED
-            offer.expired_at = now
-            db.commit()
-            raise ConflictException("Dispatch offer has expired")
+            if not offer_lookup:
+                raise NotFoundException("Dispatch offer not found for this rescuer")
 
-        # Concurrency row-locking on RescueCase
-        case_query = db.query(RescueCase).filter(RescueCase.id == offer.rescue_case_id)
-        if dialect_name == "postgresql":
-            case = case_query.with_for_update().first()
-        else:
-            case = case_query.first()
+            if offer_lookup.assignment_status != AssignmentStatus.PENDING:
+                raise ConflictException(
+                    f"Offer is no longer pending (current status: {offer_lookup.assignment_status.value})"
+                )
 
-        if not case:
-            raise NotFoundException("Rescue case not found")
+            now = datetime.utcnow()
+            if offer_lookup.expires_at and offer_lookup.expires_at < now:
+                offer_lookup.assignment_status = AssignmentStatus.EXPIRED
+                offer_lookup.expired_at = now
+                db.commit()
+                raise ConflictException("Dispatch offer has expired")
 
-        if case.status not in [RescueStatus.TRIAGED, RescueStatus.SEARCHING_RESPONDER]:
-            offer.assignment_status = AssignmentStatus.CANCELLED
-            db.commit()
-            raise ConflictException("This rescue has already been assigned to another responder or closed.")
+            # 2. Concurrency row-locking on RescueCase FIRST to enforce a single global lock acquisition order
+            case_query = db.query(RescueCase).filter(RescueCase.id == offer_lookup.rescue_case_id)
+            if dialect_name == "postgresql":
+                case = case_query.with_for_update().first()
+            else:
+                case = case_query.first()
 
-        # Mark winning offer
-        offer.assignment_status = AssignmentStatus.ACCEPTED
-        offer.accepted_at = now
+            if not case:
+                raise NotFoundException("Rescue case not found")
 
-        # Cancel all other pending offers for this case
-        other_offers = (
-            db.query(RescueAssignment)
-            .filter(
-                RescueAssignment.rescue_case_id == case.id,
-                RescueAssignment.id != offer.id,
-                RescueAssignment.assignment_status == AssignmentStatus.PENDING,
+            if case.status not in [RescueStatus.TRIAGED, RescueStatus.SEARCHING_RESPONDER]:
+                offer_lookup.assignment_status = AssignmentStatus.CANCELLED
+                db.commit()
+                raise ConflictException("This rescue has already been assigned to another responder or closed.")
+
+            # 3. Retrieve the offer to mutate within the locked case critical section
+            offer = (
+                db.query(RescueAssignment)
+                .filter(
+                    RescueAssignment.id == offer_id,
+                    RescueAssignment.rescuer_id == rescuer_id,
+                )
+                .first()
             )
-            .all()
-        )
-        for other in other_offers:
-            other.assignment_status = AssignmentStatus.CANCELLED
-            NotificationService.notify_user(
+            if not offer or offer.assignment_status != AssignmentStatus.PENDING:
+                raise ConflictException("Offer is no longer available.")
+
+            # Mark winning offer
+            offer.assignment_status = AssignmentStatus.ACCEPTED
+            offer.accepted_at = now
+
+            # Cancel all other pending offers for this case
+            other_offers = (
+                db.query(RescueAssignment)
+                .filter(
+                    RescueAssignment.rescue_case_id == case.id,
+                    RescueAssignment.id != offer.id,
+                    RescueAssignment.assignment_status == AssignmentStatus.PENDING,
+                )
+                .all()
+            )
+            for other in other_offers:
+                other.assignment_status = AssignmentStatus.CANCELLED
+                NotificationService.notify_user(
+                    db=db,
+                    user_id=other.rescuer_id,
+                    title="Rescue Assigned",
+                    message=f"Case {case.case_number} was accepted by another responder.",
+                    notification_type="DISPATCH_CANCELLED",
+                    rescue_case_id=case.id,
+                )
+
+            # Update case status
+            from app.services.rescue_service import RescueService
+            rescuer = db.query(User).filter(User.id == rescuer_id).first()
+            rescuer_name = rescuer.full_name if rescuer else "Responder"
+            RescueService.update_status(
                 db=db,
-                user_id=other.rescuer_id,
-                title="Rescue Assigned",
-                message=f"Case {case.case_number} was accepted by another responder.",
-                notification_type="DISPATCH_CANCELLED",
-                rescue_case_id=case.id,
+                rescue_case=case,
+                new_status=RescueStatus.RESPONDER_ASSIGNED,
+                user_id=rescuer_id,
+                notes=f"Offer accepted by responder {rescuer_name}",
             )
 
-        # Update case status
-        from app.services.rescue_service import RescueService
-        rescuer = db.query(User).filter(User.id == rescuer_id).first()
-        rescuer_name = rescuer.full_name if rescuer else "Responder"
-        RescueService.update_status(
-            db=db,
-            rescue_case=case,
-            new_status=RescueStatus.RESPONDER_ASSIGNED,
-            user_id=rescuer_id,
-            notes=f"Offer accepted by responder {rescuer_name}",
-        )
+            db.commit()
+            db.refresh(offer)
 
-        db.commit()
-        db.refresh(offer)
+            # Notify Citizen Reporter
+            if case.reporter_id:
+                NotificationService.notify_user(
+                    db=db,
+                    user_id=case.reporter_id,
+                    title="🐾 Responder Assigned!",
+                    message=f"{rescuer_name} has accepted your rescue report ({case.case_number}) and is preparing to respond.",
+                    notification_type="RESPONDER_ASSIGNED",
+                    rescue_case_id=case.id,
+                    data={
+                        "type": "RESPONDER_ASSIGNED",
+                        "case_id": str(case.id),
+                        "case_number": case.case_number,
+                        "responder_name": rescuer_name,
+                        "route": f"/cases/{case.id}",
+                    },
+                )
 
-        # Notify Citizen Reporter
-        if case.reporter_id:
-            NotificationService.notify_user(
-                db=db,
-                user_id=case.reporter_id,
-                title="🐾 Responder Assigned!",
-                message=f"{rescuer_name} has accepted your rescue report ({case.case_number}) and is preparing to respond.",
-                notification_type="RESPONDER_ASSIGNED",
-                rescue_case_id=case.id,
-                data={
-                    "type": "RESPONDER_ASSIGNED",
-                    "case_id": str(case.id),
-                    "case_number": case.case_number,
-                    "responder_name": rescuer_name,
-                    "route": f"/cases/{case.id}",
-                },
+            logger.info(
+                f"[EVENT: OFFER_ACCEPTED] Offer {offer.id} accepted by rescuer {rescuer_id} for case {case.case_number}"
             )
 
-        logger.info(
-            f"[EVENT: OFFER_ACCEPTED] Offer {offer.id} accepted by rescuer {rescuer_id} for case {case.case_number}"
-        )
-
-        return offer
+            return offer
+        except (OperationalError, DBAPIError) as db_err:
+            db.rollback()
+            logger.warning(f"Database concurrency conflict during accept_offer: {db_err}")
+            raise ConflictException("Concurrent assignment collision detected. Please try again.")
 
     @classmethod
     def reject_offer(

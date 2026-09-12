@@ -54,6 +54,6 @@ test.describe('Full-Stack Citizen Report Flow (Unmocked)', () => {
     await page.getByRole('button', { name: 'Track This Rescue Live' }).click();
     await expect(page).toHaveURL(/\/cases\//);
     await expect(page.getByText('Gateway of India, Colaba, Mumbai')).toBeVisible({ timeout: 10000 });
-    await expect(page.getByText('Canine').or(page.getByText('Dog'))).toBeVisible();
+    await expect(page.getByText('Canine').or(page.getByText('Dog', { exact: true }))).toBeVisible();
   });
 });
