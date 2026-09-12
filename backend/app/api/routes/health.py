@@ -19,6 +19,7 @@ def health_liveness():
     }
 
 @router.get("/health/ready")
+@router.get("/health/readiness")
 def health_readiness(response: Response, db: Session = Depends(get_db)):
     """Readiness probe checking critical downstream dependencies: Database, Redis, and Worker."""
     checks = {

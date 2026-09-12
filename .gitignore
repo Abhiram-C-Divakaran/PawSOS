@@ -45,3 +45,10 @@ htmlcov/
 uploads/
 backend/uploads/*
 !backend/uploads/.gitkeep
+
+# Playwright E2E
+frontend/playwright-report/
+frontend/test-results/
+playwright-report/
+test-results/
+

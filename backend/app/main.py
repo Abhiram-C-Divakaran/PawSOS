@@ -89,6 +89,7 @@ app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 # Include API Routers
 app.include_router(health.router, tags=["Health"])
+app.include_router(health.router, prefix="/api/v1", tags=["Health"])
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["Authentication"])
 app.include_router(rescues.router, prefix="/api/v1/rescues", tags=["Rescue Cases"])
 app.include_router(rescuers.router, prefix="/api/v1/rescuers", tags=["Rescuers"])

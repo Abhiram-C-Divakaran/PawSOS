@@ -102,11 +102,32 @@ export const NGOCaseDetail: React.FC = () => {
     }
   };
 
-  if (loading || !caseData) {
+  if (loading) {
     return (
       <div className="py-20 text-center">
         <div className="inline-block w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-3" />
         <p className="text-slate-600 font-medium text-sm">Loading complete rescue dossier...</p>
+      </div>
+    );
+  }
+
+  if (!caseData) {
+    return (
+      <div className="py-12 px-4 max-w-lg mx-auto text-center space-y-4">
+        <Toast toast={toast} onClose={() => setToast(null)} />
+        <div id="case-error-state" className="p-6 bg-red-50 border border-red-200 rounded-2xl text-red-700">
+          <AlertOctagon className="w-10 h-10 mx-auto mb-2 text-red-500" />
+          <h2 className="text-base font-bold">Access Denied or Case Not Found</h2>
+          <p className="text-xs text-red-600 mt-1">
+            This rescue case may belong to another organization or does not exist.
+          </p>
+        </div>
+        <button
+          onClick={() => navigate('/ngo/cases')}
+          className="px-4 py-2 bg-slate-800 text-white rounded-xl text-xs font-semibold hover:bg-slate-700 transition"
+        >
+          Back to Organization Cases
+        </button>
       </div>
     );
   }

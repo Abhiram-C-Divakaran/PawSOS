@@ -51,6 +51,7 @@ describe('NGO Operations Command Center Tests', () => {
         under_treatment: 5,
         recovering: 8,
         avg_dispatch_seconds: 42.5,
+        average_response_minutes: 16.2,
         avg_response_minutes: 16.2,
         completion_rate_pct: 91.5,
         responder_availability_pct: 75.0,

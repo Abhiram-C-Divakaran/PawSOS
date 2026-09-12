@@ -137,15 +137,28 @@ export interface NotificationItem {
 export interface NGOOverviewKPIs {
   active_cases: number;
   critical_cases: number;
+  urgent_cases?: number;
+  searching_responder_cases?: number;
   awaiting_responder: number;
   responders_en_route: number;
+  responders_available?: number;
+  responders_assigned?: number;
   under_treatment: number;
   recovering: number;
+  unresolved_cases?: number;
+  closed_today?: number;
   avg_dispatch_seconds: number;
-  avg_response_minutes: number;
+  average_response_minutes: number;
+  avg_response_minutes?: number;
+  avg_completion_minutes?: number;
   completion_rate_pct: number;
   responder_availability_pct: number;
   total_cases: number;
+  average_dispatch_latency_seconds?: number;
+  average_acceptance_latency_seconds?: number;
+  average_arrival_minutes?: number;
+  average_rescue_duration_minutes?: number;
+  average_case_completion_minutes?: number;
 }
 
 export interface HotspotItem {
@@ -156,12 +169,16 @@ export interface HotspotItem {
   critical_count: number;
   urgent_count?: number;
   top_species: string;
-  average_response_minutes?: number;
+  average_response_minutes: number;
+  avg_response_minutes?: number;
+  average_acceptance_minutes?: number;
+  average_arrival_minutes?: number;
 }
 
 export interface ResponseTimeDataPoint {
   date: string;
-  avg_response_minutes: number;
+  average_response_minutes: number;
+  avg_response_minutes?: number;
   cases: number;
 }
 
@@ -171,6 +188,12 @@ export interface RescueOutcomesData {
   unresolved_rate: number;
   veterinary_handoff_rate: number;
   total_cases: number;
+  active_field_count?: number;
+  rescued_transport_count?: number;
+  medical_care_count?: number;
+  post_care_count?: number;
+  successful_terminal_count?: number;
+  failure_count?: number;
 }
 
 export interface NGOInsightsData {

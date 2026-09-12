@@ -30,6 +30,7 @@ describe('NGOAnalytics Component', () => {
   it('renders analytics KPI row, period filters, and outcome breakdown', async () => {
     const mockOverview = {
       total_cases: 45,
+      average_response_minutes: 14.8,
       avg_response_minutes: 14.8,
       completion_rate_pct: 93.3,
     };

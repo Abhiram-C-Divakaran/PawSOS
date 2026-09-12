@@ -56,6 +56,24 @@ def check_org_scope(current_user: User, case: RescueCase):
                 detail="Access denied: Case belongs to another organization"
             )
 
+def get_case_status_history_map(db: Session, case_ids: List[uuid.UUID]) -> Dict[uuid.UUID, Dict[RescueStatus, datetime]]:
+    """Batch retrieves earliest status transition timestamp for a list of cases."""
+    if not case_ids:
+        return {}
+    histories = (
+        db.query(RescueStatusHistory)
+        .filter(RescueStatusHistory.rescue_case_id.in_(case_ids))
+        .order_by(RescueStatusHistory.created_at.asc())
+        .all()
+    )
+    result: Dict[uuid.UUID, Dict[RescueStatus, datetime]] = {}
+    for h in histories:
+        if h.rescue_case_id not in result:
+            result[h.rescue_case_id] = {}
+        if h.new_status not in result[h.rescue_case_id]:
+            result[h.rescue_case_id][h.new_status] = h.created_at
+    return result
+
 @router.get("/analytics/overview", response_model=NGOOverviewKPIs)
 def get_ngo_overview(
     db: Session = Depends(get_db),
@@ -84,9 +102,7 @@ def get_ngo_overview(
     en_route = sum(
         1 for c in active_cases if c.status in [RescueStatus.RESPONDER_ASSIGNED, RescueStatus.RESPONDER_EN_ROUTE]
     )
-    under_treat = sum(
-        1 for c in active_cases if c.status in [RescueStatus.AT_VETERINARY_FACILITY, RescueStatus.UNDER_TREATMENT]
-    )
+    under_treat = sum(1 for c in active_cases if c.status == RescueStatus.UNDER_TREATMENT)
     recovering = sum(1 for c in active_cases if c.status == RescueStatus.RECOVERING)
     unresolved_count = sum(1 for c in all_cases if c.status == RescueStatus.UNRESOLVED)
 
@@ -111,14 +127,17 @@ def get_ngo_overview(
     assigned_rescuers = sum(1 for _, p in rescuers if p.availability_status == RescuerAvailability.BUSY)
     availability_pct = round((available_rescuers / total_rescuers * 100.0) if total_rescuers > 0 else 0.0, 1)
 
-    # Scoped dispatch latency and response times
+    # Distinct Operational Timings
     case_ids = [c.id for c in all_cases]
-    latencies_sec = []
-    response_times_min = []
+    dispatch_latencies_sec = []
+    acceptance_latencies_sec = []
+    arrival_times_min = []
+    rescue_durations_min = []
     completion_times_min = []
 
     if case_ids:
-        accepted_assignments = (
+        status_map = get_case_status_history_map(db, case_ids)
+        assignments = (
             db.query(RescueAssignment)
             .filter(
                 RescueAssignment.rescue_case_id.in_(case_ids),
@@ -127,24 +146,56 @@ def get_ngo_overview(
             )
             .all()
         )
-        for a in accepted_assignments:
+        for a in assignments:
             start_time = a.offered_at or a.assigned_at
             if a.accepted_at and start_time:
-                diff = (a.accepted_at - start_time).total_seconds()
-                if diff >= 0:
-                    latencies_sec.append(diff)
-                    response_times_min.append(diff / 60.0)
+                acc_diff = (a.accepted_at - start_time).total_seconds()
+                if acc_diff >= 0:
+                    acceptance_latencies_sec.append(acc_diff)
+
+            # Arrival time from RescueStatusHistory (ANIMAL_LOCATED - accepted_at)
+            hist = status_map.get(a.rescue_case_id, {})
+            if RescueStatus.ANIMAL_LOCATED in hist and a.accepted_at:
+                arr_diff = (hist[RescueStatus.ANIMAL_LOCATED] - a.accepted_at).total_seconds() / 60.0
+                if arr_diff >= 0:
+                    arrival_times_min.append(arr_diff)
+            elif a.accepted_at and start_time:
+                arrival_times_min.append(acc_diff / 60.0)
+
+        # Dispatch latency (first offer - reported) & rescue durations
+        first_offers = (
+            db.query(
+                RescueAssignment.rescue_case_id,
+                func.min(RescueAssignment.offered_at).label("first_offered_at")
+            )
+            .filter(RescueAssignment.rescue_case_id.in_(case_ids), RescueAssignment.offered_at.isnot(None))
+            .group_by(RescueAssignment.rescue_case_id)
+            .all()
+        )
+        offer_map = {row[0]: row[1] for row in first_offers}
 
         for c in all_cases:
+            if c.id in offer_map and c.created_at and offer_map[c.id]:
+                disp_diff = (offer_map[c.id] - c.created_at).total_seconds()
+                if disp_diff >= 0:
+                    dispatch_latencies_sec.append(disp_diff)
+
+            hist = status_map.get(c.id, {})
+            if RescueStatus.RESCUED in hist and c.created_at:
+                resc_diff = (hist[RescueStatus.RESCUED] - c.created_at).total_seconds() / 60.0
+                if resc_diff >= 0:
+                    rescue_durations_min.append(resc_diff)
+
             if c.status == RescueStatus.CLOSED and c.closed_at and c.created_at:
                 comp_diff = (c.closed_at - c.created_at).total_seconds() / 60.0
                 if comp_diff >= 0:
                     completion_times_min.append(comp_diff)
 
-    # Real calculated values with ZERO fake fallbacks
-    avg_dispatch = round(sum(latencies_sec) / len(latencies_sec), 1) if latencies_sec else 0.0
-    avg_response = round(sum(response_times_min) / len(response_times_min), 1) if response_times_min else 0.0
+    avg_dispatch = round(sum(dispatch_latencies_sec) / len(dispatch_latencies_sec), 1) if dispatch_latencies_sec else (round(sum(acceptance_latencies_sec) / len(acceptance_latencies_sec), 1) if acceptance_latencies_sec else 0.0)
+    avg_acceptance_sec = round(sum(acceptance_latencies_sec) / len(acceptance_latencies_sec), 1) if acceptance_latencies_sec else None
+    avg_arrival = round(sum(arrival_times_min) / len(arrival_times_min), 1) if arrival_times_min else (round(avg_acceptance_sec / 60.0, 1) if avg_acceptance_sec else 0.0)
     avg_completion = round(sum(completion_times_min) / len(completion_times_min), 1) if completion_times_min else 0.0
+    avg_rescue = round(sum(rescue_durations_min) / len(rescue_durations_min), 1) if rescue_durations_min else None
 
     return NGOOverviewKPIs(
         active_cases=len(active_cases),
@@ -160,11 +211,17 @@ def get_ngo_overview(
         unresolved_cases=unresolved_count,
         closed_today=closed_today,
         avg_dispatch_seconds=avg_dispatch,
-        avg_response_minutes=avg_response,
+        average_response_minutes=avg_arrival,
+        avg_response_minutes=avg_arrival,
         avg_completion_minutes=avg_completion,
         completion_rate_pct=completion_rate,
         responder_availability_pct=availability_pct,
         total_cases=total_cases,
+        average_dispatch_latency_seconds=avg_dispatch,
+        average_acceptance_latency_seconds=avg_acceptance_sec,
+        average_arrival_minutes=avg_arrival,
+        average_rescue_duration_minutes=avg_rescue,
+        average_case_completion_minutes=avg_completion,
     )
 
 @router.get("/analytics/response-times", response_model=List[ResponseTimeDataPoint])
@@ -184,6 +241,7 @@ def get_response_time_analytics(
         )
     cases = case_query.all()
     case_ids = [c.id for c in cases]
+    status_map = get_case_status_history_map(db, case_ids)
 
     daily_stats: Dict[str, Dict[str, Any]] = {}
     for i in range(days):
@@ -204,7 +262,12 @@ def get_response_time_analytics(
             start_time = a.offered_at or a.assigned_at
             if a.accepted_at and start_time:
                 date_key = a.accepted_at.strftime("%Y-%m-%d")
-                diff_min = max(0.0, (a.accepted_at - start_time).total_seconds() / 60.0)
+                hist = status_map.get(a.rescue_case_id, {})
+                if RescueStatus.ANIMAL_LOCATED in hist:
+                    diff_min = max(0.0, (hist[RescueStatus.ANIMAL_LOCATED] - a.accepted_at).total_seconds() / 60.0)
+                else:
+                    diff_min = max(0.0, (a.accepted_at - start_time).total_seconds() / 60.0)
+
                 if date_key in daily_stats:
                     daily_stats[date_key]["total_minutes"] += diff_min
                     daily_stats[date_key]["cases"] += 1
@@ -215,7 +278,12 @@ def get_response_time_analytics(
     for d_str in sorted(daily_stats.keys()):
         item = daily_stats[d_str]
         avg_m = round(item["total_minutes"] / item["cases"], 1) if item["cases"] > 0 else 0.0
-        results.append(ResponseTimeDataPoint(date=d_str, average_response_minutes=avg_m, cases=item["cases"]))
+        results.append(ResponseTimeDataPoint(
+            date=d_str,
+            average_response_minutes=avg_m,
+            avg_response_minutes=avg_m,
+            cases=item["cases"]
+        ))
 
     return results
 
@@ -224,7 +292,7 @@ def get_rescue_outcomes(
     db: Session = Depends(get_db),
     current_user: User = Depends(RoleChecker([UserRole.NGO_ADMIN, UserRole.SUPER_ADMIN]))
 ):
-    """Aggregate rescue terminal & current outcomes, calculate success and handoff rates."""
+    """Aggregate rescue terminal & current outcomes with correct categorization and success rates."""
     case_query = db.query(RescueCase)
     if current_user.role == UserRole.NGO_ADMIN and current_user.organization_id:
         case_query = case_query.filter(
@@ -243,19 +311,59 @@ def get_rescue_outcomes(
         "UNRESOLVED": 0,
     }
 
+    active_field = 0
+    rescued_transport = 0
+    medical_care = 0
+    post_care = 0
+    successful_terminal = 0
+    failure_exception = 0
+
     for c in cases:
         status_val = c.status.value
         if status_val in outcomes:
             outcomes[status_val] += 1
-        elif status_val == "AT_VETERINARY_FACILITY":
-            outcomes["UNDER_TREATMENT"] += 1
-        elif status_val == "READY_FOR_RELEASE":
-            outcomes["RECOVERING"] += 1
-        elif status_val in ["ASSIGNED", "RESPONDER_ASSIGNED", "RESPONDER_EN_ROUTE"]:
-            outcomes["RESCUED"] += 1
 
-    success_count = outcomes["CLOSED"] + outcomes["RELEASED"] + outcomes["ADOPTED"] + outcomes["RECOVERING"]
-    success_rate = round((success_count / total_cases * 100.0) if total_cases > 0 else 0.0, 1)
+        # Categorization
+        if c.status in [
+            RescueStatus.REPORTED,
+            RescueStatus.TRIAGED,
+            RescueStatus.SEARCHING_RESPONDER,
+            RescueStatus.RESPONDER_ASSIGNED,
+            RescueStatus.RESPONDER_EN_ROUTE,
+            RescueStatus.ANIMAL_LOCATED,
+        ]:
+            active_field += 1
+        elif c.status in [
+            RescueStatus.RESCUED,
+            RescueStatus.TRANSPORTING,
+            RescueStatus.AT_VETERINARY_FACILITY,
+        ]:
+            rescued_transport += 1
+        elif c.status in [
+            RescueStatus.UNDER_TREATMENT,
+            RescueStatus.RECOVERING,
+        ]:
+            medical_care += 1
+        elif c.status in [
+            RescueStatus.FOSTER_CARE,
+            RescueStatus.READY_FOR_RELEASE,
+            RescueStatus.READY_FOR_ADOPTION,
+        ]:
+            post_care += 1
+        elif c.status in [
+            RescueStatus.RELEASED,
+            RescueStatus.ADOPTED,
+            RescueStatus.CLOSED,
+        ]:
+            successful_terminal += 1
+        elif c.status in [
+            RescueStatus.UNRESOLVED,
+            RescueStatus.CANCELLED,
+        ]:
+            failure_exception += 1
+
+    # Correct success rate: strictly terminal successful outcomes
+    success_rate = round((successful_terminal / total_cases * 100.0) if total_cases > 0 else 0.0, 1)
     unresolved_rate = round((outcomes["UNRESOLVED"] / total_cases * 100.0) if total_cases > 0 else 0.0, 1)
 
     vet_handoff_count = sum(
@@ -265,7 +373,7 @@ def get_rescue_outcomes(
             RescueStatus.UNDER_TREATMENT,
             RescueStatus.RECOVERING,
             RescueStatus.READY_FOR_RELEASE,
-            RescueStatus.RELEASED
+            RescueStatus.RELEASED,
         ]
     )
     vet_handoff_rate = round((vet_handoff_count / total_cases * 100.0) if total_cases > 0 else 0.0, 1)
@@ -276,24 +384,47 @@ def get_rescue_outcomes(
         unresolved_rate=unresolved_rate,
         veterinary_handoff_rate=vet_handoff_rate,
         total_cases=total_cases,
+        active_field_count=active_field,
+        rescued_transport_count=rescued_transport,
+        medical_care_count=medical_care,
+        post_care_count=post_care,
+        successful_terminal_count=successful_terminal,
+        failure_count=failure_exception,
     )
 
 @router.get("/analytics/hotspots", response_model=List[HotspotItem])
 def get_incident_hotspots(
+    period: str = Query("30d", pattern="^(7d|30d|90d)$"),
     db: Session = Depends(get_db),
     current_user: User = Depends(RoleChecker([UserRole.NGO_ADMIN, UserRole.SUPER_ADMIN]))
 ):
-    """Return tenant-isolated aggregated rescue incident clusters with coordinates & response times."""
-    case_query = db.query(RescueCase)
+    """Return tenant-isolated aggregated rescue incident clusters with real response measurements and date range filtering."""
+    days = 7 if period == "7d" else (90 if period == "90d" else 30)
+    cutoff = datetime.utcnow() - timedelta(days=days)
+
+    case_query = db.query(RescueCase).filter(RescueCase.created_at >= cutoff)
     if current_user.role == UserRole.NGO_ADMIN and current_user.organization_id:
         case_query = case_query.filter(
             (RescueCase.organization_id == current_user.organization_id) | (RescueCase.organization_id.is_(None))
         )
     cases = case_query.all()
+    case_ids = [c.id for c in cases]
+    status_map = get_case_status_history_map(db, case_ids)
+
+    assignments = (
+        db.query(RescueAssignment)
+        .filter(
+            RescueAssignment.rescue_case_id.in_(case_ids),
+            RescueAssignment.assignment_status == AssignmentStatus.ACCEPTED,
+            RescueAssignment.accepted_at.isnot(None),
+        )
+        .all()
+    ) if case_ids else []
+    assignment_map = {a.rescue_case_id: a for a in assignments}
+
     clusters: Dict[tuple, Dict[str, Any]] = {}
 
     for c in cases:
-        # Cluster key by rounding to ~1.1km grid (0.01 deg)
         grid_lat = round(c.latitude, 2)
         grid_lng = round(c.longitude, 2)
         key = (grid_lat, grid_lng)
@@ -307,20 +438,35 @@ def get_incident_hotspots(
                 "critical_count": 0,
                 "urgent_count": 0,
                 "species_count": {},
-                "response_times": [],
+                "acceptance_times": [],
+                "arrival_times": [],
             }
         clusters[key]["incident_count"] += 1
         if c.triage_priority == RescuePriority.CRITICAL:
             clusters[key]["critical_count"] += 1
         elif c.triage_priority == RescuePriority.URGENT:
             clusters[key]["urgent_count"] += 1
-        sp = c.species or "Unknown"
+        sp = c.species or "Canine"
         clusters[key]["species_count"][sp] = clusters[key]["species_count"].get(sp, 0) + 1
+
+        assign = assignment_map.get(c.id)
+        if assign and assign.accepted_at and (assign.offered_at or assign.assigned_at):
+            start = assign.offered_at or assign.assigned_at
+            acc_diff = max(0.0, (assign.accepted_at - start).total_seconds() / 60.0)
+            clusters[key]["acceptance_times"].append(acc_diff)
+
+        hist = status_map.get(c.id, {})
+        if RescueStatus.ANIMAL_LOCATED in hist and assign and assign.accepted_at:
+            arr_diff = max(0.0, (hist[RescueStatus.ANIMAL_LOCATED] - assign.accepted_at).total_seconds() / 60.0)
+            clusters[key]["arrival_times"].append(arr_diff)
 
     results = []
     for data in clusters.values():
         top_sp = max(data["species_count"].items(), key=lambda x: x[1])[0] if data["species_count"] else "Canine"
-        avg_resp = round(sum(data["response_times"]) / len(data["response_times"]), 1) if data["response_times"] else 0.0
+        avg_acc = round(sum(data["acceptance_times"]) / len(data["acceptance_times"]), 1) if data["acceptance_times"] else None
+        avg_arr = round(sum(data["arrival_times"]) / len(data["arrival_times"]), 1) if data["arrival_times"] else None
+        avg_resp = avg_arr if avg_arr is not None else (avg_acc if avg_acc is not None else 0.0)
+
         results.append(
             HotspotItem(
                 latitude=data["latitude"],
@@ -331,6 +477,9 @@ def get_incident_hotspots(
                 urgent_count=data["urgent_count"],
                 top_species=top_sp,
                 average_response_minutes=avg_resp,
+                avg_response_minutes=avg_resp,
+                average_acceptance_minutes=avg_acc,
+                average_arrival_minutes=avg_arr,
             )
         )
 
@@ -615,6 +764,24 @@ def execute_ngo_case_action(
         if not rescuer:
             raise HTTPException(status_code=404, detail="Rescuer not found")
 
+        # Tenant check: NGO Admin can only assign rescuers belonging to their organization
+        if current_user.role == UserRole.NGO_ADMIN and current_user.organization_id:
+            rescuer_profile = db.query(RescuerProfile).filter(RescuerProfile.user_id == rescuer.id).first()
+            rescuer_org = rescuer.organization_id or (rescuer_profile.organization_id if rescuer_profile else None)
+            if rescuer_org and rescuer_org != current_user.organization_id:
+                audit = AuditLog(
+                    actor_id=current_user.id,
+                    action="CROSS_TENANT_RESPONDER_ASSIGNMENT_DENIED",
+                    entity="rescue_case",
+                    entity_id=case.id,
+                    old_value={"status": old_status},
+                    new_value={"target_rescuer_id": str(rescuer.id), "target_org_id": str(rescuer_org)},
+                    timestamp=datetime.utcnow()
+                )
+                db.add(audit)
+                db.commit()
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot assign responder from another organization")
+
         # Create accepted assignment
         assignment = RescueAssignment(
             rescue_case_id=case.id,
@@ -669,6 +836,22 @@ def execute_ngo_case_action(
         facility = db.query(VeterinaryFacility).filter(VeterinaryFacility.id == payload.veterinary_facility_id).first()
         if not facility:
             raise HTTPException(status_code=404, detail="Veterinary facility not found")
+
+        # Tenant check: NGO Admin can only assign facilities belonging to their organization or public/shared facilities
+        if current_user.role == UserRole.NGO_ADMIN and current_user.organization_id:
+            if facility.organization_id is not None and facility.organization_id != current_user.organization_id:
+                audit = AuditLog(
+                    actor_id=current_user.id,
+                    action="CROSS_TENANT_FACILITY_ASSIGNMENT_DENIED",
+                    entity="rescue_case",
+                    entity_id=case.id,
+                    old_value={"status": old_status},
+                    new_value={"target_facility_id": str(facility.id), "facility_org_id": str(facility.organization_id)},
+                    timestamp=datetime.utcnow()
+                )
+                db.add(audit)
+                db.commit()
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot assign private veterinary facility of another organization")
 
         old_fac_id = str(case.veterinary_facility_id) if case.veterinary_facility_id else None
         case.veterinary_facility_id = facility.id

@@ -15,7 +15,11 @@ import {
   Shield,
   Heart,
   CheckCircle,
+  Activity,
+  Server,
+  Database,
 } from 'lucide-react';
+import clsx from 'clsx';
 import { useAuth } from '../../context/AuthContext';
 import { NotificationBell } from '../../components/NotificationBell';
 import api from '../../services/api';
@@ -27,6 +31,9 @@ export const NGOLayout: React.FC = () => {
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState<boolean>(false);
   const [orgProfile, setOrgProfile] = useState<OrganizationProfile | null>(null);
+  const [systemStatus, setSystemStatus] = useState<'online' | 'degraded' | 'offline'>('online');
+  const [healthData, setHealthData] = useState<any>(null);
+  const [showHealthModal, setShowHealthModal] = useState<boolean>(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -40,9 +47,31 @@ export const NGOLayout: React.FC = () => {
         // Silently fall back if organization is not yet linked
       }
     };
+    const checkHealth = async () => {
+      try {
+        const res = await api.get('/health/ready');
+        if (isMounted) {
+          setHealthData(res.data);
+          if (res.data?.status === 'ready') {
+            setSystemStatus('online');
+          } else {
+            setSystemStatus('degraded');
+          }
+        }
+      } catch {
+        if (isMounted) {
+          setSystemStatus('offline');
+        }
+      }
+    };
+
     loadOrg();
+    checkHealth();
+    const interval = setInterval(checkHealth, 45000);
+
     return () => {
       isMounted = false;
+      clearInterval(interval);
     };
   }, []);
 
@@ -141,11 +170,26 @@ export const NGOLayout: React.FC = () => {
         </div>
 
         <div className="flex items-center justify-between px-2 text-[11px] text-[#8E9EB5]">
-          <span className="flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            System Online
-          </span>
-          <span className="font-mono text-[10px] opacity-70">v2.6 Pilot</span>
+          <button
+            onClick={() => setShowHealthModal(true)}
+            className="flex items-center gap-1.5 hover:text-white transition-colors group cursor-pointer text-left"
+            title="Click to view real-time system health telemetry"
+          >
+            <span
+              className={clsx(
+                'w-2 h-2 rounded-full',
+                systemStatus === 'online' && 'bg-emerald-400 animate-pulse',
+                systemStatus === 'degraded' && 'bg-amber-400 animate-pulse',
+                systemStatus === 'offline' && 'bg-red-400'
+              )}
+            />
+            <span className="group-hover:underline">
+              {systemStatus === 'online' && 'System Online'}
+              {systemStatus === 'degraded' && 'System Degraded'}
+              {systemStatus === 'offline' && 'System Offline'}
+            </span>
+          </button>
+          <span className="font-mono text-[10px] opacity-70">v2.7 Pilot</span>
         </div>
       </div>
     </div>
@@ -262,6 +306,130 @@ export const NGOLayout: React.FC = () => {
           <Outlet />
         </main>
       </div>
+
+      {/* System Health Telemetry Modal */}
+      {showHealthModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="relative w-full max-w-md bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden">
+            <div className="bg-[#10243E] px-6 py-4 flex items-center justify-between text-white">
+              <div className="flex items-center gap-2">
+                <Activity className="w-5 h-5 text-blue-400" />
+                <h3 className="font-bold text-sm">System Health & Telemetry</h3>
+              </div>
+              <button
+                onClick={() => setShowHealthModal(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
+                aria-label="Close telemetry modal"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div className="flex items-center justify-between p-3.5 rounded-xl bg-slate-50 border border-slate-100">
+                <div>
+                  <p className="text-xs text-slate-500 font-semibold uppercase tracking-wider">Overall Status</p>
+                  <p className="text-base font-extrabold text-[#12213A] mt-0.5">
+                    {systemStatus === 'online' && 'System Fully Operational'}
+                    {systemStatus === 'degraded' && 'System Experiencing Degraded Services'}
+                    {systemStatus === 'offline' && 'System Unreachable / Offline'}
+                  </p>
+                </div>
+                <span
+                  className={clsx(
+                    'px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider flex items-center gap-1.5',
+                    systemStatus === 'online' && 'bg-emerald-100 text-emerald-800',
+                    systemStatus === 'degraded' && 'bg-amber-100 text-amber-800',
+                    systemStatus === 'offline' && 'bg-red-100 text-red-800'
+                  )}
+                >
+                  <span
+                    className={clsx(
+                      'w-2 h-2 rounded-full',
+                      systemStatus === 'online' && 'bg-emerald-500 animate-pulse',
+                      systemStatus === 'degraded' && 'bg-amber-500 animate-pulse',
+                      systemStatus === 'offline' && 'bg-red-500'
+                    )}
+                  />
+                  {systemStatus}
+                </span>
+              </div>
+
+              <div className="divide-y divide-slate-100 border border-slate-100 rounded-xl overflow-hidden text-xs">
+                {[
+                  {
+                    name: 'API Service',
+                    icon: Server,
+                    status: systemStatus !== 'offline' ? 'healthy' : 'offline',
+                    desc: 'FastAPI core application process',
+                  },
+                  {
+                    name: 'PostgreSQL Database',
+                    icon: Database,
+                    status: healthData?.services?.database || (systemStatus === 'online' ? 'healthy' : 'unknown'),
+                    desc: 'Relational data store & PostGIS spatial engine',
+                  },
+                  {
+                    name: 'Redis Message Broker',
+                    icon: Activity,
+                    status: healthData?.services?.redis || 'connected',
+                    desc: 'Task queues, rate limiter & Celery broker',
+                  },
+                  {
+                    name: 'Celery Background Worker',
+                    icon: Activity,
+                    status: healthData?.services?.celery || 'ready',
+                    desc: 'Automated dispatch & radius escalation engine',
+                  },
+                  {
+                    name: 'Storage Pipeline',
+                    icon: Server,
+                    status: healthData?.services?.storage || 'healthy',
+                    desc: 'Pillow optimization & object storage',
+                  },
+                  {
+                    name: 'Firebase Push Infrastructure',
+                    icon: Activity,
+                    status: healthData?.services?.firebase || 'configured',
+                    desc: 'Web Push & background service worker alerts',
+                  },
+                ].map((sub, idx) => (
+                  <div key={idx} className="p-3 flex items-center justify-between bg-white hover:bg-slate-50 transition-colors">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <sub.icon className="w-4 h-4 text-slate-400 shrink-0" />
+                      <div className="min-w-0">
+                        <p className="font-bold text-[#12213A] truncate">{sub.name}</p>
+                        <p className="text-[11px] text-slate-500 truncate">{sub.desc}</p>
+                      </div>
+                    </div>
+                    <span
+                      className={clsx(
+                        'px-2 py-0.5 rounded-md font-semibold text-[11px] capitalize shrink-0 ml-2',
+                        ['healthy', 'connected', 'ready', 'configured'].includes(sub.status)
+                          ? 'bg-emerald-50 text-emerald-700'
+                          : sub.status === 'degraded'
+                          ? 'bg-amber-50 text-amber-700'
+                          : 'bg-red-50 text-red-700'
+                      )}
+                    >
+                      {sub.status}
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              <div className="pt-2 flex justify-end gap-2">
+                <button
+                  onClick={() => setShowHealthModal(false)}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 transition-colors"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

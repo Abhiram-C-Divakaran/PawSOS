@@ -19,6 +19,14 @@ ALLOWED_MIME_TYPES = {
 }
 MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024  # 10 MB
 MAX_IMAGE_DIMENSION = 2048
+Image.MAX_IMAGE_PIXELS = 25_000_000  # Image bomb protection ceiling (~25 MP)
+
+MIME_TO_FORMAT = {
+    "image/jpeg": "JPEG",
+    "image/jpg": "JPEG",
+    "image/png": "PNG",
+    "image/webp": "WEBP",
+}
 
 def optimize_image(file: UploadFile) -> io.BytesIO:
     """
@@ -26,17 +34,39 @@ def optimize_image(file: UploadFile) -> io.BytesIO:
     - Normalizes image orientation using EXIF transpose
     - Resizes dimensions exceeding 2048px using high-quality Lanczos resampling
     - Strips unnecessary EXIF metadata to protect user location/device privacy
-    - Compresses without noticeable loss of forensic evidence quality
+    - Validates decoded image format against declared MIME type
+    - Rejects malformed, invalid, or bomb images with 400 Bad Request
     """
     file.file.seek(0)
     raw_bytes = file.file.read()
     file.file.seek(0)
 
+    content_type = file.content_type
+    expected_format = MIME_TO_FORMAT.get(content_type)
+    if not expected_format:
+        raise BadRequestException(f"Unsupported image type '{content_type}'.")
+
+    try:
+        # Check for image decompression bomb / verify integrity
+        check_img = Image.open(io.BytesIO(raw_bytes))
+        check_img.verify()
+    except Image.DecompressionBombError:
+        raise BadRequestException("Image dimensions exceed maximum safe limits (decompression bomb detected).")
+    except Exception as e:
+        logger.warning(f"Image decode failed: {e}")
+        raise BadRequestException("Malformed or unparseable image content.")
+
     try:
         image = Image.open(io.BytesIO(raw_bytes))
+        decoded_format = image.format
+        if decoded_format != expected_format:
+            if not (expected_format == "JPEG" and decoded_format in ("JPEG", "MPO")):
+                raise BadRequestException(
+                    f"Image content mismatch: declared '{content_type}' but decoded format is '{decoded_format}'."
+                )
+
         image = ImageOps.exif_transpose(image)
-        content_type = file.content_type
-        fmt = "JPEG" if content_type in ["image/jpeg", "image/jpg"] else ("WEBP" if content_type == "image/webp" else "PNG")
+        fmt = expected_format
 
         if fmt == "JPEG" and image.mode in ("RGBA", "P"):
             image = image.convert("RGB")
@@ -55,9 +85,13 @@ def optimize_image(file: UploadFile) -> io.BytesIO:
 
         buffer.seek(0)
         return buffer
+    except Image.DecompressionBombError:
+        raise BadRequestException("Image dimensions exceed maximum safe limits.")
+    except BadRequestException:
+        raise
     except Exception as e:
-        logger.warning(f"Image optimization error ({e}); falling back to raw upload.")
-        return io.BytesIO(raw_bytes)
+        logger.warning(f"Image optimization error: {e}")
+        raise BadRequestException("Invalid or corrupted image data.")
 
 class BaseStorageProvider(ABC):
     @abstractmethod

@@ -1,6 +1,6 @@
-# PawReach (PawSOS) — MVP Phase 2.5
+# PawReach (PawSOS) — Phase 2.7 (Integration Correctness & Staging Launch)
 
-PawReach is an end-to-end stray animal rescue coordination platform connecting citizens, field rescuers, veterinary clinics, foster caregivers, NGOs, and municipal authorities.
+PawReach is an enterprise-grade stray animal rescue coordination platform connecting citizens, field rescuers, veterinary clinics, foster caregivers, NGOs, and municipal authorities.
 
 ---
 
@@ -38,11 +38,11 @@ If all 4 radius levels are exhausted without responder acceptance, the case auto
 
 ## Technology Stack
 
-- **Backend**: Python 3.11+, FastAPI, SQLAlchemy 2, Alembic, GeoAlchemy2, PostgreSQL 15 + PostGIS 3.4
+- **Backend**: Python 3.12+, FastAPI, SQLAlchemy 2, Alembic, GeoAlchemy2, PostgreSQL 15 + PostGIS 3.4
 - **Background Workers**: Celery 5.6+, Redis 7
 - **Push Notifications**: Firebase Admin SDK (Backend) + Firebase Cloud Messaging (Web Client)
-- **Frontend**: React 19, TypeScript, Tailwind CSS, Leaflet / React-Leaflet, Vite, Vitest
-- **Security**: Argon2 password hashing, JWT with `jti` session revocation (`RefreshSession`), HttpOnly Secure cookies, Role-Based Access Control, Tenant Organization & Veterinary Facility Scoping
+- **Frontend**: React 19, TypeScript, Tailwind CSS, Leaflet / React-Leaflet, Vite, Vitest, Playwright
+- **Security**: Argon2 password hashing, JWT with `jti` session revocation (`RefreshSession`), Decompression bomb protection (25MP limit), MIME format verification, Role-Based Access Control, Strict Tenant Organization & Private Facility Scoping
 
 ---
 
@@ -70,7 +70,7 @@ Services started:
 - Frontend: `http://localhost:5173`
 - Backend API: `http://localhost:8000`
 - Swagger Docs: `http://localhost:8000/docs`
-- Health Check: `http://localhost:8000/health/ready`
+- Health Readiness Probe: `http://localhost:8000/health/ready`
 - Redis: `localhost:6379`
 - PostgreSQL: `localhost:5432`
 
@@ -104,27 +104,43 @@ npm run dev
 
 ## Running Test Suites
 
-### Backend Tests with Coverage
+### Backend Tests with Coverage (>=85% Required)
 ```bash
 cd backend
 pytest backend/tests --cov=app --cov-report=term-missing -v
 ```
 
 Test suites cover:
-- `test_background_dispatch.py`: Stale offer expiry via Celery worker, deterministic radius escalation (5 -> 10 -> 20 -> 40 km), responder exclusion, escalation to `UNRESOLVED`, admin alert distribution.
-- `test_token_revocation.py`: Server-side `RefreshSession` tracking, token rotation, single device logout (`POST /auth/logout`), all device logout (`POST /auth/logout-all`), replay rejection.
-- `test_scoping_security.py`: NGO Admin Org A isolation from Org B cases/responders/stats, Super Admin global access, Veterinary Facility A isolation from Facility B cases.
-- `test_pilot_scenarios.py`: End-to-end execution of all 5 operational pilot scenarios without manual database edits.
-- `test_dispatch_engine.py`: Composite dispatch scoring, row-locking race conditions, rejection reasons.
-- `test_e2e_rescue_lifecycle.py`: Complete lifecycle from reporting to release.
+- `test_api_contracts.py`: Comprehensive frontend/backend API contract validation for all NGO analytics, KPIs, and outcome classifications.
+- `test_storage_service.py`: Image decode integrity, format vs MIME validation, and decompression bomb denial.
+- `test_ngo_organization.py`: Multi-tenant boundary isolation, blocking cross-tenant responder and private facility assignments with audit logs.
+- `test_background_dispatch.py`: Stale offer expiry via Celery worker, deterministic radius escalation (5 -> 10 -> 20 -> 40 km), responder exclusion, escalation to `UNRESOLVED`.
+- `test_token_revocation.py`: Server-side `RefreshSession` tracking, token rotation, single/all device logout, replay rejection.
+- `test_scoping_security.py`: Cross-tenant scoping, Super Admin global oversight, Veterinary facility scoping.
+- `test_pilot_scenarios.py`: End-to-end execution of all 5 operational pilot scenarios.
 
-### Frontend Quality & Tests
+### Frontend Quality & Unit Tests
 ```bash
 cd frontend
 npm run lint          # oxlint checks
 npm run test:coverage # Vitest unit tests with coverage
 npm run build         # Production TypeScript build
 ```
+
+### Browser End-to-End Test Suite (Playwright)
+```bash
+cd frontend
+npm run test:e2e      # Headless Playwright test run
+npm run test:e2e:ui   # Interactive UI mode
+```
+
+E2E specifications in `frontend/e2e/`:
+- `citizen-report.spec.ts`: Emergency report form, species selection, geolocation, triage, and live case number generation.
+- `responder-flow.spec.ts`: Real-time dispatch offer alerting, acceptance, status advancement (`EN_ROUTE` -> `ANIMAL_LOCATED`).
+- `ngo-operations.spec.ts`: Command Center KPI cards, case dossier drilldown, audit trail inspection, manual responder assignment override.
+- `veterinary-flow.spec.ts`: Clinical inpatient registry, patient admission, vitals & treatment plan logging.
+- `cross-tenant.spec.ts`: Multi-tenant isolation verification, cross-tenant case access denial alert and safe navigation.
+- `concurrent-acceptance.spec.ts`: Dispatch race condition conflict handling, claim rejection notification.
 
 ---
 

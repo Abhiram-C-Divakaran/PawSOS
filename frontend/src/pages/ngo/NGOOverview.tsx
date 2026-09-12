@@ -75,7 +75,7 @@ export const NGOOverview: React.FC = () => {
       setTrendData(
         rawTrend.map((t) => ({
           date: t.date.length > 5 ? t.date.slice(5) : t.date,
-          minutes: t.avg_response_minutes,
+          minutes: t.average_response_minutes ?? t.avg_response_minutes ?? 0,
         }))
       );
 
@@ -778,9 +778,9 @@ export const NGOOverview: React.FC = () => {
                 <div className="min-w-0">
                   <p className="text-[11px] text-[#65748B] font-medium truncate">Avg. Response Time</p>
                   <p className="text-lg font-black text-[#12213A] mt-0.5">
-                    {kpis?.avg_response_minutes ?? 0} min
+                    {kpis?.average_response_minutes ?? kpis?.avg_response_minutes ?? 0} min
                   </p>
-                  <p className="text-[10px] text-slate-400 mt-0.5">Report to arrival</p>
+                  <p className="text-[10px] text-slate-400 mt-0.5">Acceptance to scene arrival</p>
                 </div>
               </div>
 

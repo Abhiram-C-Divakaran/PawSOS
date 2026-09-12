@@ -48,7 +48,7 @@ export const NGOAnalytics: React.FC = () => {
         api.get('/ngo/analytics/overview'),
         api.get(`/ngo/analytics/response-times?period=${period}`),
         api.get('/ngo/analytics/outcomes'),
-        api.get('/ngo/analytics/hotspots'),
+        api.get(`/ngo/analytics/hotspots?period=${period}`),
         api.get('/ngo/analytics/insights'),
       ]);
 
@@ -71,7 +71,7 @@ export const NGOAnalytics: React.FC = () => {
 
   const chartData = responseTimes.map((item) => ({
     date: item.date.length > 5 ? item.date.slice(5) : item.date,
-    minutes: item.avg_response_minutes,
+    minutes: item.average_response_minutes ?? item.avg_response_minutes ?? 0,
     cases: item.cases,
   }));
 
@@ -160,9 +160,9 @@ export const NGOAnalytics: React.FC = () => {
             </span>
           </div>
           <p className="text-3xl font-black text-[#12213A] mt-2">
-            {loading ? '—' : (overview?.avg_response_minutes ?? 0)} <span className="text-sm font-semibold text-slate-500">min</span>
+            {loading ? '—' : (overview?.average_response_minutes ?? overview?.avg_response_minutes ?? 0)} <span className="text-sm font-semibold text-slate-500">min</span>
           </p>
-          <p className="text-[11px] text-[#65748B] mt-1">Triage to arrival at scene</p>
+          <p className="text-[11px] text-[#65748B] mt-1">Acceptance to scene arrival</p>
         </div>
 
         <div className="bg-white p-5 rounded-2xl border border-[#E4EAF2] shadow-2xs">

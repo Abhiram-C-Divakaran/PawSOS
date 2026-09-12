@@ -154,3 +154,96 @@ def test_organization_unauthorized_roles(client, citizen_token, rescuer_token):
 
     res_rescuer = client.get("/api/v1/ngo/organization", headers={"Authorization": f"Bearer {rescuer_token}"})
     assert res_rescuer.status_code == 403
+
+def test_cross_tenant_responder_assignment_blocked(client, db, org_test_setup):
+    from app.models.rescue_case import RescueCase
+    from app.core.constants import RescueStatus
+
+    # Create a rescuer in Org B
+    rescuer_b = User(
+        full_name="Calicut Rescuer B",
+        email=f"rescuer_b_{uuid.uuid4().hex[:6]}@test.com",
+        phone=f"+9197{uuid.uuid4().hex[:8]}",
+        password_hash=get_password_hash("pass"),
+        role=UserRole.RESCUER,
+        organization_id=org_test_setup["org_b"].id,
+        is_active=True,
+    )
+    db.add(rescuer_b)
+
+    # Create a case in Org A
+    case_a = RescueCase(
+        case_number=f"CASE-{uuid.uuid4().hex[:6].upper()}",
+        reporter_id=org_test_setup["admin_a"].id,
+        species="Dog",
+        latitude=9.9816,
+        longitude=76.2999,
+        status=RescueStatus.SEARCHING_RESPONDER,
+        organization_id=org_test_setup["org_a"].id,
+    )
+    db.add(case_a)
+    db.commit()
+
+    # Admin A attempts to manually assign Rescuer B to Case A
+    token_a = org_test_setup["token_a"]
+    resp = client.post(
+        f"/api/v1/ngo/cases/{case_a.id}/action",
+        json={"action": "assign_responder", "rescuer_id": str(rescuer_b.id)},
+        headers={"Authorization": f"Bearer {token_a}"},
+    )
+    assert resp.status_code == 403
+    assert "Cannot assign responder from another organization" in resp.json()["detail"]
+
+    # Verify audit log was written
+    audit = db.query(AuditLog).filter(
+        AuditLog.action == "CROSS_TENANT_RESPONDER_ASSIGNMENT_DENIED",
+        AuditLog.entity_id == case_a.id,
+    ).first()
+    assert audit is not None
+    assert audit.actor_id == org_test_setup["admin_a"].id
+
+def test_cross_tenant_facility_assignment_blocked(client, db, org_test_setup):
+    from app.models.rescue_case import RescueCase
+    from app.core.constants import RescueStatus
+
+    # Private facility in Org B
+    fac_b = VeterinaryFacility(
+        name="Calicut Private Clinic",
+        phone="+914952345678",
+        latitude=11.2588,
+        longitude=75.7804,
+        organization_id=org_test_setup["org_b"].id,
+        is_verified=True,
+    )
+    db.add(fac_b)
+
+    # Case in Org A
+    case_a = RescueCase(
+        case_number=f"CASE-{uuid.uuid4().hex[:6].upper()}",
+        reporter_id=org_test_setup["admin_a"].id,
+        species="Cat",
+        latitude=9.9816,
+        longitude=76.2999,
+        status=RescueStatus.RESCUED,
+        organization_id=org_test_setup["org_a"].id,
+    )
+    db.add(case_a)
+    db.commit()
+
+    # Admin A attempts to change facility to Facility B
+    token_a = org_test_setup["token_a"]
+    resp = client.post(
+        f"/api/v1/ngo/cases/{case_a.id}/action",
+        json={"action": "change_facility", "veterinary_facility_id": str(fac_b.id)},
+        headers={"Authorization": f"Bearer {token_a}"},
+    )
+    assert resp.status_code == 403
+    assert "Cannot assign private veterinary facility of another organization" in resp.json()["detail"]
+
+    # Verify audit log
+    audit = db.query(AuditLog).filter(
+        AuditLog.action == "CROSS_TENANT_FACILITY_ASSIGNMENT_DENIED",
+        AuditLog.entity_id == case_a.id,
+    ).first()
+    assert audit is not None
+    assert audit.actor_id == org_test_setup["admin_a"].id

@@ -5,6 +5,8 @@ from datetime import datetime
 from app.core.constants import RescuePriority, RescueStatus, RescuerAvailability
 
 class NGOOverviewKPIs(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     active_cases: int
     critical_cases: int
     urgent_cases: int = 0
@@ -18,15 +20,22 @@ class NGOOverviewKPIs(BaseModel):
     unresolved_cases: int = 0
     closed_today: int = 0
     avg_dispatch_seconds: float
-    avg_response_minutes: float
+    average_response_minutes: float
+    avg_response_minutes: Optional[float] = None
     avg_completion_minutes: float = 0.0
     completion_rate_pct: float
     responder_availability_pct: float
     total_cases: int
+    average_dispatch_latency_seconds: Optional[float] = None
+    average_acceptance_latency_seconds: Optional[float] = None
+    average_arrival_minutes: Optional[float] = None
+    average_rescue_duration_minutes: Optional[float] = None
+    average_case_completion_minutes: Optional[float] = None
 
 class ResponseTimeDataPoint(BaseModel):
     date: str
     average_response_minutes: float
+    avg_response_minutes: Optional[float] = None
     cases: int
 
 class RescueOutcomesData(BaseModel):
@@ -35,6 +44,12 @@ class RescueOutcomesData(BaseModel):
     unresolved_rate: float
     veterinary_handoff_rate: float
     total_cases: int
+    active_field_count: int = 0
+    rescued_transport_count: int = 0
+    medical_care_count: int = 0
+    post_care_count: int = 0
+    successful_terminal_count: int = 0
+    failure_count: int = 0
 
 class NGOInsightsData(BaseModel):
     busiest_day: Optional[str] = None
@@ -79,6 +94,8 @@ class NotificationPreferences(BaseModel):
     case_closures: bool = True
 
 class HotspotItem(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     latitude: float
     longitude: float
     area_name: Optional[str] = None
@@ -87,6 +104,9 @@ class HotspotItem(BaseModel):
     urgent_count: int = 0
     top_species: str
     average_response_minutes: float = 0.0
+    avg_response_minutes: Optional[float] = None
+    average_acceptance_minutes: Optional[float] = None
+    average_arrival_minutes: Optional[float] = None
 
 class NGOResponderSummary(BaseModel):
     id: uuid.UUID
