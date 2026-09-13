@@ -1,6 +1,7 @@
 import { lazy, Suspense, type ReactElement } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
-import { AuthProvider, useAuth } from './context/AuthContext';
+import { AuthProvider } from './context/AuthContext';
+import { useAuth } from './context/useAuth';
 import { Layout } from './components/Layout';
 import { RouteLoadingSpinner } from './components/RouteLoadingSpinner';
 

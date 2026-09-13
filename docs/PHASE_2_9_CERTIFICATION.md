@@ -8,13 +8,11 @@
 | Attribute | Details |
 | :--- | :--- |
 | **Product Name** | PawReach (Repository: PawSOS) |
-| **Phase Target** | MVP Phase 2.9 — Staging Deployment, Security Hardening & Pilot Certification |
+| **Phase Target** | MVP Phase 2.9B — Actual Staging Provisioning, Truthful CD & Pilot Validation |
 | **Branch** | `main` |
-| **Baseline Commit** | `96f8e937f59f9ae69afd01fec534308cfda66fb5` |
-| **Date** | September 13, 2026 |
-| **Assessment Result** | **CERTIFIED — ALL PHASE 2.9 GATES PASSED** |
+| **Assessment Result** | **CODE VERIFIED — STAGING NOT DEPLOYED (READY FOR CLOUD PROVISIONING)** |
 
-Phase 2.9 transitions the CI-verified PawReach emergency animal response platform into a hardened, deployable, measurable staging environment ready for controlled field pilot trials. All security debt has been remediated, dependency vulnerabilities eliminated, bundle sizes optimized by over 70%, and production-grade deployment manifests established.
+Phase 2.9B completes the transition of the CI-verified PawReach emergency animal response platform into a hardened, deployable, measurable staging environment ready for controlled field pilot trials. Deployment is separated into a dedicated truthful CD workflow, all security debt has been remediated, dependency vulnerabilities eliminated, bundle sizes optimized by over 70%, Leaflet asset resolution cleaned, and production-grade deployment manifests established. Real cloud deployment is pending injection of external cloud credentials.
 
 ---
 
@@ -70,7 +68,7 @@ Phase 2.9 transitions the CI-verified PawReach emergency animal response platfor
 | :--- | :--- | :--- |
 | **`npm audit` Vulnerabilities** | **1 High** (`undici <=6.27.0` via Firebase 10.8.0) | **0 Vulnerabilities** (0 critical, 0 high, 0 moderate, 0 low) |
 | **Remediation Strategy** | Unpatched nested dependency | Scoped npm overrides in `frontend/package.json` |
-| **Audit Log Reference** | N/A | [`docs/SECURITY_DEPENDENCY_AUDIT.md`](file:///c:/Users/Abhiram/Documents/PawSOS/docs/SECURITY_DEPENDENCY_AUDIT.md) |
+| **Audit Log Reference** | N/A | [`SECURITY_DEPENDENCY_AUDIT.md`](./SECURITY_DEPENDENCY_AUDIT.md) |
 
 ### Override Architecture
 ```json
@@ -112,11 +110,11 @@ Phase 2.9 transitions the CI-verified PawReach emergency animal response platfor
 
 | Test Suite | Execution Command | Result | Coverage / Status |
 | :--- | :--- | :--- | :--- |
-| **Backend Unit & Integration** | `pytest tests/` | **108 passed**, 0 failed | **87.16% coverage** (exceeds $\ge 85\%$ threshold) |
+| **Backend Unit & Integration** | `pytest tests/` | **108 passed**, 0 failed | **86.8% coverage** (exceeds $\ge 85\%$ threshold) |
 | **Staging Security Tests** | `pytest tests/test_staging_security.py` | **25 passed**, 0 failed | Password policy, config checks, S3/FCM error lifecycles |
-| **Frontend Vitest Suite** | `npm run test:coverage` | **40 passed**, 0 failed | 11 suites passing, 0 errors |
-| **Frontend Linting** | `npm run lint` | **0 errors**, 0 warnings | Clean ESLint verification |
-| **Frontend Production Build** | `npm run build` | Clean exit code 0 | Zero TypeScript errors, zero Rollup chunk warnings |
+| **Frontend Vitest Suite** | `npm run test:coverage` | **61 passed**, 0 failed | 13 suites passing, 0 errors |
+| **Frontend Linting** | `npm run lint` | **0 errors**, 0 warnings | Clean oxlint verification on 66 files |
+| **Frontend Production Build** | `npm run build` | Clean exit code 0 | Zero TypeScript errors, zero Rollup chunk warnings, 0 Leaflet asset warnings |
 | **Mocked UI Contract Suite** | `npm run test:e2e:ui-contract` | **6 passed**, 0 failed | Citizen, Responder, NGO, Vet, Cross-Tenant, Concurrency |
 | **Fullstack E2E Suite** | `npm run test:e2e:fullstack` | **6 passed**, 0 failed | Unmocked PostgreSQL/PostGIS, Redis, Celery, FastAPI, UI |
 
@@ -126,14 +124,15 @@ Phase 2.9 transitions the CI-verified PawReach emergency animal response platfor
 
 | Artifact | File Path | Purpose |
 | :--- | :--- | :--- |
-| **Docker Compose Staging** | [`docker-compose.staging.yml`](file:///c:/Users/Abhiram/Documents/PawSOS/docker-compose.staging.yml) | Multi-container setup with separate web, worker, beat, postgis, redis, nginx |
-| **Frontend Nginx Config** | [`frontend/nginx.conf`](file:///c:/Users/Abhiram/Documents/PawSOS/frontend/nginx.conf) | Production Nginx reverse-proxy SPA routing, gzip, and security headers |
-| **Frontend Dockerfile** | [`frontend/Dockerfile`](file:///c:/Users/Abhiram/Documents/PawSOS/frontend/Dockerfile) | Multi-stage production build (`node:24-alpine` $\to$ `nginx:alpine`) |
-| **Render Blueprint** | [`render.yaml`](file:///c:/Users/Abhiram/Documents/PawSOS/render.yaml) | Cloud PaaS definition for web, worker, beat, managed PostgreSQL/PostGIS, Redis |
-| **Procfile** | [`Procfile`](file:///c:/Users/Abhiram/Documents/PawSOS/Procfile) | Standard declarations for `web`, `worker`, and `beat` processes |
-| **S3 Upload Verification** | [`scripts/verify_staging_upload.py`](file:///c:/Users/Abhiram/Documents/PawSOS/scripts/verify_staging_upload.py) | Standalone verification script testing image upload pipeline & headers |
-| **Staging Smoke Test** | [`scripts/staging_smoke_test.py`](file:///c:/Users/Abhiram/Documents/PawSOS/scripts/staging_smoke_test.py) | End-to-end smoke test validating API, readiness, frontend, and CORS |
-| **CI Staging Pipeline** | [`.github/workflows/ci.yml`](file:///c:/Users/Abhiram/Documents/PawSOS/.github/workflows/ci.yml) | Gated deployment & post-deploy smoke test jobs |
+| **Docker Compose Staging** | [`docker-compose.staging.yml`](../docker-compose.staging.yml) | Multi-container setup with separate web, worker, beat, postgis, redis, nginx with required-variable syntax |
+| **Frontend Nginx Config** | [`frontend/nginx.conf`](../frontend/nginx.conf) | Production Nginx reverse-proxy SPA routing, gzip, and security headers |
+| **Frontend Dockerfile** | [`frontend/Dockerfile`](../frontend/Dockerfile) | Multi-stage production build (`node:24-alpine` $\to$ `nginx:alpine`) |
+| **Render Blueprint** | [`render.yaml`](../render.yaml) | Cloud PaaS definition for web, worker, beat, static frontend, and `pawreach-staging-common` group |
+| **Procfile** | [`Procfile`](../Procfile) | Standard declarations for `web`, `worker`, and `beat` processes |
+| **S3 Upload Verification** | [`scripts/verify_staging_upload.py`](../scripts/verify_staging_upload.py) | Standalone verification script testing image upload pipeline & headers |
+| **Staging Smoke Test** | [`scripts/staging_smoke_test.py`](../scripts/staging_smoke_test.py) | End-to-end smoke test validating API, readiness, git_sha, frontend, and CORS |
+| **CI Automation Gate** | [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) | Deterministic CI gate (test, lint, build, coverage) without misleading false-green deploys |
+| **Staging CD Workflow** | [`.github/workflows/staging-deploy.yml`](../.github/workflows/staging-deploy.yml) | Dedicated truthful CD workflow with environment gating and fail-fast validation |
 
 ---
 
@@ -141,11 +140,16 @@ Phase 2.9 transitions the CI-verified PawReach emergency animal response platfor
 
 | Dimension | Certification Status | Notes |
 | :--- | :--- | :--- |
-| **1. Application Codebase** | **CERTIFIED (100% GREEN)** | All CI gates pass; zero regressions; zero Phase 3 features introduced. |
-| **2. Security Hardening** | **CERTIFIED** | 0 hardcoded secrets; 0 npm vulnerabilities; strong seed password policy. |
-| **3. Performance & Bundle** | **CERTIFIED** | Initial JS load reduced by 70.6%; zero chunks over 500 kB. |
-| **4. Architecture Separation** | **CERTIFIED** | Dedicated worker and singleton beat processes; 6-subsystem health telemetry. |
-| **5. Staging Cloud Provisioning** | **READY FOR PROVISIONING** | Requires cloud credentials (`Status: REQUIRES_EXTERNAL_CREDENTIALS`). |
-| **6. Field Pilot Trial Readiness** | **READY FOR CONTROLLED PILOT** | Field execution protocols documented; physical device test pending deployment. |
+| **1. Application Codebase** | **CODE VERIFIED (100% GREEN)** | All CI gates pass; 108 backend tests pass; 61 frontend tests pass; zero regressions. |
+| **2. Security Hardening** | **CODE VERIFIED** | 0 hardcoded secrets; 0 npm vulnerabilities; 0 lint warnings; strong seed password policy. |
+| **3. Performance & Bundle** | **CODE VERIFIED** | Initial JS load reduced by 70.6%; zero chunks over 500 kB; 0 Leaflet asset warnings. |
+| **4. Architecture Separation** | **CODE VERIFIED** | Dedicated worker and singleton beat processes; 6-subsystem health telemetry. |
+| **5. Staging Cloud Provisioning** | **PENDING CLOUD CREDENTIALS** | Requires external cloud credentials (`Status: REQUIRES_EXTERNAL_CREDENTIALS`). |
+| **6. Field Pilot Trial Readiness** | **READY FOR CONTROLLED PILOT** | Field execution protocols documented; physical device test pending cloud deployment. |
 
-**OVERALL PHASE 2.9 VERDICT: SIGN-OFF APPROVED FOR STAGING DEPLOYMENT & CONTROLLED PILOT TRIALS.**
+```text
+================================================================================
+FINAL PILOT CERTIFICATION VERDICT:
+CODE VERIFIED — STAGING NOT DEPLOYED
+================================================================================
+```

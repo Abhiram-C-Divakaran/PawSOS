@@ -106,6 +106,10 @@ class BaseStorageProvider(ABC):
     def check_health(self) -> bool:
         pass
 
+    @abstractmethod
+    def get_presigned_url(self, key_or_url: str, expires_in: int = 3600) -> str:
+        pass
+
 class LocalStorageProvider(BaseStorageProvider):
     def __init__(self, upload_dir: str = "uploads"):
         self.upload_dir = upload_dir
@@ -150,6 +154,10 @@ class LocalStorageProvider(BaseStorageProvider):
     def check_health(self) -> bool:
         return os.path.exists(self.upload_dir) and os.access(self.upload_dir, os.W_OK)
 
+    def get_presigned_url(self, key_or_url: str, expires_in: int = 3600) -> str:
+        """For local storage, return the URL as is."""
+        return key_or_url
+
 class S3StorageProvider(BaseStorageProvider):
     def __init__(self):
         import boto3
@@ -168,6 +176,28 @@ class S3StorageProvider(BaseStorageProvider):
         except Exception as e:
             logger.warning(f"S3 health check failed: {e}")
             return False
+
+    def get_presigned_url(self, key_or_url: str, expires_in: int = 3600) -> str:
+        """
+        Generate a secure, time-limited presigned GET URL for an evidence image stored in private S3 bucket.
+        Protects user/animal location privacy without making the bucket publicly accessible.
+        """
+        key = key_or_url
+        prefix = f"https://{self.bucket}.s3.{settings.AWS_REGION}.amazonaws.com/"
+        if key.startswith(prefix):
+            key = key[len(prefix):]
+        elif key.startswith("http://") or key.startswith("https://"):
+            # If external URL or different host, return as is
+            return key_or_url
+        try:
+            return self.s3_client.generate_presigned_url(
+                "get_object",
+                Params={"Bucket": self.bucket, "Key": key},
+                ExpiresIn=expires_in,
+            )
+        except Exception as e:
+            logger.error(f"Failed to generate presigned URL for {key}: {e}")
+            return key_or_url
 
     async def upload_image(self, file: UploadFile) -> str:
         content_type = file.content_type

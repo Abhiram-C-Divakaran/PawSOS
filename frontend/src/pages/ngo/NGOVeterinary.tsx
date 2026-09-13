@@ -53,7 +53,14 @@ export const NGOVeterinary: React.FC = () => {
   };
 
   useEffect(() => {
-    fetchFacilities();
+    let mounted = true;
+    const init = async () => {
+      if (mounted) await fetchFacilities();
+    };
+    void init();
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   const filteredFacilities = facilities.filter((f) => {

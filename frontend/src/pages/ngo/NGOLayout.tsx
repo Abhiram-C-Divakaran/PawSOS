@@ -20,7 +20,7 @@ import {
   Database,
 } from 'lucide-react';
 import clsx from 'clsx';
-import { useAuth } from '../../context/AuthContext';
+import { useAuth } from '../../context/useAuth';
 import { NotificationBell } from '../../components/NotificationBell';
 import api from '../../services/api';
 import type { OrganizationProfile, HealthReadinessResponse } from '../../types';

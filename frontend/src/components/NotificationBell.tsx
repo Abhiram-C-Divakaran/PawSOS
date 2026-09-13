@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Bell, CheckCheck, ShieldAlert, HeartHandshake, Stethoscope } from 'lucide-react';
 import api from '../services/api';
@@ -16,21 +16,27 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ variant = 'l
   const dropdownRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
 
-  const fetchNotifications = useCallback(async () => {
-    try {
-      const res = await api.get('/notifications');
-      setNotifications(res.data.items || []);
-      setUnreadCount(res.data.unread_count || 0);
-    } catch {
-      // Ignore network errors in polling
-    }
-  }, []);
 
   useEffect(() => {
-    fetchNotifications();
-    const interval = setInterval(fetchNotifications, 15000);
-    return () => clearInterval(interval);
-  }, [fetchNotifications]);
+    let isMounted = true;
+    const poll = async () => {
+      try {
+        const res = await api.get('/notifications');
+        if (isMounted) {
+          setNotifications(res.data.items || []);
+          setUnreadCount(res.data.unread_count || 0);
+        }
+      } catch {
+        // Ignore network errors in polling
+      }
+    };
+    void poll();
+    const interval = setInterval(poll, 15000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, []);
 
   // Close dropdown on outside click
   useEffect(() => {

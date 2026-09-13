@@ -89,9 +89,16 @@ export const NGOOverview: React.FC = () => {
   };
 
   useEffect(() => {
-    fetchOverviewData();
+    let mounted = true;
+    const init = async () => {
+      if (mounted) await fetchOverviewData();
+    };
+    void init();
     const interval = setInterval(fetchOverviewData, 20000);
-    return () => clearInterval(interval);
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+    };
   }, []);
 
   // Initialize and update Live Leaflet Operations Map

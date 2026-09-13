@@ -13,7 +13,7 @@ vi.mock('../services/api', () => ({
   formatApiError: (err: any) => err?.message || 'Error',
 }));
 
-vi.mock('../context/AuthContext', () => ({
+vi.mock('../context/useAuth', () => ({
   useAuth: () => ({
     logout: vi.fn(),
     user: { full_name: 'Admin User' },

@@ -1,4 +1,4 @@
-# PawReach (PawSOS) — Phase 2.7 (Integration Correctness & Staging Launch)
+# PawReach (PawSOS) — MVP Phase 2.9B: Staging Deployment & Controlled Pilot Validation
 
 PawReach is an enterprise-grade stray animal rescue coordination platform connecting citizens, field rescuers, veterinary clinics, foster caregivers, NGOs, and municipal authorities.
 
@@ -196,21 +196,28 @@ E2E specifications in `frontend/e2e/`:
 
 ---
 
-## Staging Test Accounts (from `seed_staging.py`)
+## Staging Test Accounts (from `backend/scripts/seed_staging.py`)
 
 All staging accounts are provisioned with the password set via `STAGING_SEED_PASSWORD` (minimum 14 characters, non-default):
 
-| Role | Email | Phone | Scope / Affiliation |
-|------|-------|-------|---------------------|
-| Citizen | `citizen@staging.pawsos.org` | `+919876543210` | Public Reporter |
-| Rescuer A | `rescuer.a@staging.pawsos.org` | `+919876543211` | Cochin Animal Rescue Network (Kochi Marine Drive) |
-| Rescuer B | `rescuer.b@staging.pawsos.org` | `+919876543212` | Cochin Animal Rescue Network (Kochi Kaloor) |
-| Veterinarian | `vet@staging.pawsos.org` | `+919876543213` | Cochin PetCare Emergency Hospital |
-| NGO Admin | `admin@staging.pawsos.org` | `+919876543214` | Cochin Animal Rescue Network |
-| Super Admin | `superadmin@staging.pawsos.org` | `+919876543215` | Global Operations |
+| Role | Email | Scope / Affiliation |
+|------|-------|---------------------|
+| Citizen | `citizen@staging.pawsos.org` | Public Reporter |
+| Super Admin | `superadmin@staging.pawsos.org` | Global Operations |
+| **Org Alpha Admin** | `admin@staging.pawsos.org` / `admin.a@staging.pawsos.org` | Organization Alpha - Stray Relief |
+| Rescuer Alpha 1 | `rescuer.a@staging.pawsos.org` | Org Alpha (Kochi Marine Drive) |
+| Rescuer Alpha 2 | `rescuer.b@staging.pawsos.org` | Org Alpha (Kochi Kaloor) |
+| Veterinarian Alpha | `vet@staging.pawsos.org` | Cochin PetCare Emergency Hospital |
+| **Org Beta Admin** | `admin.b@staging.pawsos.org` | Organization Beta - Animal Aid Alliance |
+| Rescuer Beta 1 | `rescuer.b1@staging.pawsos.org` | Org Beta (Fort Kochi) |
+| Rescuer Beta 2 | `rescuer.b2@staging.pawsos.org` | Org Beta (Edappally) |
+| Veterinarian Beta | `vet.b@staging.pawsos.org` | Alliance Trauma Clinic |
 
 ---
 
 ## Operational Documentation
 - [Pilot Verification Checklist](docs/PILOT_CHECKLIST.md)
+- [Phase 2.9B Certification Report](docs/PHASE_2_9_CERTIFICATION.md)
+- [Staging Deployment & Pilot Results](docs/STAGING_PILOT_RESULTS.md)
+- [Staging Deployment Architecture](docs/STAGING_DEPLOYMENT.md)
 - [Operations Incident Runbook](docs/OPERATIONS_RUNBOOK.md)

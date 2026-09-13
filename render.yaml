@@ -2,98 +2,72 @@ services:
   # 1. FastAPI API Web Service
   - type: web
     name: pawreach-staging-api
-    env: python
+    runtime: python
     region: oregon
     plan: starter
     buildCommand: pip install -r backend/requirements.txt && alembic -c backend/alembic.ini upgrade head
     startCommand: uvicorn app.main:app --app-dir backend --host 0.0.0.0 --port $PORT --workers 2
     healthCheckPath: /api/v1/health
     envVars:
-      - key: ENVIRONMENT
-        value: staging
-      - key: DATABASE_URL
-        fromDatabase:
-          name: pawreach-staging-db
-          property: connectionString
-      - key: REDIS_URL
-        fromService:
-          type: redis
-          name: pawreach-staging-redis
-          property: connectionString
-      - key: JWT_SECRET_KEY
-        generateValue: true
-      - key: JWT_ALGORITHM
-        value: HS256
-      - key: ACCESS_TOKEN_EXPIRE_MINUTES
-        value: 30
-      - key: REFRESH_TOKEN_EXPIRE_DAYS
-        value: 7
-      - key: CORS_ORIGINS
-        sync: false
-      - key: STORAGE_PROVIDER
-        value: s3
-      - key: AWS_ACCESS_KEY_ID
-        sync: false
-      - key: AWS_SECRET_ACCESS_KEY
-        sync: false
-      - key: AWS_REGION
-        value: us-east-1
-      - key: S3_BUCKET_NAME
-        sync: false
+      - fromGroup: pawreach-staging-common
       - key: COOKIE_SECURE
         value: "true"
-      - key: SENTRY_DSN
-        sync: false
+      - key: COOKIE_SAMESITE
+        value: lax
 
   # 2. Celery Worker Background Service
   - type: worker
     name: pawreach-staging-worker
-    env: python
+    runtime: python
     region: oregon
     plan: starter
     buildCommand: pip install -r backend/requirements.txt
     startCommand: celery -A app.tasks.celery_app.celery_app --workdir backend worker --loglevel=INFO -Q dispatch,notifications,default
     envVars:
-      - key: ENVIRONMENT
-        value: staging
-      - key: DATABASE_URL
-        fromDatabase:
-          name: pawreach-staging-db
-          property: connectionString
-      - key: REDIS_URL
-        fromService:
-          type: redis
-          name: pawreach-staging-redis
-          property: connectionString
-      - key: CELERY_HEARTBEAT_INTERVAL_SECONDS
-        value: 5.0
-      - key: CELERY_HEARTBEAT_TTL_SECONDS
-        value: 60
+      - fromGroup: pawreach-staging-common
 
-  # 3. Celery Beat Periodic Scheduler
+  # 3. Celery Beat Periodic Scheduler (Singleton)
   - type: worker
     name: pawreach-staging-beat
-    env: python
+    runtime: python
     region: oregon
     plan: starter
+    numInstances: 1
     buildCommand: pip install -r backend/requirements.txt
-    startCommand: celery -A app.tasks.celery_app.celery_app --workdir backend beat --loglevel=INFO
+    startCommand: celery -A app.tasks.celery_app.celery_app --workdir backend beat --loglevel=INFO --pidfile=/tmp/celerybeat.pid
     envVars:
-      - key: ENVIRONMENT
-        value: staging
-      - key: DATABASE_URL
-        fromDatabase:
-          name: pawreach-staging-db
-          property: connectionString
-      - key: REDIS_URL
-        fromService:
-          type: redis
-          name: pawreach-staging-redis
-          property: connectionString
-      - key: DISPATCH_BEAT_INTERVAL_SECONDS
-        value: 2.0
+      - fromGroup: pawreach-staging-common
 
-  # 4. Redis Service
+  # 4. Frontend Static PWA Site
+  - type: web
+    name: pawreach-staging-frontend
+    runtime: static
+    region: oregon
+    buildCommand: npm --prefix frontend ci && npm --prefix frontend run build
+    staticPublishPath: ./frontend/dist
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: VITE_API_BASE_URL
+        sync: false
+      - key: VITE_FIREBASE_API_KEY
+        sync: false
+      - key: VITE_FIREBASE_AUTH_DOMAIN
+        sync: false
+      - key: VITE_FIREBASE_PROJECT_ID
+        sync: false
+      - key: VITE_FIREBASE_STORAGE_BUCKET
+        sync: false
+      - key: VITE_FIREBASE_MESSAGING_SENDER_ID
+        sync: false
+      - key: VITE_FIREBASE_APP_ID
+        sync: false
+      - key: VITE_FIREBASE_VAPID_KEY
+        sync: false
+
+  # 5. Managed Redis Service
   - type: redis
     name: pawreach-staging-redis
     region: oregon
@@ -102,8 +76,57 @@ services:
     ipAllowList: []
 
 databases:
-  # Managed PostgreSQL with PostGIS
+  # Managed PostgreSQL with PostGIS (15+)
   - name: pawreach-staging-db
     region: oregon
     plan: starter
     postgresMajorVersion: 15
+
+envVarGroups:
+  - name: pawreach-staging-common
+    envVars:
+      - key: ENVIRONMENT
+        value: staging
+      - key: DATABASE_URL
+        fromDatabase:
+          name: pawreach-staging-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: pawreach-staging-redis
+          property: connectionString
+      - key: STORAGE_PROVIDER
+        value: s3
+      - key: AWS_REGION
+        value: ap-south-1
+      - key: AWS_ACCESS_KEY_ID
+        sync: false
+      - key: AWS_SECRET_ACCESS_KEY
+        sync: false
+      - key: S3_BUCKET_NAME
+        sync: false
+      - key: JWT_SECRET_KEY
+        generateValue: true
+      - key: JWT_ALGORITHM
+        value: HS256
+      - key: ACCESS_TOKEN_EXPIRE_MINUTES
+        value: "30"
+      - key: REFRESH_TOKEN_EXPIRE_DAYS
+        value: "7"
+      - key: CORS_ORIGINS
+        sync: false
+      - key: SENTRY_DSN
+        sync: false
+      - key: CELERY_HEARTBEAT_INTERVAL_SECONDS
+        value: "10.0"
+      - key: CELERY_HEARTBEAT_TTL_SECONDS
+        value: "60"
+      - key: DISPATCH_BEAT_INTERVAL_SECONDS
+        value: "20.0"
+      - key: DISPATCH_OFFER_EXPIRY_SECONDS
+        value: "20"
+      - key: FIREBASE_PROJECT_ID
+        sync: false
+      - key: FIREBASE_CREDENTIALS_PATH
+        sync: false

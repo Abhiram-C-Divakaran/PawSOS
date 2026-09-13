@@ -13,11 +13,12 @@ router = APIRouter()
 
 @router.get("/health")
 def health_liveness():
-    """Basic liveness probe verifying the API process is alive and responsive."""
+    """Basic liveness probe verifying the API process is alive and responsive with build metadata."""
     return {
         "status": "ok",
         "environment": settings.ENVIRONMENT,
-        "version": "1.0.0"
+        "version": "2.0.0",
+        "git_sha": settings.GIT_SHA,
     }
 
 @router.get("/health/ready")

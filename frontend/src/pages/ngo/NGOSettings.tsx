@@ -12,7 +12,7 @@ import {
   RotateCw,
 } from 'lucide-react';
 import api, { formatApiError } from '../../services/api';
-import { useAuth } from '../../context/AuthContext';
+import { useAuth } from '../../context/useAuth';
 import type { DispatchSettings, NotificationPreferences } from '../../types';
 
 export const NGOSettings: React.FC = () => {
@@ -35,8 +35,6 @@ export const NGOSettings: React.FC = () => {
 
   const fetchSettings = async () => {
     try {
-      setLoading(true);
-      setError(null);
       const [dispatchRes, prefRes] = await Promise.all([
         api.get('/ngo/settings/dispatch'),
         api.get('/auth/me/preferences').catch(() => ({
@@ -62,7 +60,14 @@ export const NGOSettings: React.FC = () => {
   };
 
   useEffect(() => {
-    fetchSettings();
+    let mounted = true;
+    const init = async () => {
+      if (mounted) await fetchSettings();
+    };
+    void init();
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   const handleSavePreferences = async (e: React.FormEvent) => {

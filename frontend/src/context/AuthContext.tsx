@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
+import { createContext, useState, useEffect, useCallback, type ReactNode } from 'react';
 import api from '../services/api';
 import { unregisterDeviceTokenFromBackend } from '../services/firebase';
 import type { User } from '../types';
@@ -16,7 +16,10 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState<boolean>(true);
+  const [loading, setLoading] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return Boolean(localStorage.getItem('access_token'));
+  });
 
   const refreshUser = useCallback(async () => {
     const token = localStorage.getItem('access_token');
@@ -40,8 +43,30 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   useEffect(() => {
-    refreshUser();
-  }, [refreshUser]);
+    const token = localStorage.getItem('access_token');
+    if (!token) return;
+
+    let isMounted = true;
+    api.get('/auth/me')
+      .then((response) => {
+        if (isMounted) setUser(response.data);
+      })
+      .catch((error) => {
+        console.error('Failed to fetch user:', error);
+        if (isMounted) {
+          setUser(null);
+          localStorage.removeItem('access_token');
+          localStorage.removeItem('refresh_token');
+        }
+      })
+      .finally(() => {
+        if (isMounted) setLoading(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const login = async (tokenData: any) => {
     if (tokenData?.access_token) {
@@ -80,10 +105,5 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   );
 };
 
-export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
-};
+export { AuthContext };
+

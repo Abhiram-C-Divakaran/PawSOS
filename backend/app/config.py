@@ -1,5 +1,5 @@
 import os
-from pydantic import model_validator
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
@@ -10,6 +10,16 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     CORS_ORIGINS: str = ""
     ENVIRONMENT: str = "development"
+    PROCESS_TYPE: str = Field(default_factory=lambda: os.getenv("PROCESS_TYPE", "api"))
+    GIT_SHA: str = Field(
+        default_factory=lambda: (
+            os.getenv("GIT_SHA")
+            or os.getenv("RENDER_GIT_COMMIT")
+            or os.getenv("VERCEL_GIT_COMMIT_SHA")
+            or os.getenv("GITHUB_SHA")
+            or "unknown"
+        )
+    )
 
     # Redis & Background Tasks
     REDIS_URL: str = "redis://localhost:6379/0"
@@ -85,11 +95,12 @@ class Settings(BaseSettings):
                 raise ValueError(
                     f"A valid REDIS_URL (redis:// or rediss://) is required in {env} environment."
                 )
-            # 4. CORS: Explicit origin required, wildcard prohibited
-            if not self.CORS_ORIGINS or self.CORS_ORIGINS.strip() == "*":
-                raise ValueError(
-                    f"Explicit CORS_ORIGINS must be configured in {env} environment. Wildcard '*' is prohibited for credentialed requests."
-                )
+            # 4. CORS: Explicit origin required for HTTP services, wildcard prohibited
+            if self.PROCESS_TYPE.lower() in ("api", "web", "all"):
+                if not self.CORS_ORIGINS or self.CORS_ORIGINS.strip() == "*":
+                    raise ValueError(
+                        f"Explicit CORS_ORIGINS must be configured in {env} environment. Wildcard '*' is prohibited for credentialed requests."
+                    )
             # 5. S3 Storage: All credentials and bucket required when STORAGE_PROVIDER=s3
             if self.STORAGE_PROVIDER.lower() == "s3":
                 if not (

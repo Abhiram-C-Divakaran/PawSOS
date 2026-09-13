@@ -27,11 +27,13 @@ All automated tests must pass and coverage thresholds must be satisfied on `main
 - [x] **Token Revocation & Session Security** (`test_token_revocation.py`, `test_health_and_security.py`): Single logout, global logout, refresh-token rotation, replay attack rejection, cookie security.
 
 ### 2. Frontend Automated Testing & Build Validation
-- [x] **Vitest Unit & Integration Suite**: 11 test suites, **40 tests passing** (0 failures).
+- [x] **Vitest Unit & Integration Suite**: 13 test suites, **61 tests passing** (0 failures) including API interceptor token rotation and Firebase push notification lifecycle.
 - [x] **Frontend Dependency Security Audit**: **0 vulnerabilities** (0 critical, 0 high, 0 moderate, 0 low). Scoped npm overrides for Firebase `undici: ^6.28.1` and jsdom `undici: ^7.25.0`.
-- [x] **Production Bundle Optimization**:
+- [x] **Frontend Linter Hygiene**: **0 errors, 0 warnings** across all 66 files via oxlint.
+- [x] **Production Bundle & Asset Resolution Optimization**:
   - Initial entry bundle reduced from `1,083.20 kB` to **`317.75 kB`** (-70.6% reduction).
   - Zero chunks over 500 kB (eliminating all Vite/Rollup chunk warnings).
+  - Zero Leaflet distribution asset warnings (all markers and layers resolved at build time).
   - Code splitting via `React.lazy()` for all heavy routes (Leaflet map: 148 kB, Recharts: 332 kB, Command Center: 42 kB, Analytics: 30 kB, Vet: 28 kB).
 - [x] **NGO Analytics Component Tests** (`NGOAnalytics.test.tsx`): Metric cards, Recharts responsive rendering, outcome distribution, spatial density.
 - [x] **NGO Organization Component Tests** (`NGOOrganization.test.tsx`): Dynamic profile loading, input editing, mutation success banner.

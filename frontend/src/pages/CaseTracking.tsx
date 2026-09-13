@@ -29,10 +29,17 @@ export const CaseTracking = () => {
   }, [id]);
 
   useEffect(() => {
-    fetchCaseData();
+    let mounted = true;
+    const init = async () => {
+      if (mounted) await fetchCaseData();
+    };
+    void init();
     // Auto refresh every 10 seconds for real-time tracking
     const interval = setInterval(fetchCaseData, 10000);
-    return () => clearInterval(interval);
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+    };
   }, [fetchCaseData]);
 
   if (loading && !rescueCase) {

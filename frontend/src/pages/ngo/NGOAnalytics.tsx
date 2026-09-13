@@ -66,7 +66,14 @@ export const NGOAnalytics: React.FC = () => {
   }, [period]);
 
   useEffect(() => {
-    fetchAnalytics();
+    let mounted = true;
+    const init = async () => {
+      if (mounted) await fetchAnalytics();
+    };
+    void init();
+    return () => {
+      mounted = false;
+    };
   }, [fetchAnalytics]);
 
   const chartData = responseTimes.map((item) => ({

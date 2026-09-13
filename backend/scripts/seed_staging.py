@@ -1,5 +1,6 @@
 """Staging Seed Data Script for PawReach Pilot Testing.
-Creates initial test organization, partner veterinary facility, and designated test accounts.
+Creates two distinct staging NGO organizations (Org Alpha & Org Beta), partner veterinary facilities,
+and designated test accounts for cross-tenant pilot validation.
 Requires STAGING_SEED_PASSWORD environment variable.
 """
 import sys
@@ -73,33 +74,48 @@ def seed_staging_database():
             "Please run 'alembic upgrade head' before running seed_staging.py."
         )
 
-    print("Seeding PawReach staging database with validated credentials...")
+    print("Seeding PawReach staging database with validated multi-tenant credentials...")
     db = SessionLocal()
 
     try:
-        # 1. Create Staging NGO Organization
-        ngo = db.query(Organization).filter(Organization.name == "Cochin Animal Rescue Network").first()
-        if not ngo:
-            ngo = Organization(
-                name="Cochin Animal Rescue Network",
+        # 1. Organization Alpha (Primary NGO)
+        org_alpha = db.query(Organization).filter(Organization.name == "Organization Alpha - Stray Relief").first()
+        if not org_alpha:
+            org_alpha = Organization(
+                name="Organization Alpha - Stray Relief",
                 organization_type=OrganizationType.NGO,
                 address="Marine Drive, Ernakulam, Kerala 682031",
-                email="contact@staging.pawsos.org",
+                email="contact@alpha.staging.pawsos.org",
                 phone="+919876543200",
                 verification_status=True,
             )
-            db.add(ngo)
+            db.add(org_alpha)
             db.flush()
-            print(f"Created NGO Organization: {ngo.name} ({ngo.id})")
+            print(f"Created Org Alpha: {org_alpha.name} (ID: {org_alpha.id})")
 
-        # 2. Create Partner Veterinary Facility
-        vet_facility = db.query(VeterinaryFacility).filter(VeterinaryFacility.name == "Cochin PetCare Emergency Hospital").first()
-        if not vet_facility:
-            vet_facility = VeterinaryFacility(
-                organization_id=ngo.id,
+        # 2. Organization Beta (Isolated Second NGO)
+        org_beta = db.query(Organization).filter(Organization.name == "Organization Beta - Animal Aid Alliance").first()
+        if not org_beta:
+            org_beta = Organization(
+                name="Organization Beta - Animal Aid Alliance",
+                organization_type=OrganizationType.NGO,
+                address="Infopark Expressway, Kakkanad, Kerala 682042",
+                email="contact@beta.staging.pawsos.org",
+                phone="+919876543299",
+                verification_status=True,
+            )
+            db.add(org_beta)
+            db.flush()
+            print(f"Created Org Beta: {org_beta.name} (ID: {org_beta.id})")
+
+        # 3. Veterinary Facility Alpha (Linked to Org Alpha)
+        vet_facility_alpha = db.query(VeterinaryFacility).filter(VeterinaryFacility.name == "Cochin PetCare Emergency Hospital").first()
+        if not vet_facility_alpha:
+            vet_facility_alpha = VeterinaryFacility(
+                organization_id=org_alpha.id,
                 name="Cochin PetCare Emergency Hospital",
                 phone="+919876543201",
-                email="hospital@staging.pawsos.org",
+                email="hospital.alpha@staging.pawsos.org",
                 latitude=9.9816,
                 longitude=76.2999,
                 address="MG Road, Ernakulam, Kerala 682016",
@@ -107,14 +123,34 @@ def seed_staging_database():
                 is_24_hours=True,
                 is_verified=True,
             )
-            db.add(vet_facility)
+            db.add(vet_facility_alpha)
             db.flush()
-            print(f"Created Veterinary Facility: {vet_facility.name} ({vet_facility.id})")
+            print(f"Created Vet Facility Alpha: {vet_facility_alpha.name} (ID: {vet_facility_alpha.id})")
+
+        # 4. Veterinary Facility Beta (Linked to Org Beta)
+        vet_facility_beta = db.query(VeterinaryFacility).filter(VeterinaryFacility.name == "Alliance Trauma & Critical Care Clinic").first()
+        if not vet_facility_beta:
+            vet_facility_beta = VeterinaryFacility(
+                organization_id=org_beta.id,
+                name="Alliance Trauma & Critical Care Clinic",
+                phone="+919876543291",
+                email="hospital.beta@staging.pawsos.org",
+                latitude=10.0150,
+                longitude=76.3400,
+                address="Civil Station Road, Kakkanad, Kerala 682030",
+                supports_emergency=True,
+                is_24_hours=True,
+                is_verified=True,
+            )
+            db.add(vet_facility_beta)
+            db.flush()
+            print(f"Created Vet Facility Beta: {vet_facility_beta.name} (ID: {vet_facility_beta.id})")
 
         hashed_pwd = get_password_hash(staging_pwd)
 
-        # 3. Create Designated Staging Accounts
+        # 5. Designated Staging Accounts (Multi-Tenant)
         accounts = [
+            # Global Roles
             {
                 "email": "citizen@staging.pawsos.org",
                 "phone": "+919876543210",
@@ -124,11 +160,36 @@ def seed_staging_database():
                 "facility_id": None,
             },
             {
+                "email": "superadmin@staging.pawsos.org",
+                "phone": "+919876543215",
+                "name": "System Administrator",
+                "role": UserRole.SUPER_ADMIN,
+                "org_id": None,
+                "facility_id": None,
+            },
+            # Organization Alpha Team
+            {
+                "email": "admin@staging.pawsos.org",
+                "phone": "+919876543214",
+                "name": "Priya Sharma (Admin Alpha)",
+                "role": UserRole.NGO_ADMIN,
+                "org_id": org_alpha.id,
+                "facility_id": None,
+            },
+            {
+                "email": "admin.a@staging.pawsos.org",
+                "phone": "+919876543216",
+                "name": "Anil Kumar (Admin Alpha 2)",
+                "role": UserRole.NGO_ADMIN,
+                "org_id": org_alpha.id,
+                "facility_id": None,
+            },
+            {
                 "email": "rescuer.a@staging.pawsos.org",
                 "phone": "+919876543211",
-                "name": "Arjun Nair (Rescuer A)",
+                "name": "Arjun Nair (Responder Alpha 1)",
                 "role": UserRole.RESCUER,
-                "org_id": ngo.id,
+                "org_id": org_alpha.id,
                 "facility_id": None,
                 "lat": 9.9850,
                 "lng": 76.2980,
@@ -136,9 +197,9 @@ def seed_staging_database():
             {
                 "email": "rescuer.b@staging.pawsos.org",
                 "phone": "+919876543212",
-                "name": "Sneha Menon (Rescuer B)",
+                "name": "Sneha Menon (Responder Alpha 2)",
                 "role": UserRole.RESCUER,
-                "org_id": ngo.id,
+                "org_id": org_alpha.id,
                 "facility_id": None,
                 "lat": 9.9910,
                 "lng": 76.3020,
@@ -146,26 +207,47 @@ def seed_staging_database():
             {
                 "email": "vet@staging.pawsos.org",
                 "phone": "+919876543213",
-                "name": "Dr. Rajesh Varma",
+                "name": "Dr. Rajesh Varma (Vet Alpha)",
                 "role": UserRole.VETERINARIAN,
-                "org_id": ngo.id,
-                "facility_id": vet_facility.id,
+                "org_id": org_alpha.id,
+                "facility_id": vet_facility_alpha.id,
             },
+            # Organization Beta Team (Tenant Boundary Testing)
             {
-                "email": "admin@staging.pawsos.org",
-                "phone": "+919876543214",
-                "name": "Priya Sharma (NGO Admin)",
+                "email": "admin.b@staging.pawsos.org",
+                "phone": "+919876543294",
+                "name": "Kavita Iyer (Admin Beta)",
                 "role": UserRole.NGO_ADMIN,
-                "org_id": ngo.id,
+                "org_id": org_beta.id,
                 "facility_id": None,
             },
             {
-                "email": "superadmin@staging.pawsos.org",
-                "phone": "+919876543215",
-                "name": "System Administrator",
-                "role": UserRole.SUPER_ADMIN,
-                "org_id": None,
+                "email": "rescuer.b1@staging.pawsos.org",
+                "phone": "+919876543295",
+                "name": "Rohan Das (Responder Beta 1)",
+                "role": UserRole.RESCUER,
+                "org_id": org_beta.id,
                 "facility_id": None,
+                "lat": 10.0120,
+                "lng": 76.3420,
+            },
+            {
+                "email": "rescuer.b2@staging.pawsos.org",
+                "phone": "+919876543296",
+                "name": "Maya Sen (Responder Beta 2)",
+                "role": UserRole.RESCUER,
+                "org_id": org_beta.id,
+                "facility_id": None,
+                "lat": 10.0180,
+                "lng": 76.3380,
+            },
+            {
+                "email": "vet.b@staging.pawsos.org",
+                "phone": "+919876543297",
+                "name": "Dr. Ananya Roy (Vet Beta)",
+                "role": UserRole.VETERINARIAN,
+                "org_id": org_beta.id,
+                "facility_id": vet_facility_beta.id,
             },
         ]
 
@@ -203,7 +285,7 @@ def seed_staging_database():
                     print(f"  Created rescuer profile for {acc['name']}")
 
         db.commit()
-        print("Staging seed completed successfully with secure credentials!")
+        print("Multi-tenant staging seed completed successfully with secure credentials!")
     except Exception as e:
         db.rollback()
         print(f"Error seeding database: {e}")
@@ -213,4 +295,3 @@ def seed_staging_database():
 
 if __name__ == "__main__":
     seed_staging_database()
-

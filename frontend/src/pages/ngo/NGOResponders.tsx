@@ -40,7 +40,21 @@ export const NGOResponders: React.FC = () => {
   };
 
   useEffect(() => {
-    fetchResponders();
+    let active = true;
+    const load = async () => {
+      try {
+        const res = await api.get('/ngo/responders');
+        if (active) setResponders(res.data || []);
+      } catch (err: any) {
+        if (active) setError(formatApiError(err, 'Failed to load field responders'));
+      } finally {
+        if (active) setLoading(false);
+      }
+    };
+    void load();
+    return () => {
+      active = false;
+    };
   }, []);
 
   const handleToggleActive = async (responder: NGOResponderSummary) => {

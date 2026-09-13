@@ -166,9 +166,15 @@ export const RescuerDashboard = () => {
   }, [syncLocationAndFetchNearby]);
 
   useEffect(() => {
-    fetchFacilities();
-    detectLocation();
-    fetchIncomingOffers();
+    let mounted = true;
+    const init = async () => {
+      if (mounted) {
+        await fetchFacilities();
+        detectLocation();
+        await fetchIncomingOffers();
+      }
+    };
+    void init();
 
     const interval = setInterval(() => {
       fetchIncomingOffers();

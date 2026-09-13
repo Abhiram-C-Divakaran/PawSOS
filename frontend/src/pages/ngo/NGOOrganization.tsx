@@ -53,7 +53,14 @@ export const NGOOrganization: React.FC = () => {
   };
 
   useEffect(() => {
-    fetchProfile();
+    let mounted = true;
+    const init = async () => {
+      if (mounted) await fetchProfile();
+    };
+    void init();
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   const handleSave = async (e: React.FormEvent) => {

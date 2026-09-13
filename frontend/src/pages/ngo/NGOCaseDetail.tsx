@@ -64,8 +64,17 @@ export const NGOCaseDetail = () => {
   }, []);
 
   useEffect(() => {
-    fetchDossier();
-    loadActionPrerequisites();
+    let mounted = true;
+    const init = async () => {
+      if (mounted) {
+        await fetchDossier();
+        await loadActionPrerequisites();
+      }
+    };
+    void init();
+    return () => {
+      mounted = false;
+    };
   }, [fetchDossier, loadActionPrerequisites]);
 
   const handleExecuteAction = async () => {

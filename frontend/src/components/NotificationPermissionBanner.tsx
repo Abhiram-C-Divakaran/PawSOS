@@ -7,25 +7,23 @@ interface Props {
 }
 
 export const NotificationPermissionBanner: React.FC<Props> = ({ onStatusChange }) => {
-  const [isVisible, setIsVisible] = useState<boolean>(false);
-  const [status, setStatus] = useState<string>('default');
+  const [isVisible, setIsVisible] = useState<boolean>(() => {
+    if (typeof window === 'undefined' || !('Notification' in window)) return false;
+    const dismissed = localStorage.getItem('pawreach_dismiss_push_banner') === 'true';
+    return Notification.permission === 'default' && !dismissed;
+  });
+  const [status, setStatus] = useState<string>(() => {
+    if (typeof window === 'undefined' || !('Notification' in window)) return 'unsupported';
+    return Notification.permission;
+  });
   const [loading, setLoading] = useState<boolean>(false);
 
   useEffect(() => {
     if (typeof window === 'undefined' || !('Notification' in window)) {
-      setStatus('unsupported');
       onStatusChange?.('unsupported');
       return;
     }
-
-    const perm = Notification.permission;
-    setStatus(perm);
-    onStatusChange?.(perm);
-
-    const dismissed = localStorage.getItem('pawreach_dismiss_push_banner') === 'true';
-    if (perm === 'default' && !dismissed) {
-      setIsVisible(true);
-    }
+    onStatusChange?.(Notification.permission);
   }, [onStatusChange]);
 
   const handleEnable = async () => {

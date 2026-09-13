@@ -37,7 +37,14 @@ export const NGOCases: React.FC = () => {
   }, [page, limit, search, priorityFilter, statusFilter]);
 
   useEffect(() => {
-    fetchCases();
+    let mounted = true;
+    const init = async () => {
+      if (mounted) await fetchCases();
+    };
+    void init();
+    return () => {
+      mounted = false;
+    };
   }, [fetchCases]);
 
   const handleSearchSubmit = (e: React.FormEvent) => {

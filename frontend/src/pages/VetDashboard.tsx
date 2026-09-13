@@ -48,10 +48,19 @@ export const VetDashboard = () => {
   };
 
   useEffect(() => {
-    fetchFacilities();
-    fetchCases();
+    let mounted = true;
+    const init = async () => {
+      await fetchFacilities();
+      if (mounted) {
+        await fetchCases();
+      }
+    };
+    void init();
     const interval = setInterval(fetchCases, 15000);
-    return () => clearInterval(interval);
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+    };
   }, []);
 
   const handleSelectCase = (c: RescueCase) => {
