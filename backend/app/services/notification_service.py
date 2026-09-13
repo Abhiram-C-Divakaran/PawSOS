@@ -3,7 +3,7 @@ import logging
 import os
 import uuid
 from typing import Any, Dict, List, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 
@@ -64,7 +64,7 @@ class NotificationService:
                         token=device.token,
                     )
                     messaging.send(fcm_msg)
-                    device.last_seen_at = datetime.utcnow()
+                    device.last_seen_at = datetime.now(timezone.utc)
                 except messaging.UnregisteredError:
                     logger.warning(f"FCM token {device.token[:12]}... is unregistered. Deactivating device.")
                     device.is_active = False
@@ -99,7 +99,7 @@ class NotificationService:
             rescue_case_id=rescue_case_id,
             data=data_json,
             is_read=False,
-            created_at=datetime.utcnow()
+            created_at=datetime.now(timezone.utc)
         )
         db.add(notif)
         db.commit()

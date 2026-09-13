@@ -33,16 +33,16 @@ from app.api.routes import (
     health,
 )
 
-# Production security & database checks
-if settings.ENVIRONMENT == "production":
+# Production & Staging security & database checks
+if settings.ENVIRONMENT in ["production", "staging"]:
     insecure_keys = ["secret", "dev_secret_key_change_in_production", ""]
     if settings.JWT_SECRET_KEY in insecure_keys or len(settings.JWT_SECRET_KEY) < 32:
-        raise RuntimeError("FATAL: Insecure or default JWT_SECRET_KEY detected in production environment.")
+        raise RuntimeError(f"FATAL: Insecure or default JWT_SECRET_KEY detected in {settings.ENVIRONMENT} environment.")
     
-    # Requirement #35: Production database must use PostgreSQL + PostGIS. Fail startup if SQLite.
+    # Production/staging database must use PostgreSQL + PostGIS. Fail startup if SQLite.
     if "sqlite" in settings.DATABASE_URL.lower():
         raise RuntimeError(
-            "FATAL: Production database must use PostgreSQL with PostGIS. SQLite is strictly prohibited in production."
+            f"FATAL: {settings.ENVIRONMENT.capitalize()} database must use PostgreSQL with PostGIS. SQLite is strictly prohibited."
         )
 
 # Ensure uploads directory exists

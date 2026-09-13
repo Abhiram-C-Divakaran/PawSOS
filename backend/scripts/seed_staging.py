@@ -1,15 +1,19 @@
-"""Staging Seed Data Script for PawReach MVP Phase 2.5 Pilot Testing.
+"""Staging Seed Data Script for PawReach Pilot Testing.
 Creates initial test organization, partner veterinary facility, and designated test accounts.
+Requires STAGING_SEED_PASSWORD environment variable.
 """
 import sys
 import os
 import uuid
-from datetime import datetime
+import re
+from datetime import datetime, timezone
 
 # Add parent directory to sys.path so app modules can be imported
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from app.database import SessionLocal, engine, Base
+from sqlalchemy import inspect
+from app.database import SessionLocal, engine
+from app.config import settings
 from app.models.organization import Organization
 from app.models.veterinary_facility import VeterinaryFacility
 from app.models.user import User
@@ -17,9 +21,59 @@ from app.models.rescuer_profile import RescuerProfile
 from app.core.security import get_password_hash
 from app.core.constants import UserRole, RescuerAvailability, OrganizationType
 
+INSECURE_PATTERNS = [
+    "stagingpass",
+    "password",
+    "admin123",
+    "changeme",
+    "pawsos",
+    "pawreach",
+    "12345678",
+]
+
+def validate_staging_password(password: str | None) -> str:
+    """Validate that the staging seed password meets strict security criteria."""
+    if not password:
+        raise RuntimeError(
+            "STAGING_SEED_PASSWORD environment variable is required to run seed_staging.py. "
+            "Please provide a strong, non-default password of at least 14 characters."
+        )
+    if len(password) < 14:
+        raise ValueError(
+            f"STAGING_SEED_PASSWORD must be at least 14 characters long (provided: {len(password)})."
+        )
+    
+    pwd_lower = password.lower()
+    for pattern in INSECURE_PATTERNS:
+        if pattern in pwd_lower:
+            raise ValueError(
+                f"STAGING_SEED_PASSWORD contains insecure or common pattern '{pattern}'. "
+                "Provide a strong, unpredictable password for staging seeding."
+            )
+    return password
+
 def seed_staging_database():
-    print("Seeding PawReach staging database...")
-    Base.metadata.create_all(bind=engine)
+    env = (os.environ.get("ENVIRONMENT") or settings.ENVIRONMENT or "").lower()
+    if env == "production":
+        raise RuntimeError(
+            "FATAL: Staging seeding is strictly prohibited in production environments (ENVIRONMENT=production)."
+        )
+
+    # 1. Enforce STAGING_SEED_PASSWORD validation
+    staging_pwd = validate_staging_password(os.environ.get("STAGING_SEED_PASSWORD"))
+
+    # 2. Verify schema exists without creating or mutating outside Alembic
+    inspector = inspect(engine)
+    required_tables = ["organizations", "veterinary_facilities", "users", "rescuer_profiles"]
+    missing = [tbl for tbl in required_tables if not inspector.has_table(tbl)]
+    if missing:
+        raise RuntimeError(
+            f"Database schema not initialized. Missing tables: {missing}. "
+            "The staging seed script does not create or mutate schema. "
+            "Please run 'alembic upgrade head' before running seed_staging.py."
+        )
+
+    print("Seeding PawReach staging database with validated credentials...")
     db = SessionLocal()
 
     try:
@@ -57,7 +111,7 @@ def seed_staging_database():
             db.flush()
             print(f"Created Veterinary Facility: {vet_facility.name} ({vet_facility.id})")
 
-        default_pwd = get_password_hash("StagingPass123!")
+        hashed_pwd = get_password_hash(staging_pwd)
 
         # 3. Create Designated Staging Accounts
         accounts = [
@@ -122,7 +176,7 @@ def seed_staging_database():
                     full_name=acc["name"],
                     email=acc["email"],
                     phone=acc["phone"],
-                    password_hash=default_pwd,
+                    password_hash=hashed_pwd,
                     role=acc["role"],
                     organization_id=acc["org_id"],
                     veterinary_facility_id=acc["facility_id"],
@@ -143,13 +197,13 @@ def seed_staging_database():
                         vehicle_available=True,
                         experience_level="Advanced",
                         reliability_score=98.0,
-                        last_location_update=datetime.utcnow(),
+                        last_location_update=datetime.now(timezone.utc),
                     )
                     db.add(profile)
                     print(f"  Created rescuer profile for {acc['name']}")
 
         db.commit()
-        print("Staging seed completed successfully!")
+        print("Staging seed completed successfully with secure credentials!")
     except Exception as e:
         db.rollback()
         print(f"Error seeding database: {e}")
@@ -159,3 +213,4 @@ def seed_staging_database():
 
 if __name__ == "__main__":
     seed_staging_database()
+

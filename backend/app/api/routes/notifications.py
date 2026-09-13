@@ -1,8 +1,9 @@
+import uuid
+from datetime import datetime, timezone
+from typing import List
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from typing import List
-import uuid
-from datetime import datetime
 
 from app.database import get_db
 from app.models.user import User
@@ -34,7 +35,7 @@ def register_device_token(
         device.platform = payload.platform
         device.device_name = payload.device_name
         device.is_active = True
-        device.last_seen_at = datetime.utcnow()
+        device.last_seen_at = datetime.now(timezone.utc)
     else:
         device = DeviceToken(
             user_id=current_user.id,
@@ -42,7 +43,7 @@ def register_device_token(
             platform=payload.platform,
             device_name=payload.device_name,
             is_active=True,
-            last_seen_at=datetime.utcnow(),
+            last_seen_at=datetime.now(timezone.utc),
         )
         db.add(device)
 
@@ -103,7 +104,7 @@ def mark_notification_read(
     if not notif:
         raise HTTPException(status_code=404, detail="Notification not found")
     notif.is_read = True
-    notif.read_at = datetime.utcnow()
+    notif.read_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(notif)
     return notif
@@ -116,6 +117,6 @@ def mark_all_notifications_read(
     """Mark all unread notifications for current user as read."""
     db.query(Notification).filter(
         Notification.user_id == current_user.id, Notification.is_read == False
-    ).update({"is_read": True, "read_at": datetime.utcnow()}, synchronize_session=False)
+    ).update({"is_read": True, "read_at": datetime.now(timezone.utc)}, synchronize_session=False)
     db.commit()
     return {"success": True, "message": "All notifications marked as read"}

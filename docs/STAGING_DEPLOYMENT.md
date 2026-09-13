@@ -1,29 +1,59 @@
-# PawReach / PawSOS — Staging Deployment & Operations Guide
-**Phase 2.6 — Pilot Readiness & Staging Operations**
+# PawReach — Staging Deployment & Operations Guide
+**Phase 2.9 — Staging Deployment, Security Hardening & Pilot Certification**
 
-This runbook outlines the required infrastructure, environment configurations, deployment commands, readiness verification steps, and operational procedures for deploying the PawReach platform to a staging or production pilot environment.
+This document outlines the architecture, environment configurations, deployment manifests, database initialization, process management, readiness verification, and operational procedures for deploying PawReach to a staging environment.
 
 ---
 
-## 1. Architecture & Infrastructure Requirements
+## 1. Process & Service Architecture
 
-| Service | Min. Version | Recommended Spec | Purpose |
+In staging and production, PawReach runs as separate, dedicated services to guarantee performance, resilience, and horizontal scalability:
+
+```
+                                +---------------------------+
+                                |  Nginx (Frontend SPA)     |
+                                |  Port 80 / 443            |
+                                +---------------------------+
+                                              |
+                                              | Reverse Proxy /api/
+                                              v
++-----------------------+       +---------------------------+       +-----------------------+
+|  Celery Beat          |       |  FastAPI Web Server       | ----> |  PostgreSQL + PostGIS |
+|  (Scheduler)          |       |  Port 8000 (Gunicorn/Uvic)|       |  Port 5432            |
++-----------------------+       +---------------------------+       +-----------------------+
+            |                                 |                                 ^
+            | Enqueue periodic                | Enqueue tasks                   | Query state
+            v                                 v                                 |
++-----------------------------------------------------------+                   |
+|                        Redis Broker                       |                   |
+|                        Port 6379                          |                   |
++-----------------------------------------------------------+                   |
+            |                                                                   |
+            v Dequeue dispatch & push jobs                                      |
++-------------------------------------------------------------------------------+
+|  Celery Worker (dispatch, notifications, default queues)                      |
++-------------------------------------------------------------------------------+
+            |
+            +---> AWS S3 (Object Storage for evidence & records)
+            +---> Firebase Cloud Messaging (Web Push alerts)
+```
+
+| Service Name | Command / Entrypoint | Scaling | Responsibilities |
 | :--- | :--- | :--- | :--- |
-| **PostgreSQL** | 15+ (with PostGIS 3+) | 2 vCPU, 4GB RAM | Primary relational & spatial database |
-| **Redis** | 7.0+ | 1 vCPU, 2GB RAM | Celery message broker & result backend, rate limiting |
-| **Celery Worker** | 5.3+ | 2 vCPU, 2GB RAM | Background dispatch engine, radius escalation, push jobs |
-| **Celery Beat** | 5.3+ | 1 vCPU, 1GB RAM | Periodic task scheduler (offer expirations, heartbeats) |
-| **FastAPI Backend** | Python 3.11+ | 2 vCPU, 2GB RAM | Async REST API, auth, business logic |
-| **Vite Frontend (PWA)** | Node 18+ / Nginx | 1 vCPU, 1GB RAM | React + Tailwind dashboard, PWA service worker |
-| **Object Storage** | AWS S3 / MinIO | S3-compatible | Animal evidence images, resized thumbnails (Lanczos) |
-| **Firebase Cloud Messaging** | Admin SDK v6+ | Cloud Service | Real-time push alerts to mobile & desktop browsers |
-| **Sentry** | Latest SDK | Cloud Service | Error tracking & telemetry |
+| **`web`** | `gunicorn app.main:app -w 4 -k uvicorn.workers.UvicornWorker -b 0.0.0.0:8000` | Horizontal ($\ge 2$) | REST API endpoints, auth, webhooks |
+| **`worker`** | `celery -A app.tasks.celery_app worker -l INFO -c 4 -Q dispatch,notifications,default` | Horizontal ($\ge 2$) | Asynchronous dispatch engine, push notifications, image processing |
+| **`beat`** | `celery -A app.tasks.celery_app beat -l INFO --pidfile=/tmp/celerybeat.pid` | **Singleton (Exactly 1)** | Offer expiration (20s staging / 90s prod), worker heartbeats (10s) |
+| **`db`** | PostgreSQL 15+ with PostGIS 3+ | Primary + Replica | Relational data, spatial indexing, audit logs |
+| **`redis`** | Redis 7+ | Standalone / Cluster | Celery message broker, task results, rate limiting, heartbeats |
+| **`frontend`** | Nginx serving built static assets (`frontend/dist`) | Multi-replica / CDN | React 19 SPA, route-level code splitting, PWA service worker |
 
 ---
 
 ## 2. Environment Variables Configuration
 
-Create a production-grade `.env` in the root of the backend deployment. **Never commit secret keys or service account credentials to Git.**
+In staging, the backend enforces strict validation at startup via `app/config.py:validate_production_settings()`. Any missing, default, or insecure configuration causes an immediate startup failure (`SystemExit(1)`).
+
+Create `backend/.env`:
 
 ```bash
 # ==========================================
@@ -32,109 +62,141 @@ Create a production-grade `.env` in the root of the backend deployment. **Never 
 ENVIRONMENT=staging
 PROJECT_NAME="PawReach Staging"
 DEBUG=false
-JWT_SECRET_KEY="<GENERATE_SECURE_64_CHAR_HEX_KEY_MIN_32_CHARS>"
+# Minimum 32 chars, cannot contain 'secret', 'default', or 'changeme'
+JWT_SECRET_KEY="<GENERATE_64_CHAR_HEX_KEY_e.g._openssl_rand_-hex_32>"
 ACCESS_TOKEN_EXPIRE_MINUTES=30
 REFRESH_TOKEN_EXPIRE_DAYS=7
 
 # ==========================================
 # Database & Spatial Engine (PostGIS)
+# NOTE: SQLite is strictly forbidden in staging
 # ==========================================
 DATABASE_URL="postgresql://pawreach_user:<STRONG_PASSWORD>@db.staging.internal:5432/pawreach_staging"
 
 # ==========================================
-# Redis & Celery Task Queue
+# Redis Task Broker & Cache
 # ==========================================
 REDIS_URL="redis://:redis_password@redis.staging.internal:6379/0"
 
 # ==========================================
 # CORS & Allowed Origins
+# NOTE: Wildcard '*' is strictly forbidden in staging
 # ==========================================
-CORS_ORIGINS="https://staging.pawreach.org,https://admin.staging.pawreach.org"
+CORS_ORIGINS="https://staging.pawreach.org,https://admin.staging.pawreach.org,http://localhost:5173"
 
 # ==========================================
 # Cloud Object Storage (S3 / MinIO)
-# Note: In 'staging' and 'production', S3 credentials are strictly verified.
+# NOTE: All S3 keys required when STORAGE_PROVIDER=s3
 # ==========================================
 STORAGE_PROVIDER=s3
-AWS_ACCESS_KEY_ID="<AWS_IAM_ACCESS_KEY>"
-AWS_SECRET_ACCESS_KEY="<AWS_IAM_SECRET_KEY>"
+AWS_ACCESS_KEY_ID="AKIAIOSFODNN7EXAMPLE"
+AWS_SECRET_ACCESS_KEY="wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
 AWS_REGION="ap-south-1"
 S3_BUCKET_NAME="pawreach-staging-media"
 
 # ==========================================
 # Firebase Cloud Messaging (Web Push Alerts)
 # ==========================================
-FIREBASE_CREDENTIALS_PATH="/etc/secrets/pawreach-firebase-admin.json"
+FIREBASE_CREDENTIALS_PATH="/etc/secrets/firebase-admin.json"
 FIREBASE_PROJECT_ID="pawreach-staging"
 
 # ==========================================
-# Monitoring & Telemetry (Sentry)
+# Staging Seed Security Password
+# Must be >= 14 chars, not obvious/default patterns
 # ==========================================
-SENTRY_DSN="https://<public_key>@o0.ingest.sentry.io/<project_id>"
+STAGING_SEED_PASSWORD="<STRONG_PILOT_PASSWORD_MIN_14_CHARS_!>"
 ```
 
 ---
 
-## 3. Database Migration & Initialization
+## 3. Database Initialization & Seeding Workflow
 
-Run migrations before launching or rolling out new backend containers:
+> [!IMPORTANT]
+> Always run schema migrations (`alembic upgrade head`) BEFORE running any seed script. `seed_staging.py` validates that tables already exist and will deliberately abort if the schema is uninitialized.
 
 ```bash
-# Run Alembic migrations to apply schema updates
 cd backend
+
+# Step 1: Execute all Alembic migrations to build canonical PostGIS schema
 alembic upgrade head
 
-# Verify migration status
+# Step 2: Verify current migration state
 alembic current
+
+# Step 3: Seed staging baseline data with strong password enforcement
+STAGING_SEED_PASSWORD="<STRONG_PILOT_PASSWORD_MIN_14_CHARS_!>" python scripts/seed_staging.py
+```
+
+`seed_staging.py` enforces:
+- Password validation: min 14 chars, rejects default phrases (`password`, `stagingpass`, `admin123`, `changeme`, etc.).
+- Environment guard: Aborts immediately if `ENVIRONMENT=production`.
+- Pre-existing schema check: Enforces that tables exist before inserting records.
+- Timezone-aware UTC timestamps for all created records.
+
+---
+
+## 4. Deployment Manifests & Platforms
+
+PawReach provides ready-to-deploy manifests for standard cloud platforms:
+
+### Option A: Render.com Blueprint (`render.yaml`)
+Deploys web service, worker, beat, managed PostgreSQL with PostGIS, and managed Redis:
+```bash
+# In Render Dashboard:
+# 1. New -> Blueprint -> Connect PawReach repository
+# 2. Render reads render.yaml and provisions all 5 services automatically.
+# 3. Supply secret files and environment variables.
+```
+
+### Option B: Docker Compose Staging (`docker-compose.staging.yml`)
+For self-hosted virtual machines (AWS EC2, DigitalOcean, GCP Compute Engine):
+```bash
+# Build and launch all 6 staging containers
+docker compose -f docker-compose.staging.yml up -d --build
+
+# Inspect running services
+docker compose -f docker-compose.staging.yml ps
+
+# Check Celery worker and beat logs
+docker compose -f docker-compose.staging.yml logs -f worker beat
+```
+
+### Option C: Heroku / Railway / Fly.io (`Procfile`)
+PawReach includes a root `Procfile` declaring process entrypoints:
+```text
+web: cd backend && gunicorn app.main:app -w 4 -k uvicorn.workers.UvicornWorker -b 0.0.0.0:$PORT
+worker: cd backend && celery -A app.tasks.celery_app worker -l INFO -c 4 -Q dispatch,notifications,default
+beat: cd backend && celery -A app.tasks.celery_app beat -l INFO --pidfile=/tmp/celerybeat.pid
 ```
 
 ---
 
-## 4. Process Launch Commands
+## 5. Frontend Production Build & Bundle Optimization
 
-### A. FastAPI Application Server (Uvicorn / Gunicorn)
-```bash
-gunicorn app.main:app \
-  --workers 4 \
-  --worker-class uvicorn.workers.UvicornWorker \
-  --bind 0.0.0.0:8000 \
-  --timeout 120 \
-  --access-logfile - \
-  --error-logfile -
-```
+In Phase 2.9, route-level code splitting was introduced via `React.lazy` and dynamic imports for heavy components (Leaflet, Recharts, Command Center, Analytics, Vet Dashboard).
 
-### B. Celery Background Worker
-```bash
-celery -A app.tasks.celery_app worker \
-  --loglevel=INFO \
-  --concurrency=4 \
-  --queues=dispatch,notifications,default \
-  -n worker_pawreach_staging@%h
-```
-
-### C. Celery Beat Scheduler
-```bash
-celery -A app.tasks.celery_app beat \
-  --loglevel=INFO \
-  --pidfile=/tmp/celerybeat.pid \
-  --schedule=/tmp/celerybeat-schedule
-```
-
-### D. Frontend Production Build & Static Serving
 ```bash
 cd frontend
 npm ci
 npm run build
-# The 'dist' directory is deployed to Nginx / Cloudflare Pages / AWS S3 + CloudFront
 ```
+
+### Bundle Size Benchmark
+| Bundle Metric | Phase 2.8 Baseline | Phase 2.9 Optimized | Improvement |
+| :--- | :--- | :--- | :--- |
+| **Initial JS Entry Chunk** | `1,083.20 kB` (monolithic) | **`317.75 kB`** | **-70.6% reduction** |
+| **Chunks > 500 kB Warning** | 1 chunk (>1 MB warning) | **0 chunks > 500 kB** | **Zero Rollup warnings** |
+| **Route Chunks** | None (bundled into index) | Clean split: Leaflet (148 kB), Recharts (332 kB), Pages (30-42 kB) | On-demand route loading |
+
+The generated `frontend/dist` directory is served via the production Nginx container (`frontend/Dockerfile`, `frontend/nginx.conf`) with gzip compression, security headers (`X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`), and SPA fallback routing (`try_files $uri $uri/ /index.html`).
 
 ---
 
-## 5. Health & Readiness Verification
+## 6. Health & Readiness Telemetry (6 Subsystems)
 
-PawReach includes deep health probes to confirm all subsystems are operational prior to routing pilot traffic.
+PawReach exposes deep health diagnostics to monitor staging infrastructure before routing pilot traffic.
 
-### A. Basic Liveness Check
+### Liveness Check
 ```http
 GET /api/v1/health
 ```
@@ -147,13 +209,13 @@ Response:
 }
 ```
 
-### B. Deep Readiness Probe (Verifies 6 Subsystems)
+### Deep Readiness Probe
 ```http
 GET /api/v1/health/readiness
 ```
 Alias: `GET /api/v1/health/ready`
 
-Response:
+Response when all systems operational:
 ```json
 {
   "status": "ready",
@@ -167,47 +229,42 @@ Response:
   }
 }
 ```
-*If any required service fails (e.g., Celery worker offline, PostGIS extension missing), HTTP 503 is returned with specific error details.*
+
+If any service is degraded (e.g., Celery worker offline or S3 unreachable), the endpoint returns HTTP 503 with service-specific diagnostic status without leaking sensitive credentials.
 
 ---
 
-## 6. Pilot Operational Verification Procedures
+## 7. Staging Smoke Test Verification
 
-### Step 1: Storage & Image Processing Pipeline
-1. Post image evidence via `POST /api/v1/uploads/image`.
-2. Confirm image is converted to WebP with EXIF orientation metadata safely transposed.
-3. Confirm Lanczos downscaling caps max dimension to 2048px.
-4. Verify oversized files (>10MB) or fake MIME types (`application/x-msdownload`) are rejected with `400 Bad Request`.
+Execute the end-to-end staging smoke test script against deployed endpoints:
 
-### Step 2: Tenant Scoping & Isolation
-1. Authenticate as NGO Admin A (`org_id: 1`).
-2. Attempt to query rescue cases or patch organization details for NGO B (`org_id: 2`).
-3. Verify backend strictly responds with `403 Forbidden` or `404 Not Found`.
-4. Inspect `audit_logs` table to ensure unauthorized attempts and profile changes are immutably logged with actor ID and IP address.
+```bash
+python scripts/staging_smoke_test.py \
+  --api https://api.staging.pawreach.org \
+  --frontend https://staging.pawreach.org
+```
 
-### Step 3: Progressive Radius Escalation
-1. Create a `CRITICAL` rescue case.
-2. Confirm initial dispatch wave searches within 5 km.
-3. Observe Celery beat worker expire unresponsive offers at 20 seconds.
-4. Confirm radius escalation progression: 5 km → 10 km → 20 km → 40 km.
-5. If no responder accepts across all 4 waves, verify case transitions to `UNRESOLVED` and critical alert is delivered.
-
-### Step 4: Web Push Diagnostics
-1. In NGO Settings (`/ngo/settings`), click **Send Test Notification**.
-2. Confirm browser displays native push notification with action buttons.
-3. Check notification bell and ensure unread badge updates reactively.
+This automated script verifies:
+1. **API Liveness**: `GET /api/v1/health` returns HTTP 200 and healthy status.
+2. **Subsystem Readiness**: `GET /api/v1/health/readiness` checks all 6 subsystems.
+3. **CORS Headers**: Confirms preflight and allowed origins match staging frontend.
+4. **Frontend SPA Root**: Confirms HTML payload and script tags load.
+5. **Frontend Deep Routing**: Confirms `/report`, `/ngo/overview`, `/vet` route correctly without 404s.
 
 ---
 
-## 7. Disaster Recovery & Rollback Plan
+## 8. Rollback & Emergency Procedures
 
-1. **Database Snapshot**: Ensure automated daily snapshots + WAL archiving are active in RDS/PostgreSQL.
-2. **Migration Rollback**: To revert an Alembic migration:
+1. **Database Migration Rollback**:
    ```bash
+   cd backend
    alembic downgrade -1
    ```
-3. **Session Revocation**: In event of suspected credential compromise, issue global logout:
+2. **Session Revocation (Suspected Token Leak)**:
    ```bash
    POST /api/v1/auth/logout-all
+   Authorization: Bearer <ADMIN_OR_USER_TOKEN>
    ```
-   This immediately revokes all refresh tokens and sessions for the user across all devices.
+   Immediately blacklists refresh tokens and invalidates active sessions.
+3. **Object Storage Fallback**:
+   If S3 is temporarily degraded, switch `STORAGE_PROVIDER=local` in `.env` and restart the backend.

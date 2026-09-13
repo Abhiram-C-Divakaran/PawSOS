@@ -149,14 +149,21 @@ E2E specifications in `frontend/e2e/`:
 ### 1. Database (PostgreSQL + PostGIS)
 - Deploy PostgreSQL 15+ with PostGIS extension enabled (`CREATE EXTENSION IF NOT EXISTS postgis;`).
 - Run database migrations: `alembic upgrade head`.
-- Seed initial staging data: `python scripts/seed_staging.py`.
+- Seed initial staging data with secure operator-defined password:
+  ```bash
+  STAGING_SEED_PASSWORD="<STRONG_UNIQUE_PASSWORD_MIN_14_CHARS>" python scripts/seed_staging.py
+  ```
 
-### 2. Redis & Celery Worker
+### 2. Redis & Background Workers (Worker & Beat)
 - Provision a Redis instance (e.g. Railway, Redis Cloud, Upstash).
 - Set `REDIS_URL=redis://<user>:<pass>@<host>:<port>/0`.
-- Deploy worker container:
+- In staging and production, run Worker and Beat as separate services:
   ```bash
-  celery -A app.tasks.celery_app worker -B --loglevel=info
+  # Background Task Worker
+  celery -A app.tasks.celery_app.celery_app worker --loglevel=info
+
+  # Periodic Beat Scheduler
+  celery -A app.tasks.celery_app.celery_app beat --loglevel=info
   ```
 
 ### 3. Cloud Storage (S3)
@@ -191,7 +198,7 @@ E2E specifications in `frontend/e2e/`:
 
 ## Staging Test Accounts (from `seed_staging.py`)
 
-All staging accounts share the default password: `StagingPass123!`
+All staging accounts are provisioned with the password set via `STAGING_SEED_PASSWORD` (minimum 14 characters, non-default):
 
 | Role | Email | Phone | Scope / Affiliation |
 |------|-------|-------|---------------------|

@@ -57,18 +57,55 @@ class Settings(BaseSettings):
     def validate_production_settings(self):
         env = (self.ENVIRONMENT or "development").lower()
         if env in ["production", "staging"]:
+            # 1. Database: PostgreSQL only, SQLite forbidden
             if "sqlite" in self.DATABASE_URL.lower():
-                raise ValueError("Production/staging database must use PostgreSQL with PostGIS. SQLite is prohibited.")
-            insecure_secrets = ["secret", "dev_secret_key_change_in_production", ""]
-            if self.JWT_SECRET_KEY in insecure_secrets or len(self.JWT_SECRET_KEY) < 32:
-                raise ValueError("Insecure or weak JWT_SECRET_KEY detected in production/staging environment (min 32 chars).")
-            if not self.CORS_ORIGINS:
-                raise ValueError("CORS_ORIGINS must be configured in production/staging environment.")
+                raise ValueError(
+                    f"{env.capitalize()} database must use PostgreSQL with PostGIS. SQLite is strictly prohibited."
+                )
+            # 2. JWT: strong non-default secret, minimum 32 chars
+            insecure_secrets = [
+                "secret",
+                "dev_secret_key_change_in_production",
+                "changeme",
+                "default_jwt_secret_key_32chars!!",
+                "",
+            ]
+            if (
+                self.JWT_SECRET_KEY in insecure_secrets
+                or len(self.JWT_SECRET_KEY) < 32
+                or "dev_secret" in self.JWT_SECRET_KEY.lower()
+            ):
+                raise ValueError(
+                    f"Insecure or weak JWT_SECRET_KEY detected in {env} environment (minimum 32 characters, non-default required)."
+                )
+            # 3. Redis: Valid Redis URL required
+            if not self.REDIS_URL or not (
+                self.REDIS_URL.startswith("redis://") or self.REDIS_URL.startswith("rediss://")
+            ):
+                raise ValueError(
+                    f"A valid REDIS_URL (redis:// or rediss://) is required in {env} environment."
+                )
+            # 4. CORS: Explicit origin required, wildcard prohibited
+            if not self.CORS_ORIGINS or self.CORS_ORIGINS.strip() == "*":
+                raise ValueError(
+                    f"Explicit CORS_ORIGINS must be configured in {env} environment. Wildcard '*' is prohibited for credentialed requests."
+                )
+            # 5. S3 Storage: All credentials and bucket required when STORAGE_PROVIDER=s3
             if self.STORAGE_PROVIDER.lower() == "s3":
-                if not (self.AWS_ACCESS_KEY_ID and self.AWS_SECRET_ACCESS_KEY and self.S3_BUCKET_NAME):
-                    raise ValueError("AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and S3_BUCKET_NAME are required when STORAGE_PROVIDER=s3.")
+                if not (
+                    self.AWS_ACCESS_KEY_ID
+                    and self.AWS_SECRET_ACCESS_KEY
+                    and self.AWS_REGION
+                    and self.S3_BUCKET_NAME
+                ):
+                    raise ValueError(
+                        "AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION, and S3_BUCKET_NAME are all required when STORAGE_PROVIDER=s3."
+                    )
+            # 6. Firebase: Validate credentials path exists if configured
             if self.FIREBASE_CREDENTIALS_PATH and not os.path.exists(self.FIREBASE_CREDENTIALS_PATH):
-                raise ValueError(f"FIREBASE_CREDENTIALS_PATH specified ({self.FIREBASE_CREDENTIALS_PATH}) but file not found.")
+                raise ValueError(
+                    f"FIREBASE_CREDENTIALS_PATH specified ({self.FIREBASE_CREDENTIALS_PATH}) but file not found."
+                )
         return self
     
     class Config:

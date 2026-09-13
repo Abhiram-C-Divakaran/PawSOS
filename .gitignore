@@ -12,10 +12,16 @@ node_modules/
 Thumbs.db
 desktop.ini
 
-# Environment
+# Environment & Secrets
 .env
 .env.local
 .env.*.local
+*.pem
+*.key
+firebase-adminsdk*.json
+*service-account*.json
+staging_*.json
+credentials.json
 
 # Build
 dist/
