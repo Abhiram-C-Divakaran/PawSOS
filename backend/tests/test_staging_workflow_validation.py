@@ -104,9 +104,16 @@ def test_render_yaml_configuration_and_migration_architecture():
     common_group = next((g for g in env_groups if g.get("name") == "pawreach-staging-common"), None)
     assert common_group, "pawreach-staging-common envVarGroup missing"
     common_keys = [ev.get("key") for ev in common_group.get("envVars", [])]
-    assert "FIREBASE_CREDENTIALS_JSON" in common_keys
     assert "REQUIRE_FIREBASE" in common_keys
     assert "S3_PRESIGNED_URL_EXPIRE_SECONDS" in common_keys
+    assert "STORAGE_PROVIDER" in common_keys
+
+    # Service-level database and redis wiring check
+    for svc in [api_svc, worker_svc, beat_svc]:
+        db_var = next((ev for ev in svc.get("envVars", []) if ev.get("key") == "DATABASE_URL"), None)
+        assert db_var and "fromDatabase" in db_var, f"{svc['name']} missing fromDatabase wiring for DATABASE_URL"
+        redis_var = next((ev for ev in svc.get("envVars", []) if ev.get("key") == "REDIS_URL"), None)
+        assert redis_var and "fromService" in redis_var, f"{svc['name']} missing fromService wiring for REDIS_URL"
 
 
 def test_docker_compose_staging_process_types_and_fail_fast():

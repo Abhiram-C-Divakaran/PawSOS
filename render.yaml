@@ -11,6 +11,15 @@ services:
     healthCheckPath: /api/v1/health
     envVars:
       - fromGroup: pawreach-staging-common
+      - key: DATABASE_URL
+        fromDatabase:
+          name: pawreach-staging-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: pawreach-staging-redis
+          property: connectionString
       - key: PROCESS_TYPE
         value: api
       - key: COOKIE_SECURE
@@ -28,6 +37,15 @@ services:
     startCommand: celery -A app.tasks.celery_app.celery_app --workdir backend worker --loglevel=INFO -Q dispatch,notifications,default
     envVars:
       - fromGroup: pawreach-staging-common
+      - key: DATABASE_URL
+        fromDatabase:
+          name: pawreach-staging-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: pawreach-staging-redis
+          property: connectionString
       - key: PROCESS_TYPE
         value: worker
 
@@ -42,6 +60,15 @@ services:
     startCommand: celery -A app.tasks.celery_app.celery_app --workdir backend beat --loglevel=INFO --pidfile=/tmp/celerybeat.pid
     envVars:
       - fromGroup: pawreach-staging-common
+      - key: DATABASE_URL
+        fromDatabase:
+          name: pawreach-staging-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: pawreach-staging-redis
+          property: connectionString
       - key: PROCESS_TYPE
         value: beat
 
@@ -49,7 +76,6 @@ services:
   - type: web
     name: pawreach-staging-frontend
     runtime: static
-    region: oregon
     buildCommand: npm --prefix frontend ci && npm --prefix frontend run build
     staticPublishPath: ./frontend/dist
     routes:
@@ -74,8 +100,8 @@ services:
       - key: VITE_FIREBASE_VAPID_KEY
         sync: false
 
-  # 5. Managed Redis Service
-  - type: redis
+  # 5. Managed Redis / Key Value Service
+  - type: keyvalue
     name: pawreach-staging-redis
     region: oregon
     plan: starter
@@ -86,33 +112,18 @@ databases:
   # Managed PostgreSQL with PostGIS (15+)
   - name: pawreach-staging-db
     region: oregon
-    plan: starter
-    postgresMajorVersion: 15
+    plan: basic-256mb
+    postgresMajorVersion: "15"
 
 envVarGroups:
   - name: pawreach-staging-common
     envVars:
       - key: ENVIRONMENT
         value: staging
-      - key: DATABASE_URL
-        fromDatabase:
-          name: pawreach-staging-db
-          property: connectionString
-      - key: REDIS_URL
-        fromService:
-          type: redis
-          name: pawreach-staging-redis
-          property: connectionString
       - key: STORAGE_PROVIDER
         value: s3
       - key: AWS_REGION
         value: ap-south-1
-      - key: AWS_ACCESS_KEY_ID
-        sync: false
-      - key: AWS_SECRET_ACCESS_KEY
-        sync: false
-      - key: S3_BUCKET_NAME
-        sync: false
       - key: JWT_SECRET_KEY
         generateValue: true
       - key: JWT_ALGORITHM
@@ -121,10 +132,6 @@ envVarGroups:
         value: "30"
       - key: REFRESH_TOKEN_EXPIRE_DAYS
         value: "7"
-      - key: CORS_ORIGINS
-        sync: false
-      - key: SENTRY_DSN
-        sync: false
       - key: CELERY_HEARTBEAT_INTERVAL_SECONDS
         value: "10.0"
       - key: CELERY_HEARTBEAT_TTL_SECONDS
@@ -133,12 +140,6 @@ envVarGroups:
         value: "20.0"
       - key: DISPATCH_OFFER_EXPIRY_SECONDS
         value: "20"
-      - key: FIREBASE_PROJECT_ID
-        sync: false
-      - key: FIREBASE_CREDENTIALS_PATH
-        sync: false
-      - key: FIREBASE_CREDENTIALS_JSON
-        sync: false
       - key: REQUIRE_FIREBASE
         value: "false"
       - key: S3_PRESIGNED_URL_EXPIRE_SECONDS
