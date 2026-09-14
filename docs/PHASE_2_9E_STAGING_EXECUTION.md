@@ -8,14 +8,14 @@
 | **Product Name** | PawReach (Repository: `Abhiram-C-Divakaran/PawSOS`) |
 | **Phase Target** | Phase 2.9E — Real Cloud Staging Provisioning & Controlled Pilot Validation |
 | **Baseline Git SHA** | `291e2ca21e685b52eb94375ba69813e20e86c54b` |
-| **Phase 2.9E Staging Doc SHA** | `8574497175fd389d279bfdb6c5f8f600bd5e4001` |
-| **Currently Verified Main SHA** | `66c7939c8b502c3dc52638adfdb733f796842a18` |
+| **Validated Application SHA** | `66c7939c8b502c3dc52638adfdb733f796842a18` |
+| **Current Verified Main SHA** | `e11b22db7f66a7b29315c138f5f64b4ec16b5091` |
 | **Target Cloud Provider** | Render PaaS (`render.yaml`) + AWS S3 (`ap-south-1`) |
 | **Target Cloud Region** | `oregon` (Render) / `ap-south-1` (AWS S3) |
 | **Target Staging API URL** | `REQUIRES_PROVIDER_CONFIGURATION` (e.g. `https://pawreach-staging-api.onrender.com`) |
 | **Target Staging Frontend URL** | `REQUIRES_PROVIDER_CONFIGURATION` (e.g. `https://pawreach-staging-frontend.onrender.com`) |
-| **Authoritative CI Run ID** | `34823618004` (Status: `completed`, Conclusion: `success`) |
-| **Staging CD Trigger Run ID** | `34823997352` (Status: `completed`, Conclusion: `success` — deployment skipped due to unconfigured staging credentials) |
+| **Authoritative CI Run ID** | `34849823327` (Status: `completed`, Conclusion: `success`) |
+| **Staging CD Trigger Run ID** | `34850257503` (Status: `completed`, Conclusion: `success` — deployment skipped due to unconfigured staging credentials) |
 
 ---
 

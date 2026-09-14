@@ -14,9 +14,10 @@
 | **Target Web URL** | `REQUIRES_PROVIDER_CONFIGURATION` (e.g. `https://pawreach-staging-frontend.onrender.com`) |
 | **Target API URL** | `REQUIRES_PROVIDER_CONFIGURATION` (e.g. `https://pawreach-staging-api.onrender.com`) |
 | **Baseline Git SHA** | `291e2ca21e685b52eb94375ba69813e20e86c54b` |
-| **Currently Verified Main SHA** | `66c7939c8b502c3dc52638adfdb733f796842a18` |
-| **Authoritative CI Run ID** | `34823618004` (Status: `completed`, Conclusion: `success`) |
-| **Staging CD Trigger Run ID** | `34823997352` (Status: `completed`, Conclusion: `success` — deployment skipped due to unconfigured staging credentials) |
+| **Validated Application SHA** | `66c7939c8b502c3dc52638adfdb733f796842a18` |
+| **Current Verified Main SHA** | `e11b22db7f66a7b29315c138f5f64b4ec16b5091` |
+| **Authoritative CI Run ID** | `34849823327` (Status: `completed`, Conclusion: `success`) |
+| **Staging CD Trigger Run ID** | `34850257503` (Status: `completed`, Conclusion: `success` — deployment skipped due to unconfigured staging credentials) |
 | **Provisioning Status** | **PENDING EXTERNAL CLOUD CREDENTIALS** |
 | **Truthful Verification State** | **`STAGING CONFIGURATION READY — EXTERNAL ACTION REQUIRED`** |
 
