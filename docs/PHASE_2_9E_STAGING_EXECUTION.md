@@ -8,12 +8,13 @@
 | **Product Name** | PawReach (Repository: `Abhiram-C-Divakaran/PawSOS`) |
 | **Phase Target** | Phase 2.9E — Real Cloud Staging Provisioning & Controlled Pilot Validation |
 | **Baseline Git SHA** | `291e2ca21e685b52eb94375ba69813e20e86c54b` |
+| **Final Verified Git SHA** | `857449767bb17d84fc57731215bb41aaee19ee0b` |
 | **Target Cloud Provider** | Render PaaS (`render.yaml`) + AWS S3 (`ap-south-1`) |
 | **Target Cloud Region** | `oregon` (Render) / `ap-south-1` (AWS S3) |
 | **Target Staging API URL** | `REQUIRES_PROVIDER_CONFIGURATION` (e.g. `https://pawreach-staging-api.onrender.com`) |
 | **Target Staging Frontend URL** | `REQUIRES_PROVIDER_CONFIGURATION` (e.g. `https://pawreach-staging-frontend.onrender.com`) |
-| **Authoritative CI Run ID** | `34818447914` (Status: `completed`, Conclusion: `success`) |
-| **Staging CD Trigger Run ID** | `34818791296` (Status: `completed`, Conclusion: `success` — prerequisites verified) |
+| **Authoritative CI Run ID** | `34822968589` (Status: `completed`, Conclusion: `success`) |
+| **Staging CD Trigger Run ID** | `34823432294` (Status: `completed`, Conclusion: `success` — prerequisites verified) |
 
 ---
 
