@@ -1,4 +1,4 @@
-# PawReach (PawSOS) — MVP Phase 2.9C: Deployment Wiring, Private Media Closure & Staging Preflight
+# PawReach (PawSOS) — MVP Phase 2.9E: Real Staging Provisioning, Deployment Verification & Controlled Pilot Validation
 
 PawReach is an enterprise-grade stray animal rescue coordination platform connecting citizens, field rescuers, veterinary clinics, foster caregivers, NGOs, and municipal authorities.
 
@@ -232,8 +232,10 @@ All staging accounts are provisioned with the password set via `STAGING_SEED_PAS
 ---
 
 ## Operational Documentation
-- [Pilot Verification Checklist](docs/PILOT_CHECKLIST.md)
-- [Phase 2.9B Certification Report](docs/PHASE_2_9_CERTIFICATION.md)
-- [Staging Deployment & Pilot Results](docs/STAGING_PILOT_RESULTS.md)
+- [Phase 2.9 Certification Report](docs/PHASE_2_9_CERTIFICATION.md)
+- [Phase 2.9E Staging Execution Record](docs/PHASE_2_9E_STAGING_EXECUTION.md)
 - [Staging Deployment Architecture](docs/STAGING_DEPLOYMENT.md)
+- [Staging Rollback Plan](docs/STAGING_ROLLBACK.md)
 - [Operations Incident Runbook](docs/OPERATIONS_RUNBOOK.md)
+- [Pilot Verification Checklist](docs/PILOT_CHECKLIST.md)
+- [Staging Deployment & Pilot Results](docs/STAGING_PILOT_RESULTS.md)
