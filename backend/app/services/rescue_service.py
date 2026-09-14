@@ -5,11 +5,13 @@ import uuid
 from app.models.rescue_case import RescueCase
 from app.models.rescue_status_history import RescueStatusHistory
 from app.models.animal_image import AnimalImage
+from app.models.rescue_assignment import RescueAssignment
 from app.models.user import User
 from app.core.constants import (
     RescueStatus,
     RescuePriority,
     UserRole,
+    AssignmentStatus,
     ALLOWED_STATUS_TRANSITIONS,
     STATUS_ROLE_PERMISSIONS,
 )
@@ -180,6 +182,34 @@ class RescueService:
             raise ConflictException(
                 f"Invalid status transition from '{previous_status.value}' to '{new_status.value}'."
             )
+
+        # 3. Post-transition Role Scoping
+        if not system_update and user:
+            if user.role == UserRole.RESCUER and new_status != RescueStatus.CANCELLED:
+                if previous_status in [
+                    RescueStatus.RESPONDER_ASSIGNED,
+                    RescueStatus.RESPONDER_EN_ROUTE,
+                    RescueStatus.ANIMAL_LOCATED,
+                    RescueStatus.RESCUED,
+                    RescueStatus.TRANSPORTING,
+                ]:
+                    active_assignment = (
+                        db.query(RescueAssignment)
+                        .filter(
+                            RescueAssignment.rescue_case_id == rescue_case.id,
+                            RescueAssignment.rescuer_id == user.id,
+                            RescueAssignment.assignment_status == AssignmentStatus.ACCEPTED
+                        )
+                        .first()
+                    )
+                    if not active_assignment:
+                        raise ForbiddenException("Only the assigned responder may update rescue progress.")
+
+            if user.role == UserRole.VETERINARIAN:
+                if not user.veterinary_facility_id:
+                    raise ForbiddenException("Veterinarian is not associated with an authorized facility.")
+                if rescue_case.veterinary_facility_id and rescue_case.veterinary_facility_id != user.veterinary_facility_id:
+                    raise ForbiddenException("Veterinarians can only update cases assigned to their authorized facility.")
 
         # Update case
         rescue_case.status = new_status

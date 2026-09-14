@@ -14,6 +14,7 @@ import api from '../../services/api';
 import { formatApiError } from '../../utils/error';
 import { MapView } from '../../components/MapView';
 import { Toast, type ToastMessage } from '../../components/Toast';
+import { ProtectedImage } from '../../components/ProtectedImage';
 import type { NGOResponderSummary, VeterinaryFacility } from '../../types';
 
 export const NGOCaseDetail = () => {
@@ -251,7 +252,13 @@ export const NGOCaseDetail = () => {
             <div>
               <span className="text-xs text-slate-400 font-semibold uppercase mb-2 block">Incident Photo</span>
               <div className="h-44 w-64 rounded-xl overflow-hidden border border-slate-200 shadow-sm">
-                <img src={caseData.images[0].image_url} alt="Animal" className="w-full h-full object-cover" />
+                <ProtectedImage
+                  caseId={caseData.id}
+                  imageId={caseData.images[0].id}
+                  src={caseData.images[0].image_url}
+                  alt="Animal"
+                  className="w-full h-full object-cover"
+                />
               </div>
             </div>
           )}

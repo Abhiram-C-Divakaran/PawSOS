@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { MapView } from '../components/MapView';
 import { Toast, type ToastMessage } from '../components/Toast';
+import { ProtectedImage } from '../components/ProtectedImage';
 
 const formatMinutesAgo = (createdAt: string) => {
   const elapsed = Math.round((Date.now() - new Date(createdAt).getTime()) / 60000);
@@ -553,7 +554,13 @@ export const RescuerDashboard = () => {
                   <div>
                     <h3 className="text-xs uppercase font-bold text-gray-400 tracking-wider mb-2">Reported Photo</h3>
                     <div className="h-32 w-48 rounded-lg overflow-hidden border border-gray-200 shadow-sm">
-                      <img src={activeCase.images[0].image_url} alt="Animal" className="w-full h-full object-cover" />
+                      <ProtectedImage
+                        caseId={activeCase.id}
+                        imageId={activeCase.images[0].id}
+                        src={activeCase.images[0].image_url}
+                        alt="Animal"
+                        className="w-full h-full object-cover"
+                      />
                     </div>
                   </div>
                 )}

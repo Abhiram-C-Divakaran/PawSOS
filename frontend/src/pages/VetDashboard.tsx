@@ -4,6 +4,7 @@ import { formatApiError } from '../utils/error';
 import type { RescueCase, RescueStatus, VeterinaryFacility } from '../types';
 import { Stethoscope, PlusCircle, CheckCircle, HeartPulse } from 'lucide-react';
 import { Toast, type ToastMessage } from '../components/Toast';
+import { ProtectedImage } from '../components/ProtectedImage';
 
 export const VetDashboard = () => {
   const [cases, setCases] = useState<RescueCase[]>([]);
@@ -246,7 +247,13 @@ export const VetDashboard = () => {
 
                   {selectedCase.images && selectedCase.images.length > 0 ? (
                     <div className="h-28 rounded-xl overflow-hidden border border-gray-200">
-                      <img src={selectedCase.images[0].image_url} alt="Animal" className="w-full h-full object-cover" />
+                      <ProtectedImage
+                        caseId={selectedCase.id}
+                        imageId={selectedCase.images[0].id}
+                        src={selectedCase.images[0].image_url}
+                        alt="Animal"
+                        className="w-full h-full object-cover"
+                      />
                     </div>
                   ) : (
                     <div className="h-28 rounded-xl bg-gray-50 border border-dashed border-gray-300 flex items-center justify-center text-gray-400 text-xs">

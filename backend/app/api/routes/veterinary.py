@@ -27,11 +27,12 @@ def add_treatment(
         raise NotFoundException("Rescue case not found")
 
     # Requirement 43: Enforce veterinary facility scoping
-    if current_user.veterinary_facility_id:
-        if case.veterinary_facility_id and case.veterinary_facility_id != current_user.veterinary_facility_id:
-            raise ForbiddenException("Access denied: Case is assigned to another veterinary facility.")
-        if treatment_in.facility_id != current_user.veterinary_facility_id:
-            raise ForbiddenException("Access denied: You can only record treatments for your authorized facility.")
+    if not current_user.veterinary_facility_id:
+        raise ForbiddenException("Access denied: Veterinarian is not associated with an authorized facility.")
+    if case.veterinary_facility_id and case.veterinary_facility_id != current_user.veterinary_facility_id:
+        raise ForbiddenException("Access denied: Case is assigned to another veterinary facility.")
+    if treatment_in.facility_id != current_user.veterinary_facility_id:
+        raise ForbiddenException("Access denied: You can only record treatments for your authorized facility.")
         
     treatment = Treatment(
         rescue_case_id=case.id,
@@ -71,7 +72,9 @@ def get_treatments(
     db: Session = Depends(get_db),
     current_user: User = Depends(RoleChecker([UserRole.VETERINARIAN, UserRole.RESCUER, UserRole.NGO_ADMIN, UserRole.SUPER_ADMIN]))
 ):
-    if current_user.role == UserRole.VETERINARIAN and current_user.veterinary_facility_id:
+    if current_user.role == UserRole.VETERINARIAN:
+        if not current_user.veterinary_facility_id:
+            raise ForbiddenException("Access denied: Veterinarian is not associated with an authorized facility.")
         case = db.query(RescueCase).filter(RescueCase.id == case_id).first()
         if case and case.veterinary_facility_id and case.veterinary_facility_id != current_user.veterinary_facility_id:
             raise ForbiddenException("Access denied: Case is assigned to another veterinary facility.")
@@ -90,7 +93,9 @@ def update_treatment(
     if not treatment:
         raise NotFoundException("Treatment not found")
 
-    if current_user.veterinary_facility_id and treatment.facility_id != current_user.veterinary_facility_id:
+    if not current_user.veterinary_facility_id:
+        raise ForbiddenException("Access denied: Veterinarian is not associated with an authorized facility.")
+    if treatment.facility_id != current_user.veterinary_facility_id:
         raise ForbiddenException("Access denied: Treatment belongs to another veterinary facility.")
         
     update_data = treatment_in.model_dump(exclude_unset=True)

@@ -23,6 +23,7 @@ from app.core.constants import (
     RescuerAvailability,
     AssignmentStatus,
 )
+from app.core.exceptions import ForbiddenException
 from app.schemas.ngo import (
     NGOOverviewKPIs,
     HotspotItem,
@@ -45,16 +46,42 @@ from app.services.notification_service import NotificationService
 
 router = APIRouter()
 
-def check_org_scope(current_user: User, case: RescueCase):
-    """Ensure NGO admin only accesses cases within their authorized organization if scoped."""
-    if current_user.role == UserRole.SUPER_ADMIN:
+def check_org_scope(current_user: User, case: RescueCase, allow_unassigned_case: bool = False):
+    """Ensure NGO admin only accesses cases within their authorized organization.
+    
+    Fail-closed policy:
+    - Super Admin and Municipal Admin have global access.
+    - NGO Admin requires current_user.organization_id to exist and match case.organization_id.
+    - If allow_unassigned_case is False (default for private dossiers and evidence), case.organization_id
+      must exist and match current_user.organization_id. A null case.organization_id does NOT grant access.
+    """
+    if current_user.role in [UserRole.SUPER_ADMIN, UserRole.MUNICIPAL_ADMIN]:
         return
-    if current_user.role == UserRole.NGO_ADMIN and current_user.organization_id:
-        if case.organization_id and case.organization_id != current_user.organization_id:
+
+    if current_user.role == UserRole.NGO_ADMIN:
+        if not current_user.organization_id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Access denied: Case belongs to another organization"
+                detail="Access denied: NGO Admin is not associated with an organization"
             )
+        if case.organization_id:
+            if case.organization_id != current_user.organization_id:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Access denied: Case belongs to another organization"
+                )
+        else:
+            if not allow_unassigned_case:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Access denied: Case belongs to another organization"
+                )
+        return
+
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Access denied: Insufficient privileges"
+    )
 
 def get_case_status_history_map(db: Session, case_ids: List[uuid.UUID]) -> Dict[uuid.UUID, Dict[RescueStatus, datetime]]:
     """Batch retrieves earliest status transition timestamp for a list of cases."""
@@ -582,10 +609,15 @@ def get_ngo_cases(
 ):
     """Retrieve filtered and searchable rescue cases for NGO case management."""
     query = db.query(RescueCase)
-    if current_user.role == UserRole.NGO_ADMIN and current_user.organization_id:
-        query = query.filter(
-            (RescueCase.organization_id == current_user.organization_id) | (RescueCase.organization_id.is_(None))
-        )
+    if current_user.role == UserRole.NGO_ADMIN:
+        # Discovery policy: NGO admins can discover cases belonging to their own organization
+        # as well as unassigned cases available for response/intake. Cross-tenant cases are strictly excluded.
+        if current_user.organization_id:
+            query = query.filter(
+                (RescueCase.organization_id == current_user.organization_id) | (RescueCase.organization_id.is_(None))
+            )
+        else:
+            query = query.filter(RescueCase.organization_id.is_(None))
 
     if priority:
         query = query.filter(RescueCase.triage_priority == priority)
@@ -603,7 +635,7 @@ def get_ngo_cases(
         )
 
     cases = query.order_by(RescueCase.created_at.desc()).offset(skip).limit(limit).all()
-    return [build_rescue_response(c) for c in cases]
+    return [build_rescue_response(c, include_evidence=True, presign_images=False) for c in cases]
 
 @router.get("/cases/{case_id}")
 def get_ngo_case_dossier(
@@ -618,7 +650,7 @@ def get_ngo_case_dossier(
 
     check_org_scope(current_user, case)
 
-    resp = build_rescue_response(case).model_dump()
+    resp = build_rescue_response(case, include_evidence=True, presign_images=False).model_dump()
 
     # Add assignment offers history
     assignments = (
@@ -685,7 +717,7 @@ def execute_ngo_case_action(
     if not case:
         raise HTTPException(status_code=404, detail="Rescue case not found")
 
-    check_org_scope(current_user, case)
+    check_org_scope(current_user, case, allow_unassigned_case=True)
 
     # Claim unassigned case to current NGO organization if applicable
     if not case.organization_id and current_user.organization_id:

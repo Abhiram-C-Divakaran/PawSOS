@@ -5,6 +5,7 @@ import { formatApiError } from '../utils/error';
 import type { RescueCase, RescueTimeline } from '../types';
 import { MapPin, AlertTriangle, Clock, CheckCircle, UserCheck, ShieldAlert } from 'lucide-react';
 import { MapView } from '../components/MapView';
+import { ProtectedImage } from '../components/ProtectedImage';
 
 export const CaseTracking = () => {
   const { id } = useParams<{ id: string }>();
@@ -115,7 +116,9 @@ export const CaseTracking = () => {
         {/* Real photo display */}
         {primaryPhoto ? (
           <div className="w-full md:w-48 h-36 bg-gray-100 rounded-xl flex items-center justify-center border border-gray-200 overflow-hidden shadow-sm flex-shrink-0">
-            <img
+            <ProtectedImage
+              caseId={rescueCase.id}
+              imageId={rescueCase.images?.[0]?.id}
               src={primaryPhoto}
               alt={`${rescueCase.species} rescue`}
               className="object-cover w-full h-full hover:scale-105 transition-transform duration-300"

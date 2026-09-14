@@ -12,7 +12,7 @@ from app.schemas.rescue import RescueResponse
 from app.api.routes.rescues import build_rescue_response
 from app.core.permissions import RoleChecker
 from app.core.constants import UserRole, RescueStatus
-from app.core.exceptions import NotFoundException, BadRequestException
+from app.core.exceptions import NotFoundException, BadRequestException, ForbiddenException
 from app.services.rescue_service import RescueService
 
 router = APIRouter()
@@ -47,11 +47,17 @@ def get_veterinary_cases(
 
     # Facility scoping: Veterinarians can only access cases assigned to their authorized facility
     if current_user.role == UserRole.VETERINARIAN:
-        target_facility = current_user.veterinary_facility_id or facility_id
-        if target_facility:
-            query = query.filter(RescueCase.veterinary_facility_id == target_facility)
+        if not current_user.veterinary_facility_id:
+            raise ForbiddenException("Access denied: Veterinarian is not associated with an authorized facility.")
+        query = query.filter(RescueCase.veterinary_facility_id == current_user.veterinary_facility_id)
+    elif current_user.role == UserRole.NGO_ADMIN:
+        if not current_user.organization_id:
+            raise ForbiddenException("Access denied: NGO Admin is not associated with an organization.")
+        query = query.filter(RescueCase.organization_id == current_user.organization_id)
+        if facility_id:
+            query = query.filter(RescueCase.veterinary_facility_id == facility_id)
     elif facility_id:
         query = query.filter(RescueCase.veterinary_facility_id == facility_id)
 
     cases = query.order_by(RescueCase.updated_at.desc()).all()
-    return [build_rescue_response(c) for c in cases]
+    return [build_rescue_response(c, include_evidence=True, presign_images=False) for c in cases]
