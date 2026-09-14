@@ -8,13 +8,14 @@
 | **Product Name** | PawReach (Repository: `Abhiram-C-Divakaran/PawSOS`) |
 | **Phase Target** | Phase 2.9E — Real Cloud Staging Provisioning & Controlled Pilot Validation |
 | **Baseline Git SHA** | `291e2ca21e685b52eb94375ba69813e20e86c54b` |
-| **Final Verified Git SHA** | `857449767bb17d84fc57731215bb41aaee19ee0b` |
+| **Phase 2.9E Staging Doc SHA** | `8574497175fd389d279bfdb6c5f8f600bd5e4001` |
+| **Currently Verified Main SHA** | `66c7939c8b502c3dc52638adfdb733f796842a18` |
 | **Target Cloud Provider** | Render PaaS (`render.yaml`) + AWS S3 (`ap-south-1`) |
 | **Target Cloud Region** | `oregon` (Render) / `ap-south-1` (AWS S3) |
 | **Target Staging API URL** | `REQUIRES_PROVIDER_CONFIGURATION` (e.g. `https://pawreach-staging-api.onrender.com`) |
 | **Target Staging Frontend URL** | `REQUIRES_PROVIDER_CONFIGURATION` (e.g. `https://pawreach-staging-frontend.onrender.com`) |
-| **Authoritative CI Run ID** | `34822968589` (Status: `completed`, Conclusion: `success`) |
-| **Staging CD Trigger Run ID** | `34823432294` (Status: `completed`, Conclusion: `success` — prerequisites verified) |
+| **Authoritative CI Run ID** | `34823618004` (Status: `completed`, Conclusion: `success`) |
+| **Staging CD Trigger Run ID** | `34823997352` (Status: `completed`, Conclusion: `success` — deployment skipped due to unconfigured staging credentials) |
 
 ---
 
@@ -30,15 +31,15 @@ In accordance with strict truthfulness guidelines, each architectural component 
 
 | Service Component | Architecture / Runtime | Implementation State | Operational Status |
 |---|---|---|---|
-| **API Web Service** | FastAPI (Python 3.12, Uvicorn 2 workers) | [backend/app/main.py](file:///c:/Users/Abhiram/Documents/PawSOS/backend/app/main.py) | **`VERIFIED IN CI`** / `REQUIRES_PROVIDER_CONFIGURATION` |
-| **Celery Background Worker** | Celery 5.6+ (`dispatch`, `notifications`, `default`) | [backend/app/tasks/celery_app.py](file:///c:/Users/Abhiram/Documents/PawSOS/backend/app/tasks/celery_app.py) | **`VERIFIED IN CI`** / `REQUIRES_PROVIDER_CONFIGURATION` |
-| **Celery Beat Scheduler** | Celery Beat singleton scheduler | [backend/app/tasks/celery_app.py](file:///c:/Users/Abhiram/Documents/PawSOS/backend/app/tasks/celery_app.py) | **`VERIFIED IN CI`** / `REQUIRES_PROVIDER_CONFIGURATION` |
-| **PostgreSQL + PostGIS** | PostgreSQL 15 + PostGIS 3.3 | [backend/alembic/](file:///c:/Users/Abhiram/Documents/PawSOS/backend/alembic/) | **`VERIFIED IN CI`** / `REQUIRES_PROVIDER_CONFIGURATION` |
+| **API Web Service** | FastAPI (Python 3.12, Uvicorn 2 workers) | [backend/app/main.py](../backend/app/main.py) | **`VERIFIED IN CI`** / `REQUIRES_PROVIDER_CONFIGURATION` |
+| **Celery Background Worker** | Celery 5.6+ (`dispatch`, `notifications`, `default`) | [backend/app/tasks/celery_app.py](../backend/app/tasks/celery_app.py) | **`VERIFIED IN CI`** / `REQUIRES_PROVIDER_CONFIGURATION` |
+| **Celery Beat Scheduler** | Celery Beat singleton scheduler | [backend/app/tasks/celery_app.py](../backend/app/tasks/celery_app.py) | **`VERIFIED IN CI`** / `REQUIRES_PROVIDER_CONFIGURATION` |
+| **PostgreSQL + PostGIS** | PostgreSQL 15 + PostGIS 3.3 | [backend/alembic/](../backend/alembic/) | **`VERIFIED IN CI`** / `REQUIRES_PROVIDER_CONFIGURATION` |
 | **Redis Cache & Broker** | Redis 7-alpine | Message broker & rate limiter | **`VERIFIED IN CI`** / `REQUIRES_PROVIDER_CONFIGURATION` |
-| **Frontend SPA** | React 19 + TypeScript + Vite + Nginx | [frontend/src/](file:///c:/Users/Abhiram/Documents/PawSOS/frontend/src/) | **`VERIFIED IN CI`** / `REQUIRES_PROVIDER_CONFIGURATION` |
-| **Private S3 Storage** | AWS S3 / Boto3 (`STORAGE_PROVIDER=s3`) | [backend/app/services/storage_service.py](file:///c:/Users/Abhiram/Documents/PawSOS/backend/app/services/storage_service.py) | **`VERIFIED IN CI`** / `REQUIRES_EXTERNAL_CREDENTIALS` |
-| **Firebase Cloud Messaging** | Firebase Admin SDK + FCM Web Push | [backend/app/services/notification_service.py](file:///c:/Users/Abhiram/Documents/PawSOS/backend/app/services/notification_service.py) | **`VERIFIED IN CI`** / `REQUIRES_EXTERNAL_CREDENTIALS` |
-| **Application Telemetry** | Deep readiness probe + Sentry SDK | [backend/app/api/routes/health.py](file:///c:/Users/Abhiram/Documents/PawSOS/backend/app/api/routes/health.py) | **`VERIFIED IN CI`** / `REQUIRES_EXTERNAL_CREDENTIALS` |
+| **Frontend SPA** | React 19 + TypeScript + Vite + Nginx | [frontend/src/](../frontend/src/) | **`VERIFIED IN CI`** / `REQUIRES_PROVIDER_CONFIGURATION` |
+| **Private S3 Storage** | AWS S3 / Boto3 (`STORAGE_PROVIDER=s3`) | [backend/app/services/storage_service.py](../backend/app/services/storage_service.py) | **`VERIFIED IN CI`** / `REQUIRES_EXTERNAL_CREDENTIALS` |
+| **Firebase Cloud Messaging** | Firebase Admin SDK + FCM Web Push | [backend/app/services/notification_service.py](../backend/app/services/notification_service.py) | **`VERIFIED IN CI`** / `REQUIRES_EXTERNAL_CREDENTIALS` |
+| **Application Telemetry** | Deep readiness probe + Sentry SDK | [backend/app/api/routes/health.py](../backend/app/api/routes/health.py) | **`VERIFIED IN CI`** / `REQUIRES_EXTERNAL_CREDENTIALS` |
 
 ---
 
@@ -47,7 +48,7 @@ In accordance with strict truthfulness guidelines, each architectural component 
 ### 3.1 Backend Test Suite & Coverage
 * **Command**: `pytest backend/tests --cov=app --cov-report=term-missing --cov-fail-under=85 -v -p no:warnings`
 * **Test Count**: **169 passed, 0 failed** (100% pass rate)
-* **Code Coverage**: **86.47%** (Threshold: $\ge 85.0\%$)
+* **Code Coverage**: **87.02%** (Threshold: $\ge 85.0\%$)
 * **Key Test Coverage Areas**:
   - `test_access_control_closure.py`: 21 tests verifying Phase 2.9D fail-closed authorization matrix.
   - `test_staging_security.py`: 25 tests verifying seed password policy ($\ge 14$ chars), production guards, and S3/FCM error handling.
@@ -94,7 +95,7 @@ In accordance with strict truthfulness guidelines, each architectural component 
 
 ## 5. Staging Smoke Test Protocol
 
-* **Script Path**: [`scripts/staging_smoke_test.py`](file:///c:/Users/Abhiram/Documents/PawSOS/scripts/staging_smoke_test.py)
+* **Script Path**: [`scripts/staging_smoke_test.py`](../scripts/staging_smoke_test.py)
 * **Automated Test Coverage**: 10 tests in `test_staging_workflow_validation.py` verifying:
   - Command-line argument parser flags (`--api-url`, `--frontend-url`, `--expected-sha`, `--allow-http`, `--require-firebase`).
   - HTTPS enforcement in staging.

@@ -10,7 +10,7 @@ All automated tests must pass and coverage thresholds must be satisfied on `main
 
 ### 1. Backend Automated Testing & Coverage (Threshold: >= 85%)
 - [x] **Pytest Unit & Integration Suite**: **169 passed**, 0 failures (100% pass rate). Status: **`VERIFIED IN CI`**
-- [x] **Backend Coverage Bar**: **86.47%** achieved across `backend/app` package — enforced in CI via `--cov-fail-under=85`. Status: **`VERIFIED IN CI`**
+- [x] **Backend Coverage Bar**: **87.02%** achieved across `backend/app` package — enforced in CI via `--cov-fail-under=85`. Status: **`VERIFIED IN CI`**
 - [x] **Access Control & Private Media Security Tests** (`test_access_control_closure.py`): Status: **`VERIFIED IN CI`**
   - Centralized fail-closed authorization: citizens only access owned cases; independent citizen receives 403.
   - Rescuer case relationship: rescuers without active offer/assignment denied 403; open status alone never grants access.

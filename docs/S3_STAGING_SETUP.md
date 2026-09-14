@@ -60,9 +60,7 @@ To allow browser uploads or direct asset retrieval from the staging frontend:
     "AllowedMethods": ["GET", "PUT", "POST", "HEAD"],
     "AllowedOrigins": [
       "https://staging.pawreach.org",
-      "https://admin.staging.pawreach.org",
-      "http://localhost:5173",
-      "http://localhost:3000"
+      "https://admin.staging.pawreach.org"
     ],
     "ExposeHeaders": ["ETag"],
     "MaxAgeSeconds": 3600

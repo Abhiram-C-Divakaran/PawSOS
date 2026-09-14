@@ -1,21 +1,24 @@
-# PawReach Phase 2.9B — Staging Deployment & Pilot Validation Results
+# PawReach Phase 2.9E — Staging Deployment & Pilot Validation Results
 
 ## 1. Staging Environment Overview
 
 | Parameter | Configuration / Observed Value |
 | :--- | :--- |
-| **Product Name** | PawReach (Repository: PawSOS) |
-| **Phase** | Phase 2.9B — Actual Staging Provisioning, Truthful CD & Real-Device Pilot Validation |
-| **Target Infrastructure** | Render PaaS (`pawreach-staging-api`, `pawreach-staging-worker`, `pawreach-staging-beat`, `pawreach-staging-web`) |
-| **Target Database** | Managed PostgreSQL 15+ with PostGIS 3.4 (`DATABASE_URL`) |
+| **Product Name** | PawReach (Repository: `Abhiram-C-Divakaran/PawSOS`) |
+| **Phase** | Phase 2.9E — Real Cloud Staging Provisioning & Controlled Pilot Validation |
+| **Target Infrastructure** | Render PaaS (`pawreach-staging-api`, `pawreach-staging-worker`, `pawreach-staging-beat`, `pawreach-staging-frontend`) |
+| **Target Database** | Managed PostgreSQL 15+ with PostGIS 3.3 (`DATABASE_URL`) |
 | **Target Cache & Broker** | Managed Redis 7+ (`REDIS_URL`) |
 | **Object Storage** | AWS S3 (`STORAGE_PROVIDER=s3`, bucket private, pre-signed URLs) |
 | **Push Notification Service** | Firebase Cloud Messaging (Web Push PWA Service Worker) |
-| **Target Web URL** | `https://staging.pawreach.org` (or `https://pawreach-staging-web.onrender.com`) |
-| **Target API URL** | `https://api-staging.pawreach.org` (or `https://pawreach-staging-api.onrender.com`) |
-| **Git Commit SHA** | Current `main` commit (exposed via `GET /api/v1/health`) |
+| **Target Web URL** | `REQUIRES_PROVIDER_CONFIGURATION` (e.g. `https://pawreach-staging-frontend.onrender.com`) |
+| **Target API URL** | `REQUIRES_PROVIDER_CONFIGURATION` (e.g. `https://pawreach-staging-api.onrender.com`) |
+| **Baseline Git SHA** | `291e2ca21e685b52eb94375ba69813e20e86c54b` |
+| **Currently Verified Main SHA** | `66c7939c8b502c3dc52638adfdb733f796842a18` |
+| **Authoritative CI Run ID** | `34823618004` (Status: `completed`, Conclusion: `success`) |
+| **Staging CD Trigger Run ID** | `34823997352` (Status: `completed`, Conclusion: `success` — deployment skipped due to unconfigured staging credentials) |
 | **Provisioning Status** | **PENDING EXTERNAL CLOUD CREDENTIALS** |
-| **Truthful Verification State** | **`CODE VERIFIED — READY FOR STAGING PROVISIONING`** |
+| **Truthful Verification State** | **`STAGING CONFIGURATION READY — EXTERNAL ACTION REQUIRED`** |
 
 ---
 
@@ -126,10 +129,10 @@ All 5 core operational pilot scenarios are systematically verified via our unmoc
 
 | Metric | Target | Verified Value | Result |
 | :--- | :--- | :--- | :--- |
-| **Backend Test Coverage** | $\ge 85\%$ | **87.2%** | **PASSED** |
-| **Backend Test Failures** | 0 | **0 (108 passed)** | **PASSED** |
+| **Backend Test Coverage** | $\ge 85\%$ | **87.02%** | **PASSED** |
+| **Backend Test Failures** | 0 | **0 (169 passed)** | **PASSED** |
 | **Frontend Test Failures** | 0 | **0 (61 passed)** | **PASSED** |
-| **Frontend Linter Warnings** | 0 | **0 warnings, 0 errors** (oxlint on 66 files) | **PASSED** |
+| **Frontend Linter Warnings** | 0 | **0 warnings, 0 errors** (oxlint on 67 files) | **PASSED** |
 | **Vite Production Build** | Zero errors | **Clean exit 0** | **PASSED** |
 | **Vite Chunk Warnings (>500 kB)** | 0 | **0 chunks > 500 kB** | **PASSED** |
 | **Leaflet Asset Resolution Warnings** | 0 | **0 warnings** (all markers & layers resolved) | **PASSED** |
@@ -168,11 +171,12 @@ All 5 core operational pilot scenarios are systematically verified via our unmoc
 ```text
 ================================================================================
 FINAL PILOT CERTIFICATION VERDICT:
-CODE VERIFIED — READY FOR STAGING PROVISIONING
+STAGING CONFIGURATION READY — EXTERNAL ACTION REQUIRED
 ================================================================================
 Summary:
 All automated integration gates, security standards, tenant boundaries, 
-build optimizations, and test suites are 100% passing and certified.
+build optimizations, and test suites are 100% passing and certified (169 backend,
+61 vitest, 6 mocked UI contract, 7 unmocked fullstack Playwright specs).
 The platform is fully ready for staging cloud provisioning upon injection 
 of operational cloud credentials.
 ================================================================================

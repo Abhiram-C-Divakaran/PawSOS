@@ -234,6 +234,7 @@ All staging accounts are provisioned with the password set via `STAGING_SEED_PAS
 ## Operational Documentation
 - [Phase 2.9 Certification Report](docs/PHASE_2_9_CERTIFICATION.md)
 - [Phase 2.9E Staging Execution Record](docs/PHASE_2_9E_STAGING_EXECUTION.md)
+- [Staging Activation & Operator Checklist](docs/STAGING_ACTIVATION_CHECKLIST.md)
 - [Staging Deployment Architecture](docs/STAGING_DEPLOYMENT.md)
 - [Staging Rollback Plan](docs/STAGING_ROLLBACK.md)
 - [Operations Incident Runbook](docs/OPERATIONS_RUNBOOK.md)

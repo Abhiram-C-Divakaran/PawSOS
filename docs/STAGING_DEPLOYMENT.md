@@ -82,7 +82,7 @@ REDIS_URL="redis://:redis_password@redis.staging.internal:6379/0"
 # CORS & Allowed Origins
 # NOTE: Wildcard '*' is strictly forbidden in staging
 # ==========================================
-CORS_ORIGINS="https://staging.pawreach.org,https://admin.staging.pawreach.org,http://localhost:5173"
+CORS_ORIGINS="https://staging.pawreach.org,https://admin.staging.pawreach.org"
 
 # ==========================================
 # Cloud Object Storage (S3 / MinIO)
