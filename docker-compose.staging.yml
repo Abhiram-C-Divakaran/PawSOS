@@ -24,6 +24,7 @@ services:
     ports:
       - "8000:8000"
     environment:
+      - PROCESS_TYPE=api
       - DATABASE_URL=${DATABASE_URL:?DATABASE_URL required}
       - REDIS_URL=${REDIS_URL:?REDIS_URL required}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:?JWT_SECRET_KEY required (minimum 32 chars)}
@@ -33,11 +34,14 @@ services:
       - CORS_ORIGINS=${CORS_ORIGINS:?CORS_ORIGINS required}
       - ENVIRONMENT=staging
       - STORAGE_PROVIDER=${STORAGE_PROVIDER:?STORAGE_PROVIDER required (s3)}
-      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
-      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:?AWS_ACCESS_KEY_ID required when STORAGE_PROVIDER=s3}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:?AWS_SECRET_ACCESS_KEY required when STORAGE_PROVIDER=s3}
       - AWS_REGION=${AWS_REGION:-ap-south-1}
-      - S3_BUCKET_NAME=${S3_BUCKET_NAME:-}
+      - S3_BUCKET_NAME=${S3_BUCKET_NAME:?S3_BUCKET_NAME required when STORAGE_PROVIDER=s3}
       - FIREBASE_CREDENTIALS_PATH=${FIREBASE_CREDENTIALS_PATH:-}
+      - FIREBASE_CREDENTIALS_JSON=${FIREBASE_CREDENTIALS_JSON:-}
+      - REQUIRE_FIREBASE=${REQUIRE_FIREBASE:-false}
+      - S3_PRESIGNED_URL_EXPIRE_SECONDS=${S3_PRESIGNED_URL_EXPIRE_SECONDS:-900}
       - SENTRY_DSN=${SENTRY_DSN:-}
       - COOKIE_SECURE=${COOKIE_SECURE:-true}
       - COOKIE_SAMESITE=lax
@@ -57,16 +61,20 @@ services:
     container_name: pawreach_staging_worker
     command: celery -A app.tasks.celery_app.celery_app worker --loglevel=INFO -Q dispatch,notifications,default
     environment:
+      - PROCESS_TYPE=worker
       - DATABASE_URL=${DATABASE_URL:?DATABASE_URL required}
       - REDIS_URL=${REDIS_URL:?REDIS_URL required}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:?JWT_SECRET_KEY required (minimum 32 chars)}
       - ENVIRONMENT=staging
       - STORAGE_PROVIDER=${STORAGE_PROVIDER:?STORAGE_PROVIDER required (s3)}
-      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
-      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:?AWS_ACCESS_KEY_ID required when STORAGE_PROVIDER=s3}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:?AWS_SECRET_ACCESS_KEY required when STORAGE_PROVIDER=s3}
       - AWS_REGION=${AWS_REGION:-ap-south-1}
-      - S3_BUCKET_NAME=${S3_BUCKET_NAME:-}
+      - S3_BUCKET_NAME=${S3_BUCKET_NAME:?S3_BUCKET_NAME required when STORAGE_PROVIDER=s3}
       - FIREBASE_CREDENTIALS_PATH=${FIREBASE_CREDENTIALS_PATH:-}
+      - FIREBASE_CREDENTIALS_JSON=${FIREBASE_CREDENTIALS_JSON:-}
+      - REQUIRE_FIREBASE=${REQUIRE_FIREBASE:-false}
+      - S3_PRESIGNED_URL_EXPIRE_SECONDS=${S3_PRESIGNED_URL_EXPIRE_SECONDS:-900}
       - CELERY_HEARTBEAT_INTERVAL_SECONDS=10.0
       - CELERY_HEARTBEAT_TTL_SECONDS=60
     depends_on:
@@ -85,6 +93,7 @@ services:
     container_name: pawreach_staging_beat
     command: celery -A app.tasks.celery_app.celery_app beat --loglevel=INFO --pidfile=/tmp/celerybeat.pid
     environment:
+      - PROCESS_TYPE=beat
       - DATABASE_URL=${DATABASE_URL:?DATABASE_URL required}
       - REDIS_URL=${REDIS_URL:?REDIS_URL required}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:?JWT_SECRET_KEY required (minimum 32 chars)}

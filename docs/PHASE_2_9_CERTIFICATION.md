@@ -8,11 +8,11 @@
 | Attribute | Details |
 | :--- | :--- |
 | **Product Name** | PawReach (Repository: PawSOS) |
-| **Phase Target** | MVP Phase 2.9B — Actual Staging Provisioning, Truthful CD & Pilot Validation |
+| **Phase Target** | MVP Phase 2.9C — Deployment Wiring, Private Media Closure & Staging Preflight |
 | **Branch** | `main` |
-| **Assessment Result** | **CODE VERIFIED — STAGING NOT DEPLOYED (READY FOR CLOUD PROVISIONING)** |
+| **Assessment Result** | **CODE VERIFIED — READY FOR STAGING PROVISIONING** |
 
-Phase 2.9B completes the transition of the CI-verified PawReach emergency animal response platform into a hardened, deployable, measurable staging environment ready for controlled field pilot trials. Deployment is separated into a dedicated truthful CD workflow, all security debt has been remediated, dependency vulnerabilities eliminated, bundle sizes optimized by over 70%, Leaflet asset resolution cleaned, and production-grade deployment manifests established. Real cloud deployment is pending injection of external cloud credentials.
+Phase 2.9C completes the deployment wiring, private S3 media closure, process-specific configuration validation, and preflight hardening of the CI-verified PawReach emergency animal response platform. Deployment is wired with truthful CD workflow triggers, normalized commit SHA resolution, bounded deployment polling, fail-fast staging compose definitions, private S3 presigned URL architecture with strict multi-tenant authorization, and environment-aware Firebase credential support (via JSON secrets or file paths). Real cloud deployment is pending external cloud account provisioning.
 
 ---
 
@@ -145,11 +145,11 @@ Phase 2.9B completes the transition of the CI-verified PawReach emergency animal
 | **3. Performance & Bundle** | **CODE VERIFIED** | Initial JS load reduced by 70.6%; zero chunks over 500 kB; 0 Leaflet asset warnings. |
 | **4. Architecture Separation** | **CODE VERIFIED** | Dedicated worker and singleton beat processes; 6-subsystem health telemetry. |
 | **5. Staging Cloud Provisioning** | **PENDING CLOUD CREDENTIALS** | Requires external cloud credentials (`Status: REQUIRES_EXTERNAL_CREDENTIALS`). |
-| **6. Field Pilot Trial Readiness** | **READY FOR CONTROLLED PILOT** | Field execution protocols documented; physical device test pending cloud deployment. |
+| **6. Field Pilot Trial Readiness** | **PENDING STAGING + REAL-DEVICE VALIDATION** | Field execution protocols documented; physical device test pending cloud deployment. |
 
 ```text
 ================================================================================
 FINAL PILOT CERTIFICATION VERDICT:
-CODE VERIFIED — STAGING NOT DEPLOYED
+CODE VERIFIED — READY FOR STAGING PROVISIONING
 ================================================================================
 ```

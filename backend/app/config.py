@@ -36,7 +36,12 @@ class Settings(BaseSettings):
 
     # Firebase Cloud Messaging
     FIREBASE_CREDENTIALS_PATH: str = ""
+    FIREBASE_CREDENTIALS_JSON: str = ""
+    REQUIRE_FIREBASE: bool = False
     FIREBASE_PROJECT_ID: str = ""
+
+    # Cloud Storage Presigned URL Expiry
+    S3_PRESIGNED_URL_EXPIRE_SECONDS: int = 900
 
     # Automatic Dispatch Settings
     RESPONDER_LOCATION_STALE_MINUTES: int = 30
@@ -66,6 +71,7 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def validate_production_settings(self):
         env = (self.ENVIRONMENT or "development").lower()
+        proc = (self.PROCESS_TYPE or "api").lower()
         if env in ["production", "staging"]:
             # 1. Database: PostgreSQL only, SQLite forbidden
             if "sqlite" in self.DATABASE_URL.lower():
@@ -96,13 +102,13 @@ class Settings(BaseSettings):
                     f"A valid REDIS_URL (redis:// or rediss://) is required in {env} environment."
                 )
             # 4. CORS: Explicit origin required for HTTP services, wildcard prohibited
-            if self.PROCESS_TYPE.lower() in ("api", "web", "all"):
+            if proc in ("api", "web", "all"):
                 if not self.CORS_ORIGINS or self.CORS_ORIGINS.strip() == "*":
                     raise ValueError(
                         f"Explicit CORS_ORIGINS must be configured in {env} environment. Wildcard '*' is prohibited for credentialed requests."
                     )
             # 5. S3 Storage: All credentials and bucket required when STORAGE_PROVIDER=s3
-            if self.STORAGE_PROVIDER.lower() == "s3":
+            if self.STORAGE_PROVIDER.lower() == "s3" and proc in ("api", "web", "worker", "all"):
                 if not (
                     self.AWS_ACCESS_KEY_ID
                     and self.AWS_SECRET_ACCESS_KEY
@@ -112,14 +118,32 @@ class Settings(BaseSettings):
                     raise ValueError(
                         "AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION, and S3_BUCKET_NAME are all required when STORAGE_PROVIDER=s3."
                     )
-            # 6. Firebase: Validate credentials path exists if configured
+            # 6. Firebase Validation
+            if self.FIREBASE_CREDENTIALS_JSON:
+                import json
+                try:
+                    parsed = json.loads(self.FIREBASE_CREDENTIALS_JSON)
+                    if not isinstance(parsed, dict):
+                        raise ValueError("FIREBASE_CREDENTIALS_JSON must be a valid JSON object.")
+                except Exception as e:
+                    if isinstance(e, ValueError) and "must be a valid JSON object" in str(e):
+                        raise
+                    raise ValueError("FIREBASE_CREDENTIALS_JSON contains invalid or unparseable JSON.")
+
             if self.FIREBASE_CREDENTIALS_PATH and not os.path.exists(self.FIREBASE_CREDENTIALS_PATH):
                 raise ValueError(
                     f"FIREBASE_CREDENTIALS_PATH specified ({self.FIREBASE_CREDENTIALS_PATH}) but file not found."
                 )
+
+            if self.REQUIRE_FIREBASE:
+                if not self.FIREBASE_CREDENTIALS_JSON and not self.FIREBASE_CREDENTIALS_PATH:
+                    raise ValueError(
+                        "REQUIRE_FIREBASE is enabled but neither FIREBASE_CREDENTIALS_JSON nor FIREBASE_CREDENTIALS_PATH is configured."
+                    )
         return self
     
     class Config:
         env_file = ".env"
 
 settings = Settings()
+

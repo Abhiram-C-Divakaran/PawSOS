@@ -23,4 +23,6 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             "connect-src 'self' https://fcm.googleapis.com https://*.firebaseio.com; "
             "frame-ancestors 'none';"
         )
+        # Enforce HTTPS transport security
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
         return response

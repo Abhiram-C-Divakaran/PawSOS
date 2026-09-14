@@ -59,9 +59,11 @@ class RescueService:
 
         # Record images if provided
         if case_in.image_url:
+            from app.services.storage_service import normalize_image_key
+            canonical_key = normalize_image_key(case_in.image_url) or case_in.image_url
             img = AnimalImage(
                 rescue_case_id=db_case.id,
-                image_url=case_in.image_url,
+                image_url=canonical_key,
                 image_type="REPORT",
                 uploaded_by=reporter_id,
             )

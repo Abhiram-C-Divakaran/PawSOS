@@ -126,12 +126,24 @@ def health_readiness(response: Response, db: Session = Depends(get_db)):
         if require_full:
             healthy = False
 
-    # 4. Firebase Cloud Messaging configuration check (optional in CI)
+    # 4. Firebase Cloud Messaging configuration check (environment-aware)
     try:
         from app.services.notification_service import _firebase_initialized
-        checks["firebase"] = "healthy" if _firebase_initialized else "unconfigured"
+        if _firebase_initialized:
+            checks["firebase"] = "healthy"
+        else:
+            if settings.REQUIRE_FIREBASE:
+                checks["firebase"] = "unavailable"
+                healthy = False
+            else:
+                checks["firebase"] = "unconfigured"
     except Exception:
-        checks["firebase"] = "unconfigured"
+        if settings.REQUIRE_FIREBASE:
+            checks["firebase"] = "unavailable"
+            healthy = False
+        else:
+            checks["firebase"] = "unconfigured"
+
 
     # Map to standardized operational status strings
     if checks["worker"] == "active":

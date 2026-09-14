@@ -5,11 +5,14 @@ services:
     runtime: python
     region: oregon
     plan: starter
-    buildCommand: pip install -r backend/requirements.txt && alembic -c backend/alembic.ini upgrade head
+    buildCommand: cd backend && pip install -r requirements.txt
+    preDeployCommand: cd backend && alembic upgrade head
     startCommand: uvicorn app.main:app --app-dir backend --host 0.0.0.0 --port $PORT --workers 2
     healthCheckPath: /api/v1/health
     envVars:
       - fromGroup: pawreach-staging-common
+      - key: PROCESS_TYPE
+        value: api
       - key: COOKIE_SECURE
         value: "true"
       - key: COOKIE_SAMESITE
@@ -21,10 +24,12 @@ services:
     runtime: python
     region: oregon
     plan: starter
-    buildCommand: pip install -r backend/requirements.txt
+    buildCommand: cd backend && pip install -r requirements.txt
     startCommand: celery -A app.tasks.celery_app.celery_app --workdir backend worker --loglevel=INFO -Q dispatch,notifications,default
     envVars:
       - fromGroup: pawreach-staging-common
+      - key: PROCESS_TYPE
+        value: worker
 
   # 3. Celery Beat Periodic Scheduler (Singleton)
   - type: worker
@@ -33,10 +38,12 @@ services:
     region: oregon
     plan: starter
     numInstances: 1
-    buildCommand: pip install -r backend/requirements.txt
+    buildCommand: cd backend && pip install -r requirements.txt
     startCommand: celery -A app.tasks.celery_app.celery_app --workdir backend beat --loglevel=INFO --pidfile=/tmp/celerybeat.pid
     envVars:
       - fromGroup: pawreach-staging-common
+      - key: PROCESS_TYPE
+        value: beat
 
   # 4. Frontend Static PWA Site
   - type: web
@@ -130,3 +137,9 @@ envVarGroups:
         sync: false
       - key: FIREBASE_CREDENTIALS_PATH
         sync: false
+      - key: FIREBASE_CREDENTIALS_JSON
+        sync: false
+      - key: REQUIRE_FIREBASE
+        value: "false"
+      - key: S3_PRESIGNED_URL_EXPIRE_SECONDS
+        value: "900"

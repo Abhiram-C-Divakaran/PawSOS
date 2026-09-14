@@ -1,4 +1,4 @@
-# PawReach (PawSOS) — MVP Phase 2.9B: Staging Deployment & Controlled Pilot Validation
+# PawReach (PawSOS) — MVP Phase 2.9C: Deployment Wiring, Private Media Closure & Staging Preflight
 
 PawReach is an enterprise-grade stray animal rescue coordination platform connecting citizens, field rescuers, veterinary clinics, foster caregivers, NGOs, and municipal authorities.
 
@@ -42,7 +42,7 @@ If all 4 radius levels are exhausted without responder acceptance, the case auto
 - **Background Workers**: Celery 5.6+, Redis 7
 - **Push Notifications**: Firebase Admin SDK (Backend) + Firebase Cloud Messaging (Web Client)
 - **Frontend**: React 19, TypeScript, Tailwind CSS, Leaflet / React-Leaflet, Vite, Vitest, Playwright
-- **Security**: Argon2 password hashing, JWT with `jti` session revocation (`RefreshSession`), Decompression bomb protection (25MP limit), MIME format verification, Role-Based Access Control, Strict Tenant Organization & Private Facility Scoping
+- **Security**: Argon2 password hashing, JWT with `jti` session revocation (`RefreshSession`), Decompression bomb protection (25MP limit), MIME format verification, Role-Based Access Control, Strict Tenant Organization & Private Facility Scoping, Pre-signed private S3 media URLs
 
 ---
 
@@ -70,7 +70,7 @@ Services started:
 - Frontend: `http://localhost:5173`
 - Backend API: `http://localhost:8000`
 - Swagger Docs: `http://localhost:8000/docs`
-- Health Readiness Probe: `http://localhost:8000/health/ready`
+- Health Readiness Probe: `http://localhost:8000/api/v1/health/ready`
 - Redis: `localhost:6379`
 - PostgreSQL: `localhost:5432`
 
@@ -89,7 +89,8 @@ python scripts/seed_staging.py
 # Start FastAPI server
 uvicorn app.main:app --reload --port 8000
 
-# In a separate terminal, start the Celery Worker & Beat scheduler
+# In a separate terminal, start the Celery Worker & Beat scheduler (local development only)
+# (Note: -B embedded beat scheduler is for local development only; staging and production run dedicated worker and beat services)
 celery -A app.tasks.celery_app worker -B --loglevel=info
 ```
 
@@ -107,12 +108,15 @@ npm run dev
 ### Backend Tests with Coverage (>=85% Required)
 ```bash
 cd backend
-pytest backend/tests --cov=app --cov-report=term-missing -v
+pytest tests --cov=app --cov-report=term-missing -v
 ```
 
 Test suites cover:
 - `test_api_contracts.py`: Comprehensive frontend/backend API contract validation for all NGO analytics, KPIs, and outcome classifications.
 - `test_storage_service.py`: Image decode integrity, format vs MIME validation, and decompression bomb denial.
+- `test_private_media_security.py`: Canonical S3 key normalization, pre-signed URL generation, and cross-tenant image access denial.
+- `test_firebase_config.py`: Inline JSON vs file path credential loading, validation, and health probe degradation.
+- `test_staging_workflow_validation.py` & `test_smoke_test_unit.py`: CD workflow parsing, smoke test protocol, and preflight script validation.
 - `test_ngo_organization.py`: Multi-tenant boundary isolation, blocking cross-tenant responder and private facility assignments with audit logs.
 - `test_background_dispatch.py`: Stale offer expiry via Celery worker, deterministic radius escalation (5 -> 10 -> 20 -> 40 km), responder exclusion, escalation to `UNRESOLVED`.
 - `test_token_revocation.py`: Server-side `RefreshSession` tracking, token rotation, single/all device logout, replay rejection.
@@ -130,17 +134,26 @@ npm run build         # Production TypeScript build
 ### Browser End-to-End Test Suite (Playwright)
 ```bash
 cd frontend
-npm run test:e2e      # Headless Playwright test run
+# Mocked UI-contract suite
+npm run test:e2e:ui-contract
+
+# Unmocked full-stack E2E suite (requires running backend, Redis, and PostGIS)
+npm run test:e2e:fullstack
+
+# Run all E2E suites
+npm run test:e2e
 npm run test:e2e:ui   # Interactive UI mode
 ```
 
-E2E specifications in `frontend/e2e/`:
-- `citizen-report.spec.ts`: Emergency report form, species selection, geolocation, triage, and live case number generation.
-- `responder-flow.spec.ts`: Real-time dispatch offer alerting, acceptance, status advancement (`EN_ROUTE` -> `ANIMAL_LOCATED`).
-- `ngo-operations.spec.ts`: Command Center KPI cards, case dossier drilldown, audit trail inspection, manual responder assignment override.
-- `veterinary-flow.spec.ts`: Clinical inpatient registry, patient admission, vitals & treatment plan logging.
-- `cross-tenant.spec.ts`: Multi-tenant isolation verification, cross-tenant case access denial alert and safe navigation.
-- `concurrent-acceptance.spec.ts`: Dispatch race condition conflict handling, claim rejection notification.
+E2E specifications:
+- `frontend/e2e-contract/`: Mocked API contract tests validating UI views, forms, error handling, and state transitions without external backends.
+- `frontend/e2e-fullstack/`:
+  - `citizen-report.spec.ts`: Emergency report form, species selection, geolocation, triage, and live case number generation.
+  - `responder-flow.spec.ts`: Real-time dispatch offer alerting, acceptance, status advancement (`EN_ROUTE` -> `ANIMAL_LOCATED`).
+  - `dispatch-escalation.spec.ts`: Progressive radius escalation from 5km up to 40km.
+  - `veterinary-flow.spec.ts`: Clinical inpatient registry, patient admission, vitals & treatment plan logging.
+  - `cross-tenant.spec.ts`: Multi-tenant isolation verification, cross-tenant case access denial alert and safe navigation.
+  - `concurrent-acceptance.spec.ts`: Dispatch race condition conflict handling, claim rejection notification.
 
 ---
 
@@ -151,7 +164,7 @@ E2E specifications in `frontend/e2e/`:
 - Run database migrations: `alembic upgrade head`.
 - Seed initial staging data with secure operator-defined password:
   ```bash
-  STAGING_SEED_PASSWORD="<STRONG_UNIQUE_PASSWORD_MIN_14_CHARS>" python scripts/seed_staging.py
+  STAGING_SEED_PASSWORD="<STRONG_UNIQUE_PASSWORD_MIN_14_CHARS>" ENVIRONMENT=staging python scripts/seed_staging.py
   ```
 
 ### 2. Redis & Background Workers (Worker & Beat)
@@ -174,13 +187,16 @@ E2E specifications in `frontend/e2e/`:
   AWS_SECRET_ACCESS_KEY=<secret>
   AWS_REGION=<region>
   S3_BUCKET_NAME=<bucket>
+  S3_PRESIGNED_URL_EXPIRE_SECONDS=900
   ```
-- Images are automatically resized (max dimension 2048px), compressed, and EXIF metadata stripped via Pillow.
+- Images are automatically resized (max dimension 2048px), compressed, and EXIF metadata stripped via Pillow. S3 objects remain strictly private with temporary presigned URLs.
 
 ### 4. Firebase Cloud Messaging (Web Push)
-- Place service account JSON file on backend and set:
+- Supply credentials via environment variable (preferred in cloud PaaS) or file path:
   ```text
-  FIREBASE_CREDENTIALS_PATH=/etc/secrets/firebase-adminsdk.json
+  FIREBASE_CREDENTIALS_JSON={"type": "service_account", ...}
+  # OR: FIREBASE_CREDENTIALS_PATH=/etc/secrets/firebase-adminsdk.json
+  REQUIRE_FIREBASE=true
   FIREBASE_PROJECT_ID=pawsos-staging
   ```
 - Configure frontend environment:

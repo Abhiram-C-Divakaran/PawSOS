@@ -158,6 +158,24 @@ class LocalStorageProvider(BaseStorageProvider):
         """For local storage, return the URL as is."""
         return key_or_url
 
+def normalize_image_key(raw: str | None) -> str | None:
+    """
+    Normalize raw image reference to a stable canonical storage key or local path.
+    Strips query parameters (e.g. AWS presigned tokens) and S3 bucket URL prefixes,
+    ensuring only the permanent object reference is persisted in the database.
+    """
+    if not raw:
+        return raw
+    cleaned = raw.split("?")[0].strip()
+    if "amazonaws.com/" in cleaned:
+        after = cleaned.split("amazonaws.com/", 1)[1]
+        parts = after.split("/", 1)
+        if len(parts) == 2 and parts[0] == settings.S3_BUCKET_NAME:
+            return parts[1]
+        return after
+    return cleaned
+
+
 class S3StorageProvider(BaseStorageProvider):
     def __init__(self):
         import boto3
@@ -177,23 +195,47 @@ class S3StorageProvider(BaseStorageProvider):
             logger.warning(f"S3 health check failed: {e}")
             return False
 
-    def get_presigned_url(self, key_or_url: str, expires_in: int = 3600) -> str:
+    def get_presigned_url(self, key_or_url: str, expires_in: int = 900) -> str:
         """
         Generate a secure, time-limited presigned GET URL for an evidence image stored in private S3 bucket.
         Protects user/animal location privacy without making the bucket publicly accessible.
+        Normalizes both stable object keys (rescues/...) and legacy full S3 URLs.
+        Returns external non-S3 URLs or local /uploads/ paths unchanged.
         """
+        if not key_or_url:
+            return key_or_url
+
+        # Return local storage paths or root-relative paths unchanged
+        if key_or_url.startswith("/uploads/") or key_or_url.startswith("/"):
+            return key_or_url
+
         key = key_or_url
+        if "?" in key:
+            key = key.split("?")[0]
+
         prefix = f"https://{self.bucket}.s3.{settings.AWS_REGION}.amazonaws.com/"
+        alt_prefix = f"https://{self.bucket}.s3.amazonaws.com/"
+
         if key.startswith(prefix):
             key = key[len(prefix):]
+        elif key.startswith(alt_prefix):
+            key = key[len(alt_prefix):]
+        elif "amazonaws.com/" in key:
+            after = key.split("amazonaws.com/", 1)[1]
+            if after.startswith(f"{self.bucket}/"):
+                key = after[len(self.bucket) + 1:]
+            else:
+                key = after
         elif key.startswith("http://") or key.startswith("https://"):
-            # If external URL or different host, return as is
+            # Non-S3 external URL (e.g. mock tile server or placeholder)
             return key_or_url
+
         try:
+            duration = expires_in or settings.S3_PRESIGNED_URL_EXPIRE_SECONDS
             return self.s3_client.generate_presigned_url(
                 "get_object",
                 Params={"Bucket": self.bucket, "Key": key},
-                ExpiresIn=expires_in,
+                ExpiresIn=duration,
             )
         except Exception as e:
             logger.error(f"Failed to generate presigned URL for {key}: {e}")
@@ -224,14 +266,15 @@ class S3StorageProvider(BaseStorageProvider):
                 filename,
                 ExtraArgs={"ContentType": content_type}
             )
-            return f"https://{self.bucket}.s3.{settings.AWS_REGION}.amazonaws.com/{filename}"
+            # Return stable canonical object key, NOT direct public URL
+            return filename
         except Exception as e:
             logger.error(f"S3 upload failure: {e}")
             raise BadRequestException("Cloud storage upload failed.")
 
-    def delete_image(self, url: str) -> bool:
+    def delete_image(self, url_or_key: str) -> bool:
         try:
-            key = url.split(f"{self.bucket}.s3.{settings.AWS_REGION}.amazonaws.com/")[-1]
+            key = normalize_image_key(url_or_key) or url_or_key
             self.s3_client.delete_object(Bucket=self.bucket, Key=key)
             return True
         except Exception as e:

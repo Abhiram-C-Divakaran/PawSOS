@@ -23,6 +23,9 @@ from app.core.permissions import RoleChecker
 from app.core.constants import UserRole, RescueStatus, AssignmentStatus
 from app.core.exceptions import NotFoundException, ConflictException, ForbiddenException
 
+from app.services.storage_service import storage_service
+from app.config import settings
+
 router = APIRouter()
 
 def build_rescue_response(case: RescueCase, distance_km: Optional[float] = None) -> RescueResponse:
@@ -43,7 +46,10 @@ def build_rescue_response(case: RescueCase, distance_km: Optional[float] = None)
     images = [
         AnimalImageResponse(
             id=img.id,
-            image_url=img.image_url,
+            image_url=storage_service.get_presigned_url(
+                img.image_url,
+                expires_in=settings.S3_PRESIGNED_URL_EXPIRE_SECONDS
+            ),
             image_type=img.image_type,
             created_at=img.created_at
         )
@@ -76,13 +82,21 @@ def build_rescue_response(case: RescueCase, distance_km: Optional[float] = None)
     )
 
 def verify_case_access(case: RescueCase, user: User) -> None:
-    """Enforce strict access rules for cases."""
-    if user.role in [UserRole.SUPER_ADMIN, UserRole.NGO_ADMIN, UserRole.MUNICIPAL_ADMIN]:
+    """Enforce strict access rules and multi-tenant isolation for rescue cases and evidence images."""
+    if user.role in [UserRole.SUPER_ADMIN, UserRole.MUNICIPAL_ADMIN]:
         return
+
+    if user.role == UserRole.NGO_ADMIN:
+        # Cross-tenant isolation: NGO admin cannot access cases belonging to another NGO
+        if user.organization_id and case.organization_id and user.organization_id != case.organization_id:
+            raise ForbiddenException("Cross-tenant access forbidden.")
+        return
+
     if user.role == UserRole.CITIZEN:
         if case.reporter_id != user.id:
             raise ForbiddenException("Citizens can only access their own reported rescue cases.")
         return
+
     if user.role == UserRole.RESCUER:
         # Rescuers can view cases that are open or assigned to them
         is_assigned = any(
@@ -101,6 +115,7 @@ def verify_case_access(case: RescueCase, user: User) -> None:
         if not is_assigned and not is_open:
             raise ForbiddenException("Rescuers cannot view unrelated private cases.")
         return
+
     if user.role == UserRole.VETERINARIAN:
         # Veterinarians can view cases that are at a veterinary facility or under treatment
         if case.status not in [
@@ -113,12 +128,42 @@ def verify_case_access(case: RescueCase, user: User) -> None:
         ]:
             raise ForbiddenException("Veterinarians can only view cases referred to veterinary care.")
 
-        # Requirement 43: Enforce authorized veterinary facility scoping
-        if user.veterinary_facility_id and case.veterinary_facility_id:
-            if case.veterinary_facility_id != user.veterinary_facility_id:
-                raise ForbiddenException("Veterinarians can only view cases assigned to their authorized facility.")
+        # Enforce authorized veterinary facility scoping
+        if user.veterinary_facility_id and case.veterinary_facility_id and user.veterinary_facility_id != case.veterinary_facility_id:
+            raise ForbiddenException("Veterinarians can only view cases assigned to their authorized facility.")
         return
+
     raise ForbiddenException("Access denied.")
+
+@router.get("/{case_id}/images/{image_id}/access", response_model=dict)
+def get_rescue_image_access(
+    case_id: UUID,
+    image_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    Authorized evidence-image access endpoint.
+    Validates tenant and user authorization before returning a short-lived presigned GET URL.
+    """
+    case = db.query(RescueCase).filter(RescueCase.id == case_id).first()
+    if not case:
+        raise NotFoundException("Rescue case not found")
+
+    verify_case_access(case, current_user)
+
+    target_image = next((img for img in case.images if img.id == image_id), None)
+    if not target_image:
+        raise NotFoundException("Animal image not found for this case")
+
+    signed_url = storage_service.get_presigned_url(
+        target_image.image_url,
+        expires_in=settings.S3_PRESIGNED_URL_EXPIRE_SECONDS
+    )
+    return {
+        "url": signed_url,
+        "expires_in": settings.S3_PRESIGNED_URL_EXPIRE_SECONDS
+    }
 
 @router.post("", response_model=RescueResponse)
 def create_rescue(

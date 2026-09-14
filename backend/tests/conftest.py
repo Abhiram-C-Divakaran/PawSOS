@@ -108,13 +108,14 @@ def rescuer_token(rescuer_user):
     return create_access_token(rescuer_user.id)
 
 @pytest.fixture
-def vet_user(db):
+def vet_user(db, test_facility):
     user = User(
         full_name="Test Vet",
         email=f"vet_{uuid.uuid4().hex[:6]}@example.com",
         phone=f"+9196{uuid.uuid4().hex[:8]}",
         password_hash=get_password_hash("password123"),
         role=UserRole.VETERINARIAN,
+        veterinary_facility_id=test_facility.id,
         is_active=True,
         is_verified=True
     )

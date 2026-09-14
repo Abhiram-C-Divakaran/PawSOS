@@ -15,7 +15,7 @@
 | **Target API URL** | `https://api-staging.pawreach.org` (or `https://pawreach-staging-api.onrender.com`) |
 | **Git Commit SHA** | Current `main` commit (exposed via `GET /api/v1/health`) |
 | **Provisioning Status** | **PENDING EXTERNAL CLOUD CREDENTIALS** |
-| **Truthful Verification State** | **`CODE VERIFIED — STAGING NOT DEPLOYED`** |
+| **Truthful Verification State** | **`CODE VERIFIED — READY FOR STAGING PROVISIONING`** |
 
 ---
 
@@ -74,28 +74,40 @@ python scripts/staging_smoke_test.py \
 
 ## 4. End-to-End Operational Scenario Verification
 
-All 5 core operational pilot scenarios are systematically verified via our unmocked fullstack E2E suite (`npm run test:e2e:fullstack`) against live PostgreSQL/PostGIS, Redis, Celery worker/beat, and FastAPI:
+All 5 core operational pilot scenarios are systematically verified via our unmocked fullstack E2E suite (`npm run test:e2e:fullstack`) against real PostgreSQL/PostGIS engine in CI, Redis, Celery worker/beat, and FastAPI:
 
 ### Scenario 1: Citizen Emergency Report to NGO Dispatch
 - **Citizen Action**: Submits emergency report with animal photo, location (Marine Drive, Kochi: 9.9816° N, 76.2799° E), species (Canine), and severe bleeding symptoms.
 - **System Action**: Rule-based triage assigns `CRITICAL` priority (score 95). Case is saved in PostgreSQL with spatial `ST_Point`. Background task creates progressive dispatch offers.
-- **Verification Result**: **PASSED** (`e2e-fullstack/citizen-report.spec.ts`).
+- **Verification Status**:
+  - **Automated Full-Stack Scenario**: **PASS** (`e2e-fullstack/citizen-report.spec.ts`)
+  - **Real Staging Scenario**: **NOT EXECUTED** (Pending cloud provisioning)
+  - **Physical Device**: **NOT EXECUTED** (Pending cloud provisioning & physical device testing)
 
 ### Scenario 2: Progressive Radius Escalation (5km -> 10km -> 20km -> 40km)
 - **Workflow**: Offers expire without acceptance in initial 5 km radius after 20 seconds.
 - **System Action**: Celery Beat schedules escalation; search window expands to 10 km, 20 km, and 40 km radius. If exhausted, status transitions to `UNRESOLVED` with admin escalation alerts.
-- **Verification Result**: **PASSED** (`e2e-fullstack/dispatch-escalation.spec.ts`).
+- **Verification Status**:
+  - **Automated Full-Stack Scenario**: **PASS** (`e2e-fullstack/dispatch-escalation.spec.ts`)
+  - **Real Staging Scenario**: **NOT EXECUTED** (Pending cloud provisioning)
+  - **Physical Device**: **NOT EXECUTED** (Pending cloud provisioning & physical device testing)
 
 ### Scenario 3: Rescuer Response & Location Tracking
 - **Responder Action**: Rescuer receives push/dashboard offer, atomic acceptance lock acquired.
 - **Status Progression**: Transitions `ASSIGNED` $\to$ `EN_ROUTE` $\to$ `ANIMAL_LOCATED` $\to$ `RESCUED` $\to$ `TRANSPORTING`.
 - **Concurrency Protection**: Second rescuer attempting acceptance receives HTTP 409 Conflict.
-- **Verification Result**: **PASSED** (`e2e-fullstack/responder-flow.spec.ts`, `e2e-fullstack/concurrent-acceptance.spec.ts`).
+- **Verification Status**:
+  - **Automated Full-Stack Scenario**: **PASS** (`e2e-fullstack/responder-flow.spec.ts`, `e2e-fullstack/concurrent-acceptance.spec.ts`)
+  - **Real Staging Scenario**: **NOT EXECUTED** (Pending cloud provisioning)
+  - **Physical Device**: **NOT EXECUTED** (Pending cloud provisioning & physical device testing)
 
 ### Scenario 4: Veterinary Intake & Treatment Recording
 - **Clinical Intake**: Rescuer brings animal to authorized facility ("Cochin PetCare Emergency Hospital").
 - **Veterinarian Action**: Accesses clinic inbox, conducts clinical intake, inputs diagnosis ("Compound tibia fracture"), medications ("Meloxicam 0.2mg/kg, Ceftriaxone 25mg/kg"), and updates status to `UNDER_TREATMENT`.
-- **Verification Result**: **PASSED** (`e2e-fullstack/veterinary-flow.spec.ts`).
+- **Verification Status**:
+  - **Automated Full-Stack Scenario**: **PASS** (`e2e-fullstack/veterinary-flow.spec.ts`)
+  - **Real Staging Scenario**: **NOT EXECUTED** (Pending cloud provisioning)
+  - **Physical Device**: **NOT EXECUTED** (Pending cloud provisioning & physical device testing)
 
 ### Scenario 5: Multi-Tenant NGO Data & Mutation Isolation
 - **Tenant Scope**: Dual operational organizations seeded ("Organization Alpha - Stray Relief" and "Organization Beta - Animal Aid Alliance").
@@ -103,7 +115,10 @@ All 5 core operational pilot scenarios are systematically verified via our unmoc
   - Org A Admin cannot view Org B cases or responders (`#case-error-state` barrier).
   - Attempting `PATCH /ngo/responders/{user_id}/status` across tenants returns HTTP 403 Forbidden with code `CROSS_TENANT_RESPONDER_UPDATE_DENIED`.
   - Organization reassignment strictly restricted to `SUPER_ADMIN`.
-- **Verification Result**: **PASSED** (`e2e-fullstack/cross-tenant.spec.ts`, `tests/test_scoping_security.py`).
+- **Verification Status**:
+  - **Automated Full-Stack Scenario**: **PASS** (`e2e-fullstack/cross-tenant.spec.ts`, `tests/test_scoping_security.py`)
+  - **Real Staging Scenario**: **NOT EXECUTED** (Pending cloud provisioning)
+  - **Physical Device**: **NOT EXECUTED** (Pending cloud provisioning & physical device testing)
 
 ---
 
@@ -153,7 +168,7 @@ All 5 core operational pilot scenarios are systematically verified via our unmoc
 ```text
 ================================================================================
 FINAL PILOT CERTIFICATION VERDICT:
-CODE VERIFIED — STAGING NOT DEPLOYED
+CODE VERIFIED — READY FOR STAGING PROVISIONING
 ================================================================================
 Summary:
 All automated integration gates, security standards, tenant boundaries, 

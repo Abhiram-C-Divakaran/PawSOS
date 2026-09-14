@@ -14,22 +14,75 @@ from app.models.user import User
 
 logger = logging.getLogger(__name__)
 
-# Firebase App Initialization (graceful fallback if credentials not found)
-_firebase_initialized = False
 try:
     import firebase_admin
     from firebase_admin import credentials, messaging
+except ImportError:
+    firebase_admin = None
+    credentials = None
+    messaging = None
 
-    cred_path = settings.FIREBASE_CREDENTIALS_PATH
-    if cred_path and os.path.exists(cred_path):
-        cred = credentials.Certificate(cred_path)
-        firebase_admin.initialize_app(cred)
-        _firebase_initialized = True
-        logger.info(f"Firebase Admin SDK initialized successfully with credentials at: {cred_path}")
-    else:
-        logger.info("Firebase credentials not configured or file not found. Operating in push-fallback mock mode.")
-except Exception as e:
-    logger.warning(f"Could not initialize Firebase Admin SDK: {e}. Push notifications will run in mock mode.")
+# Firebase App Initialization (graceful fallback if credentials not found)
+_firebase_initialized = False
+
+def initialize_firebase_admin() -> bool:
+    global _firebase_initialized
+    if firebase_admin is None or credentials is None:
+        _firebase_initialized = False
+        return False
+    try:
+        # If already initialized in this process
+        if firebase_admin._apps:
+            _firebase_initialized = True
+            return True
+
+        cred_json = settings.FIREBASE_CREDENTIALS_JSON
+        cred_path = settings.FIREBASE_CREDENTIALS_PATH
+
+        # Precedence: FIREBASE_CREDENTIALS_JSON takes precedence over file path
+        if cred_json and cred_json.strip():
+            try:
+                parsed = json.loads(cred_json)
+                if not isinstance(parsed, dict):
+                    raise ValueError("Firebase credentials JSON must parse to an object/dict")
+                cred = credentials.Certificate(parsed)
+                firebase_admin.initialize_app(cred)
+                _firebase_initialized = True
+                logger.info("Firebase Admin SDK initialized successfully from secure JSON secret.")
+                return True
+            except Exception as ex:
+                logger.error(f"Failed to initialize Firebase Admin SDK from FIREBASE_CREDENTIALS_JSON: {type(ex).__name__}")
+                _firebase_initialized = False
+                return False
+        elif cred_path and cred_path.strip() and os.path.exists(cred_path):
+            try:
+                cred = credentials.Certificate(cred_path)
+                firebase_admin.initialize_app(cred)
+                _firebase_initialized = True
+                logger.info(f"Firebase Admin SDK initialized successfully with credentials file at: {cred_path}")
+                return True
+            except Exception as ex:
+                logger.error(f"Failed to initialize Firebase Admin SDK from file path {cred_path}: {type(ex).__name__}")
+                _firebase_initialized = False
+                return False
+        else:
+            _firebase_initialized = False
+            if settings.REQUIRE_FIREBASE:
+                logger.error("REQUIRE_FIREBASE is enabled but Firebase credentials are not configured.")
+            else:
+                if settings.ENVIRONMENT in ["production", "staging"]:
+                    logger.info("Firebase credentials not configured in staging/production. Web push is unconfigured.")
+                else:
+                    logger.info("Firebase credentials not configured. Operating in push-fallback mock mode.")
+            return False
+    except Exception as e:
+        logger.warning(f"Could not load or initialize Firebase Admin SDK: {e}")
+        _firebase_initialized = False
+        return False
+
+# Initialize at module load
+initialize_firebase_admin()
+
 
 
 class NotificationService:
