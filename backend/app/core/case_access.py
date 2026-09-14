@@ -38,6 +38,22 @@ VETERINARY_LIFECYCLE_STATUSES = [
 ]
 
 
+def _is_unexpired(expires_at: Optional[datetime]) -> bool:
+    """Check if offer expires_at timestamp is in the future.
+    
+    Database columns (RescueAssignment.expires_at) intentionally store naive UTC datetimes.
+    To ensure compatibility with both naive column values and potential timezone-aware inputs:
+    - If expires_at is timezone-aware, compare against datetime.now(timezone.utc).
+    - If expires_at is naive, compare against datetime.utcnow().
+    """
+    if expires_at is None:
+        return True
+    if expires_at.tzinfo is not None:
+        from datetime import timezone
+        return expires_at > datetime.now(timezone.utc)
+    return expires_at > datetime.utcnow()
+
+
 def has_rescuer_case_relationship(case: RescueCase, user: User, db: Optional[Session] = None) -> bool:
     """Check if rescuer has an active relationship granting private case/evidence access.
     
@@ -54,7 +70,7 @@ def has_rescuer_case_relationship(case: RescueCase, user: User, db: Optional[Ses
                 if a.assignment_status == AssignmentStatus.ACCEPTED:
                     return True
                 if a.assignment_status == AssignmentStatus.PENDING:
-                    if a.expires_at is None or a.expires_at > now:
+                    if _is_unexpired(a.expires_at):
                         return True
 
     # Fallback to direct DB query if session is provided

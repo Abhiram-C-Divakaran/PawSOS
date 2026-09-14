@@ -47,6 +47,7 @@ def seed_e2e():
         # 1. Clean existing E2E seed data to guarantee deterministic freshness
         e2e_emails = [
             "citizen.e2e@pawreach.test",
+            "citizen2.e2e@pawreach.test",
             "rescuer1.e2e@pawreach.test",
             "rescuer2.e2e@pawreach.test",
             "rescuer3.e2e@pawreach.test",
@@ -152,6 +153,18 @@ def seed_e2e():
             is_verified=True,
         )
         db.add(citizen)
+
+        # 4.1b Citizen Two (Independent Citizen for cross-user authorization tests)
+        citizen2 = User(
+            email="citizen2.e2e@pawreach.test",
+            phone="+919800000099",
+            full_name="E2E Citizen Two",
+            password_hash=pwd_hash,
+            role=UserRole.CITIZEN,
+            is_active=True,
+            is_verified=True,
+        )
+        db.add(citizen2)
 
         # 4.2 Rescuer 1 (Responder A - Org A, Colaba location ~0.5km)
         rescuer1 = User(

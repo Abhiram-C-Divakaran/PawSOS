@@ -3,7 +3,7 @@ import { loginViaApi, authenticatePage, DEFAULT_E2E_PASSWORD, API_BASE_URL } fro
 
 /**
  * Bounded polling helper waiting for background Celery worker to expand case dispatch radius.
- * Does NOT call any manual redispatch endpoint.
+ * Does NOT call any manual redispatch endpoint. Uses authorized actor token.
  */
 async function waitForDispatchRadius(
   request: APIRequestContext,
@@ -30,6 +30,7 @@ async function waitForDispatchRadius(
 
 /**
  * Bounded polling helper waiting for background Celery worker to transition case status.
+ * Uses authorized actor token.
  */
 async function waitForCaseStatus(
   request: APIRequestContext,
@@ -59,9 +60,13 @@ test.describe('Full-Stack Automatic Dispatch Escalation & Exhaustion Flow (Unmoc
     page,
     request,
   }) => {
-    // 1. Authenticate seeded Citizen and NGO Admin A
+    // 1. Authenticate seeded actors
     const tokenCitizen = await loginViaApi(request, 'citizen.e2e@pawreach.test', DEFAULT_E2E_PASSWORD);
+    const tokenCitizen2 = await loginViaApi(request, 'citizen2.e2e@pawreach.test', DEFAULT_E2E_PASSWORD);
     const tokenAdminA = await loginViaApi(request, 'ngoadminA.e2e@pawreach.test', DEFAULT_E2E_PASSWORD);
+    const tokenSuperAdmin = await loginViaApi(request, 'superadmin.e2e@pawreach.test', DEFAULT_E2E_PASSWORD);
+    const tokenRescuer1 = await loginViaApi(request, 'rescuer1.e2e@pawreach.test', DEFAULT_E2E_PASSWORD);
+    const tokenRescuer3 = await loginViaApi(request, 'rescuer3.e2e@pawreach.test', DEFAULT_E2E_PASSWORD);
 
     // 2. Create emergency case at Gateway of India, Colaba (lat: 18.9220, lng: 72.8340)
     // Rescuer 1 (~0.5km) & Rescuer 2 (~1.1km) are within 5km radius.
@@ -85,8 +90,9 @@ test.describe('Full-Stack Automatic Dispatch Escalation & Exhaustion Flow (Unmoc
 
     // 3. Verify Initial State: Case creation automatically initiates dispatch
     // Status is SEARCHING_RESPONDER, radius is 5.0km, dispatch_attempt is 1
+    // Polling and reading owned by the reporting citizen
     const initialRes = await request.get(`${API_BASE_URL}/rescues/${caseId}`, {
-      headers: { Authorization: `Bearer ${tokenAdminA.access_token}` },
+      headers: { Authorization: `Bearer ${tokenCitizen.access_token}` },
     });
     expect(initialRes.ok()).toBeTruthy();
     const initialData = await initialRes.json();
@@ -94,9 +100,40 @@ test.describe('Full-Stack Automatic Dispatch Escalation & Exhaustion Flow (Unmoc
     expect(initialData.dispatch_radius_km).toBe(5.0);
     expect(initialData.dispatch_attempt).toBe(1);
 
-    // Verify initial offers (Wave 1) were generated for eligible responders within 5km, but NOT Rescuer 3 (at ~8.5km)
-    const dossierRes1 = await request.get(`${API_BASE_URL}/ngo/cases/${caseId}`, {
+    // 4. Explicit Phase 2.9D Security Assertions: Fail-Closed Authorization Boundaries
+    // A. Another citizen cannot access this case -> 403 Forbidden
+    const otherCitizenRes = await request.get(`${API_BASE_URL}/rescues/${caseId}`, {
+      headers: { Authorization: `Bearer ${tokenCitizen2.access_token}` },
+    });
+    expect(otherCitizenRes.status()).toBe(403);
+
+    // B. NGO Admin cannot read private case details while case is unassigned -> 403 Forbidden
+    const ngoAdminRescueRes = await request.get(`${API_BASE_URL}/rescues/${caseId}`, {
       headers: { Authorization: `Bearer ${tokenAdminA.access_token}` },
+    });
+    expect(ngoAdminRescueRes.status()).toBe(403);
+
+    // C. NGO Admin cannot read private case dossier while case is unassigned -> 403 Forbidden
+    const ngoAdminDossierRes = await request.get(`${API_BASE_URL}/ngo/cases/${caseId}`, {
+      headers: { Authorization: `Bearer ${tokenAdminA.access_token}` },
+    });
+    expect(ngoAdminDossierRes.status()).toBe(403);
+
+    // D. Rescuer 1 (within 5km wave, received PENDING offer) -> 200 OK
+    const rescuer1Res = await request.get(`${API_BASE_URL}/rescues/${caseId}`, {
+      headers: { Authorization: `Bearer ${tokenRescuer1.access_token}` },
+    });
+    expect(rescuer1Res.status()).toBe(200);
+
+    // E. Rescuer 3 (~8.5km away in Worli, no wave 1 offer yet) -> 403 Forbidden
+    const rescuer3Wave1Res = await request.get(`${API_BASE_URL}/rescues/${caseId}`, {
+      headers: { Authorization: `Bearer ${tokenRescuer3.access_token}` },
+    });
+    expect(rescuer3Wave1Res.status()).toBe(403);
+
+    // 5. Inspect initial dispatch offers (Wave 1) using Super Admin as read-only test observer
+    const dossierRes1 = await request.get(`${API_BASE_URL}/ngo/cases/${caseId}`, {
+      headers: { Authorization: `Bearer ${tokenSuperAdmin.access_token}` },
     });
     expect(dossierRes1.ok()).toBeTruthy();
     const dossier1 = await dossierRes1.json();
@@ -109,15 +146,16 @@ test.describe('Full-Stack Automatic Dispatch Escalation & Exhaustion Flow (Unmoc
       expect(off.rescuer_name).not.toBe('E2E Rescuer Wave Two');
     }
 
-    // 4. ALLOW OFFERS TO EXPIRE NATURALLY VIA BACKGROUND CELERY WORKER
+    // 6. ALLOW OFFERS TO EXPIRE NATURALLY VIA BACKGROUND CELERY WORKER
     // Do NOT call redispatch! Wait for Celery Beat and worker to expire offers and expand radius to 10 km.
-    const escalatedCase = await waitForDispatchRadius(request, caseId, 10.0, tokenAdminA.access_token);
+    // Citizen reporter owns case-state polling.
+    const escalatedCase = await waitForDispatchRadius(request, caseId, 10.0, tokenCitizen.access_token);
     expect(escalatedCase.dispatch_radius_km).toBe(10.0);
     expect(escalatedCase.dispatch_attempt).toBe(2);
 
-    // 5. PROVE OFFER EXPIRY & NEXT-WAVE CREATION VIA REAL POSTGRESQL STATE
+    // 7. PROVE OFFER EXPIRY & NEXT-WAVE CREATION VIA REAL POSTGRESQL STATE
     const dossierRes2 = await request.get(`${API_BASE_URL}/ngo/cases/${caseId}`, {
-      headers: { Authorization: `Bearer ${tokenAdminA.access_token}` },
+      headers: { Authorization: `Bearer ${tokenSuperAdmin.access_token}` },
     });
     expect(dossierRes2.ok()).toBeTruthy();
     const dossier2 = await dossierRes2.json();
@@ -144,17 +182,28 @@ test.describe('Full-Stack Automatic Dispatch Escalation & Exhaustion Flow (Unmoc
     expect(pendingWave2Offers.length).toBe(1);
     expect(pendingWave2Offers[0].rescuer_name).toBe('E2E Rescuer Wave Two');
 
-    // 6. PROVE DISPATCH EXHAUSTION (SEARCHING_RESPONDER -> UNRESOLVED)
+    // Rescuer 3 now has an active offer in Wave 2 -> must now be granted access to the case
+    const rescuer3Wave2Res = await request.get(`${API_BASE_URL}/rescues/${caseId}`, {
+      headers: { Authorization: `Bearer ${tokenRescuer3.access_token}` },
+    });
+    expect(rescuer3Wave2Res.status()).toBe(200);
+
+    // 8. PROVE DISPATCH EXHAUSTION (SEARCHING_RESPONDER -> UNRESOLVED)
     // Wait for subsequent radii (20km, 40km) to expire naturally without manual intervention
-    const unresolvedCase = await waitForCaseStatus(request, caseId, 'UNRESOLVED', tokenAdminA.access_token);
+    const unresolvedCase = await waitForCaseStatus(request, caseId, 'UNRESOLVED', tokenCitizen.access_token);
     expect(unresolvedCase.status).toBe('UNRESOLVED');
 
-    // 7. Verify NGO Command Center UI reflects the terminal UNRESOLVED dispatch state
-    await authenticatePage(page, 'ngoadminA.e2e@pawreach.test', DEFAULT_E2E_PASSWORD);
+    // 9. Verify NGO Command Center UI reflects the terminal UNRESOLVED dispatch state for authorized Super Admin
+    await authenticatePage(page, 'superadmin.e2e@pawreach.test', DEFAULT_E2E_PASSWORD);
     await page.goto(`/ngo/cases/${caseId}`);
 
     await expect(page.getByText(unresolvedCase.case_number)).toBeVisible({ timeout: 15000 });
     await expect(page.getByText('Colaba Waterfront, Mumbai')).toBeVisible();
     await expect(page.getByText('UNRESOLVED')).toBeVisible();
+
+    // 10. Verify Citizen Live Tracking UI reflects the reported case
+    await authenticatePage(page, 'citizen.e2e@pawreach.test', DEFAULT_E2E_PASSWORD);
+    await page.goto(`/cases/${caseId}`);
+    await expect(page.getByText('Colaba Waterfront, Mumbai')).toBeVisible({ timeout: 10000 });
   });
 });
