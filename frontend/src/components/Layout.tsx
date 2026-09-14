@@ -1,6 +1,6 @@
 import { Outlet, Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/useAuth';
-import { LogOut, Activity, AlertCircle, ShieldPlus } from 'lucide-react';
+import { LogOut, Activity, AlertCircle, ShieldPlus, Heart, Home, FileText } from 'lucide-react';
 import { NotificationBell } from './NotificationBell';
 import { NotificationPermissionBanner } from './NotificationPermissionBanner';
 import { ForegroundNotificationToast } from './ForegroundNotificationToast';
@@ -25,35 +25,51 @@ export const Layout = () => {
               <Link to="/" className="flex-shrink-0 flex items-center font-bold text-xl tracking-wide text-brand-brightTeal">
                 PawReach
               </Link>
-              {isAuthenticated && (
-                <div className="hidden sm:ml-6 sm:flex sm:space-x-4">
-                  {user?.role === 'CITIZEN' && (
-                    <>
-                      <Link to="/report" className="text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium flex items-center">
-                        <AlertCircle className="w-4 h-4 mr-1" /> Report Animal
+              
+              <div className="hidden sm:ml-6 sm:flex sm:space-x-3">
+                {/* Public Adopt Link */}
+                <Link to="/adopt" className="text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium flex items-center">
+                  <Heart className="w-4 h-4 mr-1 text-rose-400" /> Adopt
+                </Link>
+
+                {isAuthenticated && (
+                  <>
+                    {user?.role === 'CITIZEN' && (
+                      <>
+                        <Link to="/report" className="text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium flex items-center">
+                          <AlertCircle className="w-4 h-4 mr-1" /> Report Animal
+                        </Link>
+                        <Link to="/my-cases" className="text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium flex items-center">
+                          <Activity className="w-4 h-4 mr-1" /> My Cases
+                        </Link>
+                        <Link to="/adoption-applications" className="text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium flex items-center">
+                          <FileText className="w-4 h-4 mr-1" /> My Applications
+                        </Link>
+                      </>
+                    )}
+                    {user?.role === 'FOSTER' && (
+                      <Link to="/foster" className="text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium flex items-center">
+                        <Home className="w-4 h-4 mr-1 text-teal-400" /> Foster Care
                       </Link>
-                      <Link to="/my-cases" className="text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium flex items-center">
-                        <Activity className="w-4 h-4 mr-1" /> My Cases
+                    )}
+                    {user?.role === 'RESCUER' && (
+                      <Link to="/rescuer" className="text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium flex items-center">
+                        <ShieldPlus className="w-4 h-4 mr-1" /> Rescue Dashboard
                       </Link>
-                    </>
-                  )}
-                  {user?.role === 'RESCUER' && (
-                    <Link to="/rescuer" className="text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium flex items-center">
-                      <ShieldPlus className="w-4 h-4 mr-1" /> Rescue Dashboard
-                    </Link>
-                  )}
-                  {user?.role === 'VETERINARIAN' && (
-                    <Link to="/vet" className="text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium flex items-center">
-                      <Activity className="w-4 h-4 mr-1" /> Vet Dashboard
-                    </Link>
-                  )}
-                  {(user?.role === 'NGO_ADMIN' || user?.role === 'SUPER_ADMIN') && (
-                    <Link to="/ngo" className="text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium flex items-center">
-                      <Activity className="w-4 h-4 mr-1" /> NGO Command Center
-                    </Link>
-                  )}
-                </div>
-              )}
+                    )}
+                    {user?.role === 'VETERINARIAN' && (
+                      <Link to="/vet" className="text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium flex items-center">
+                        <Activity className="w-4 h-4 mr-1" /> Vet Dashboard
+                      </Link>
+                    )}
+                    {(user?.role === 'NGO_ADMIN' || user?.role === 'SUPER_ADMIN') && (
+                      <Link to="/ngo" className="text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium flex items-center">
+                        <Activity className="w-4 h-4 mr-1" /> NGO Command Center
+                      </Link>
+                    )}
+                  </>
+                )}
+              </div>
             </div>
             <div className="flex items-center">
               {isAuthenticated ? (

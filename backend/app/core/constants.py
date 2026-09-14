@@ -50,6 +50,39 @@ class RescuerAvailability(str, Enum):
     BUSY = "BUSY"
     OFFLINE = "OFFLINE"
 
+class FosterHomeAvailability(str, Enum):
+    AVAILABLE = "AVAILABLE"
+    PAUSED = "PAUSED"
+    FULL = "FULL"
+    INACTIVE = "INACTIVE"
+
+class FosterAssignmentStatus(str, Enum):
+    OFFERED = "OFFERED"
+    ACTIVE = "ACTIVE"
+    DECLINED = "DECLINED"
+    CANCELLED = "CANCELLED"
+    COMPLETED = "COMPLETED"
+
+class AdoptionListingStatus(str, Enum):
+    DRAFT = "DRAFT"
+    PUBLISHED = "PUBLISHED"
+    PAUSED = "PAUSED"
+    CLOSED = "CLOSED"
+
+class AdoptionApplicationStatus(str, Enum):
+    SUBMITTED = "SUBMITTED"
+    UNDER_REVIEW = "UNDER_REVIEW"
+    VISIT_SCHEDULED = "VISIT_SCHEDULED"
+    APPROVED = "APPROVED"
+    REJECTED = "REJECTED"
+    WITHDRAWN = "WITHDRAWN"
+
+class AdoptionVisitStatus(str, Enum):
+    SCHEDULED = "SCHEDULED"
+    COMPLETED = "COMPLETED"
+    CANCELLED = "CANCELLED"
+    NO_SHOW = "NO_SHOW"
+
 class AssignmentStatus(str, Enum):
     PENDING = "PENDING"
     ACCEPTED = "ACCEPTED"
@@ -107,6 +140,5 @@ STATUS_ROLE_PERMISSIONS: Dict[UserRole, List[RescueStatus]] = {
     UserRole.MUNICIPAL_ADMIN: list(RescueStatus),
     UserRole.FOSTER: [
         RescueStatus.FOSTER_CARE,
-        RescueStatus.READY_FOR_ADOPTION,
     ],
 }

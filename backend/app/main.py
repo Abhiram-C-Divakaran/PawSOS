@@ -31,6 +31,8 @@ from app.api.routes import (
     animals,
     uploads,
     health,
+    foster,
+    adoptions,
 )
 
 # Production & Staging security & database checks
@@ -100,6 +102,11 @@ app.include_router(veterinary_facilities.router, prefix="/api/v1/veterinary", ta
 app.include_router(veterinary.router, prefix="/api/v1/rescues/{case_id}/treatments", tags=["Veterinary Treatments"])
 app.include_router(uploads.router, prefix="/api/v1/uploads", tags=["Uploads"])
 app.include_router(animals.router, prefix="/api/v1/animals", tags=["Animals"])
+app.include_router(foster.router, prefix="/api/v1/foster", tags=["Foster Care Operations"])
+app.include_router(foster.ngo_router, prefix="/api/v1/ngo/foster", tags=["NGO Foster Operations"])
+app.include_router(adoptions.router, prefix="/api/v1/adoptions", tags=["Public Adoptions Catalog"])
+app.include_router(adoptions.applicant_router, prefix="/api/v1/adoption-applications", tags=["My Adoption Applications"])
+app.include_router(adoptions.ngo_router, prefix="/api/v1/ngo/adoptions", tags=["NGO Adoption Operations"])
 
 @app.get("/")
 def root():

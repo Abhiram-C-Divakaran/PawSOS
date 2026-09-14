@@ -11,6 +11,10 @@ from .veterinary_facility import VeterinaryFacility
 from .treatment import Treatment
 from .foster_home import FosterHome
 from .foster_assignment import FosterAssignment
+from .foster_care_update import FosterCareUpdate
+from .adoption_listing import AdoptionListing
+from .adoption_application import AdoptionApplication
+from .adoption_visit import AdoptionVisit
 from .notification import Notification
 from .device_token import DeviceToken
 from .audit_log import AuditLog

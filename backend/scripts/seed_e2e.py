@@ -19,6 +19,12 @@ from app.models.user import User
 from app.models.rescuer_profile import RescuerProfile
 from app.models.rescue_case import RescueCase
 from app.models.rescue_assignment import RescueAssignment
+from app.models.animal import Animal
+from app.models.foster_home import FosterHome
+from app.models.foster_assignment import FosterAssignment
+from app.models.foster_care_update import FosterCareUpdate
+from app.models.adoption_listing import AdoptionListing
+from app.models.adoption_application import AdoptionApplication
 from app.models.notification import Notification
 from app.models.device_token import DeviceToken
 from app.models.refresh_session import RefreshSession
@@ -30,6 +36,9 @@ from app.core.constants import (
     RescueStatus,
     RescuePriority,
     AssignmentStatus,
+    FosterHomeAvailability,
+    FosterAssignmentStatus,
+    AdoptionListingStatus,
 )
 
 E2E_PASSWORD = "E2ETestPassword123!"
@@ -57,11 +66,17 @@ def seed_e2e():
             "ngoadminA.e2e@pawreach.test",
             "ngoadminB.e2e@pawreach.test",
             "superadmin.e2e@pawreach.test",
+            "foster.e2e@pawreach.test",
         ]
         existing_users = db.query(User).filter(User.email.in_(e2e_emails)).all()
         user_ids = [u.id for u in existing_users]
         if user_ids:
             # Clean dependent entities
+            db.query(FosterCareUpdate).delete(synchronize_session=False)
+            db.query(FosterAssignment).delete(synchronize_session=False)
+            db.query(FosterHome).delete(synchronize_session=False)
+            db.query(AdoptionApplication).delete(synchronize_session=False)
+            db.query(AdoptionListing).delete(synchronize_session=False)
             db.query(Notification).filter(Notification.user_id.in_(user_ids)).delete(synchronize_session=False)
             db.query(DeviceToken).filter(DeviceToken.user_id.in_(user_ids)).delete(synchronize_session=False)
             db.query(RefreshSession).filter(RefreshSession.user_id.in_(user_ids)).delete(synchronize_session=False)
@@ -283,6 +298,19 @@ def seed_e2e():
             is_verified=True,
         )
         db.add(super_admin)
+
+        # 4.10 Foster Caregiver
+        foster_user = User(
+            email="foster.e2e@pawreach.test",
+            phone="+919800000011",
+            full_name="E2E Foster Caregiver",
+            password_hash=pwd_hash,
+            role=UserRole.FOSTER,
+            organization_id=org_a.id,
+            is_active=True,
+            is_verified=True,
+        )
+        db.add(foster_user)
         db.flush()
 
         # 5. Create Rescuer Profiles
@@ -350,6 +378,27 @@ def seed_e2e():
         )
         db.add(profile_b)
 
+        # 5.1 Foster Home profile for Foster Caregiver
+        foster_home = FosterHome(
+            caregiver_id=foster_user.id,
+            organization_id=org_a.id,
+            capacity=2,
+            current_occupancy=0,
+            availability_status="AVAILABLE",
+            accepted_species="Canine,Feline",
+            maximum_animal_size="Large",
+            medical_care_supported=True,
+            verified=True,
+            verified_at=datetime.utcnow(),
+            verified_by_user_id=ngo_admin_a.id,
+            locality="Bandra West",
+            latitude=19.0596,
+            longitude=72.8295,
+            created_at=datetime.utcnow(),
+        )
+        db.add(foster_home)
+        db.flush()
+
         # 6. Pre-staged Rescue Cases for E2E Scenarios
         db.query(RescueCase).filter(
             RescueCase.case_number.in_([
@@ -357,6 +406,8 @@ def seed_e2e():
                 "E2E-CASE-CONCURRENT-001",
                 "E2E-CASE-VET-001",
                 "E2E-CASE-VETB-001",
+                "E2E-CASE-FOST-001",
+                "E2E-CASE-ADOPT-001",
             ])
         ).delete(synchronize_session=False)
 
@@ -455,6 +506,80 @@ def seed_e2e():
         )
         db.add(case_vet_b)
 
+        # 6.5 Animal recovering and ready for foster placement
+        animal_fost = Animal(
+            species="Canine",
+            sex="Female",
+            approx_age="1 year",
+            colour="Golden",
+            description="Sweet recovering pup needing foster care",
+        )
+        db.add(animal_fost)
+        db.flush()
+
+        case_foster = RescueCase(
+            case_number="E2E-CASE-FOST-001",
+            animal_id=animal_fost.id,
+            reporter_id=citizen.id,
+            organization_id=org_a.id,
+            species="Canine",
+            description="Recovering puppy ready for foster care transition",
+            latitude=19.0596,
+            longitude=72.8295,
+            location="POINT(72.8295 19.0596)",
+            address_text="Bandra West, Mumbai",
+            status=RescueStatus.RECOVERING,
+            triage_priority=RescuePriority.MODERATE,
+            triage_score=40,
+            created_at=datetime.utcnow() - timedelta(hours=3),
+        )
+        db.add(case_foster)
+
+        # 6.6 Animal ready for adoption with published listing
+        animal_adopt = Animal(
+            species="Canine",
+            sex="Male",
+            approx_age="2 years",
+            colour="Brown and White",
+            description="Gentle rescue dog fully vaccinated and sterilised, ready for forever home",
+            sterilization_status="Neutered",
+            vaccination_status="Up-to-date",
+        )
+        db.add(animal_adopt)
+        db.flush()
+
+        case_adopt = RescueCase(
+            case_number="E2E-CASE-ADOPT-001",
+            animal_id=animal_adopt.id,
+            reporter_id=citizen.id,
+            organization_id=org_a.id,
+            species="Canine",
+            description="Healed and vaccinated canine ready for adoption",
+            latitude=18.9220,
+            longitude=72.8340,
+            location="POINT(72.8340 18.9220)",
+            address_text="Colaba, Mumbai",
+            status=RescueStatus.READY_FOR_ADOPTION,
+            triage_priority=RescuePriority.GENERAL,
+            triage_score=20,
+            created_at=datetime.utcnow() - timedelta(days=2),
+        )
+        db.add(case_adopt)
+        db.flush()
+
+        listing_adopt = AdoptionListing(
+            animal_id=animal_adopt.id,
+            rescue_case_id=case_adopt.id,
+            organization_id=org_a.id,
+            title="Milo - Gentle Golden Retriever Mix",
+            public_description="Milo is a friendly, loving 2-year-old rescue who is fully rehabilitated and looking for a caring family.",
+            public_image_url="https://images.unsplash.com/photo-1543466835-00a7907e9de1?w=800",
+            status="PUBLISHED",
+            published_at=datetime.utcnow() - timedelta(days=1),
+            created_by=ngo_admin_a.id,
+        )
+        db.add(listing_adopt)
+
         db.commit()
         print("E2E seed completed successfully:")
         print(f"  Org A: {org_a.name} ({org_a.id})")
@@ -462,7 +587,7 @@ def seed_e2e():
         print(f"  Vet Facility A: {vet_facility_a.name} ({vet_facility_a.id})")
         print(f"  Vet Facility B: {vet_facility_b.name} ({vet_facility_b.id})")
         print(f"  Users seeded: {len(e2e_emails)} accounts (Password: {E2E_PASSWORD})")
-        print("  Pre-staged cases: E2E-CASE-ORGB-001, E2E-CASE-CONCURRENT-001, E2E-CASE-VET-001, E2E-CASE-VETB-001")
+        print("  Pre-staged cases: E2E-CASE-ORGB-001, E2E-CASE-CONCURRENT-001, E2E-CASE-VET-001, E2E-CASE-VETB-001, E2E-CASE-FOST-001, E2E-CASE-ADOPT-001")
 
     except Exception as e:
         db.rollback()

@@ -13,6 +13,11 @@ const MyCases = lazy(() => import('./pages/MyCases').then((m) => ({ default: m.M
 const CaseTracking = lazy(() => import('./pages/CaseTracking').then((m) => ({ default: m.CaseTracking })));
 const RescuerDashboard = lazy(() => import('./pages/RescuerDashboard').then((m) => ({ default: m.RescuerDashboard })));
 const VetDashboard = lazy(() => import('./pages/VetDashboard').then((m) => ({ default: m.VetDashboard })));
+const FosterDashboard = lazy(() => import('./pages/FosterDashboard').then((m) => ({ default: m.FosterDashboard })));
+const AdoptionBrowse = lazy(() => import('./pages/AdoptionBrowse').then((m) => ({ default: m.AdoptionBrowse })));
+const AdoptionDetail = lazy(() => import('./pages/AdoptionDetail').then((m) => ({ default: m.AdoptionDetail })));
+const AdoptionApplicationPage = lazy(() => import('./pages/AdoptionApplicationPage').then((m) => ({ default: m.AdoptionApplicationPage })));
+const MyAdoptionApplications = lazy(() => import('./pages/MyAdoptionApplications').then((m) => ({ default: m.MyAdoptionApplications })));
 
 // NGO Command Center Route Chunks
 const NGOLayout = lazy(() => import('./pages/ngo/NGOLayout').then((m) => ({ default: m.NGOLayout })));
@@ -21,6 +26,8 @@ const NGOCases = lazy(() => import('./pages/ngo/NGOCases').then((m) => ({ defaul
 const NGOCaseDetail = lazy(() => import('./pages/ngo/NGOCaseDetail').then((m) => ({ default: m.NGOCaseDetail })));
 const NGOResponders = lazy(() => import('./pages/ngo/NGOResponders').then((m) => ({ default: m.NGOResponders })));
 const NGOVeterinary = lazy(() => import('./pages/ngo/NGOVeterinary').then((m) => ({ default: m.NGOVeterinary })));
+const NGOFoster = lazy(() => import('./pages/ngo/NGOFoster').then((m) => ({ default: m.NGOFoster })));
+const NGOAdoptions = lazy(() => import('./pages/ngo/NGOAdoptions').then((m) => ({ default: m.NGOAdoptions })));
 const NGOAnalytics = lazy(() => import('./pages/ngo/NGOAnalytics').then((m) => ({ default: m.NGOAnalytics })));
 const NGOOrganization = lazy(() => import('./pages/ngo/NGOOrganization').then((m) => ({ default: m.NGOOrganization })));
 const NGOSettings = lazy(() => import('./pages/ngo/NGOSettings').then((m) => ({ default: m.NGOSettings })));
@@ -53,6 +60,7 @@ const HomeRedirect = () => {
   if (isAuthenticated && user) {
     if (user.role === 'RESCUER') return <Navigate to="/rescuer" replace />;
     if (user.role === 'VETERINARIAN') return <Navigate to="/vet" replace />;
+    if (user.role === 'FOSTER') return <Navigate to="/foster" replace />;
     if (user.role === 'NGO_ADMIN' || user.role === 'SUPER_ADMIN') return <Navigate to="/ngo" replace />;
     return <Navigate to="/my-cases" replace />;
   }
@@ -76,6 +84,36 @@ function App() {
               <Route path="my-cases" element={<ProtectedRoute><MyCases /></ProtectedRoute>} />
               <Route path="cases/:id" element={<ProtectedRoute><CaseTracking /></ProtectedRoute>} />
               
+              {/* Public Adoption Catalog & Details */}
+              <Route path="adopt" element={<AdoptionBrowse />} />
+              <Route path="adopt/:listingId" element={<AdoptionDetail />} />
+              <Route
+                path="adopt/:listingId/apply"
+                element={
+                  <ProtectedRoute allowedRoles={['CITIZEN', 'NGO_ADMIN', 'RESCUER', 'FOSTER', 'SUPER_ADMIN']}>
+                    <AdoptionApplicationPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="adoption-applications"
+                element={
+                  <ProtectedRoute allowedRoles={['CITIZEN', 'NGO_ADMIN', 'RESCUER', 'FOSTER', 'SUPER_ADMIN']}>
+                    <MyAdoptionApplications />
+                  </ProtectedRoute>
+                }
+              />
+
+              {/* Foster Caregiver Hub */}
+              <Route
+                path="foster"
+                element={
+                  <ProtectedRoute allowedRoles={['FOSTER', 'NGO_ADMIN', 'SUPER_ADMIN']}>
+                    <FosterDashboard />
+                  </ProtectedRoute>
+                }
+              />
+
               {/* Rescuer Routes */}
               <Route path="rescuer" element={<ProtectedRoute allowedRoles={['RESCUER', 'NGO_ADMIN']}><RescuerDashboard /></ProtectedRoute>} />
               
@@ -97,6 +135,8 @@ function App() {
               <Route path="cases/:id" element={<NGOCaseDetail />} />
               <Route path="responders" element={<NGOResponders />} />
               <Route path="veterinary" element={<NGOVeterinary />} />
+              <Route path="foster" element={<NGOFoster />} />
+              <Route path="adoptions" element={<NGOAdoptions />} />
               <Route path="analytics" element={<NGOAnalytics />} />
               <Route path="organization" element={<NGOOrganization />} />
               <Route path="settings" element={<NGOSettings />} />

@@ -17,9 +17,11 @@ class FosterAssignment(Base):
     expected_end_date = Column(DateTime, nullable=True)
     actual_end_date = Column(DateTime, nullable=True)
     
-    status = Column(String, default="ACTIVE")
+    status = Column(String, default="OFFERED", nullable=False)
     notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
 
     animal = relationship("Animal")
     rescue_case = relationship("RescueCase")
-    foster_home = relationship("FosterHome")
+    foster_home = relationship("FosterHome", back_populates="assignments")
+    care_updates = relationship("FosterCareUpdate", back_populates="assignment", cascade="all, delete-orphan", order_by="desc(FosterCareUpdate.created_at)")

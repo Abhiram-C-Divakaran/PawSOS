@@ -96,6 +96,32 @@ def has_rescuer_case_relationship(case: RescueCase, user: User, db: Optional[Ses
     return False
 
 
+def has_foster_case_relationship(case: RescueCase, user: User, db: Optional[Session] = None) -> bool:
+    """Check if foster caregiver has an active or offered assignment for this case."""
+    if db is None:
+        return False
+    from app.models.foster_home import FosterHome
+    from app.models.foster_assignment import FosterAssignment
+    from app.core.constants import FosterAssignmentStatus
+
+    active = (
+        db.query(FosterAssignment)
+        .join(FosterHome, FosterAssignment.foster_home_id == FosterHome.id)
+        .filter(
+            FosterAssignment.rescue_case_id == case.id,
+            FosterHome.caregiver_id == user.id,
+            FosterAssignment.status.in_([
+                FosterAssignmentStatus.ACTIVE.value,
+                FosterAssignmentStatus.OFFERED.value,
+                "ACTIVE",
+                "OFFERED",
+            ]),
+        )
+        .first()
+    )
+    return active is not None
+
+
 def verify_case_access(case: RescueCase, user: User, db: Optional[Session] = None) -> None:
     """Enforce strict, fail-closed authorization for private rescue case details and evidence images.
     
@@ -138,7 +164,15 @@ def verify_case_access(case: RescueCase, user: User, db: Optional[Session] = Non
             raise ForbiddenException("Veterinarians can only view cases assigned to their authorized facility.")
         return
 
-    # 6. Default deny for all other roles or unhandled states
+    # 6. Foster caregiver relationship check (fail-closed: active or offered assignment only)
+    if user.role == UserRole.FOSTER:
+        if not has_foster_case_relationship(case, user, db):
+            raise ForbiddenException(
+                "Foster caregivers can only access cases assigned or offered to them."
+            )
+        return
+
+    # 7. Default deny for all other roles or unhandled states
     raise ForbiddenException("Access denied.")
 
 

@@ -166,3 +166,60 @@ def test_facility(db):
     db.commit()
     db.refresh(fac)
     return fac
+
+@pytest.fixture
+def test_org(db):
+    org = Organization(
+        name="PawReach Shelter & Rescue",
+        organization_type=OrganizationType.NGO,
+        email=f"shelter_{uuid.uuid4().hex[:6]}@example.com",
+        phone="+912226002222",
+        operating_region="Mumbai Suburban",
+        verification_status=True,
+    )
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+    return org
+
+@pytest.fixture
+def ngo_admin_user(db, test_org):
+    user = User(
+        full_name="Test NGO Admin",
+        email=f"ngo_admin_{uuid.uuid4().hex[:6]}@example.com",
+        phone=f"+9194{uuid.uuid4().hex[:8]}",
+        password_hash=get_password_hash("password123"),
+        role=UserRole.NGO_ADMIN,
+        organization_id=test_org.id,
+        is_active=True,
+        is_verified=True,
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
+
+@pytest.fixture
+def ngo_admin_token(ngo_admin_user):
+    return create_access_token(ngo_admin_user.id)
+
+@pytest.fixture
+def foster_user(db):
+    user = User(
+        full_name="Test Foster Caregiver",
+        email=f"foster_{uuid.uuid4().hex[:6]}@example.com",
+        phone=f"+9193{uuid.uuid4().hex[:8]}",
+        password_hash=get_password_hash("password123"),
+        role=UserRole.FOSTER,
+        is_active=True,
+        is_verified=True,
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
+
+@pytest.fixture
+def foster_token(foster_user):
+    return create_access_token(foster_user.id)
+

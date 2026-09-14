@@ -1,4 +1,4 @@
-export type UserRole = 'CITIZEN' | 'RESCUER' | 'VETERINARIAN' | 'NGO_ADMIN' | 'SUPER_ADMIN' | 'MUNICIPAL_ADMIN';
+export type UserRole = 'CITIZEN' | 'RESCUER' | 'VETERINARIAN' | 'NGO_ADMIN' | 'SUPER_ADMIN' | 'MUNICIPAL_ADMIN' | 'FOSTER';
 
 export interface User {
   id: string;
@@ -287,5 +287,146 @@ export interface HealthReadinessResponse {
   services: ServiceHealth;
   checks?: Record<string, string>;
 }
+
+// ==========================================
+// PHASE 3A: FOSTER & ADOPTION INTERFACES
+// ==========================================
+
+export type FosterHomeAvailability = 'AVAILABLE' | 'FULL' | 'TEMPORARILY_UNAVAILABLE' | 'INACTIVE';
+export type FosterAssignmentStatus = 'OFFERED' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED' | 'TRANSFERRED';
+export type AdoptionListingStatus = 'DRAFT' | 'PUBLISHED' | 'PENDING' | 'ADOPTED' | 'CLOSED' | 'WITHDRAWN';
+export type AdoptionApplicationStatus = 'SUBMITTED' | 'UNDER_REVIEW' | 'VISIT_SCHEDULED' | 'APPROVED' | 'REJECTED' | 'WITHDRAWN';
+export type AdoptionVisitStatus = 'SCHEDULED' | 'COMPLETED' | 'CANCELLED' | 'RESCHEDULED';
+
+export interface FosterCareUpdate {
+  id: string;
+  assignment_id: string;
+  update_type: string;
+  notes: string;
+  appetite_status?: string;
+  mobility_status?: string;
+  medication_administered: boolean;
+  behavioral_notes?: string;
+  media_urls?: string[];
+  created_at: string;
+}
+
+export interface FosterAssignment {
+  id: string;
+  animal_id?: string;
+  rescue_case_id?: string;
+  foster_home_id: string;
+  status: FosterAssignmentStatus;
+  start_date?: string;
+  expected_end_date?: string;
+  actual_end_date?: string;
+  notes?: string;
+  created_at?: string;
+  rescue_case?: {
+    id: string;
+    case_number: string;
+    species: string;
+    description?: string;
+    status: RescueStatus;
+  };
+  care_updates?: FosterCareUpdate[];
+}
+
+export interface FosterHome {
+  id: string;
+  caregiver_id: string;
+  organization_id?: string;
+  locality?: string;
+  latitude?: number;
+  longitude?: number;
+  capacity: number;
+  current_occupancy: number;
+  accepted_species?: string;
+  medical_care_supported: boolean;
+  availability_status: FosterHomeAvailability;
+  verified: boolean;
+  verified_at?: string;
+  created_at?: string;
+  caregiver?: {
+    id: string;
+    full_name: string;
+    phone?: string;
+    email?: string;
+  };
+  active_assignments?: FosterAssignment[];
+}
+
+export interface FosterCandidate {
+  foster_home_id: string;
+  caregiver_name: string;
+  locality: string;
+  score: number;
+  compatible: boolean;
+  reasons: string[];
+  remaining_capacity: number;
+  distance_km?: number;
+}
+
+export interface AdoptionListing {
+  id: string;
+  animal_id: string;
+  rescue_case_id: string;
+  organization_id: string;
+  title: string;
+  public_description?: string;
+  public_image_url?: string;
+  species: string;
+  sex?: string;
+  approx_age?: string;
+  colour?: string;
+  identifying_marks?: string;
+  sterilization_status?: string;
+  vaccination_status?: string;
+  medical_summary?: string;
+  organization_name: string;
+  organization_email?: string;
+  organization_phone?: string;
+  locality?: string;
+  status: AdoptionListingStatus;
+  published_at?: string;
+  created_at?: string;
+}
+
+export interface AdoptionVisit {
+  id: string;
+  application_id: string;
+  scheduled_at: string;
+  visit_type: string;
+  location_address: string;
+  notes?: string;
+  status: AdoptionVisitStatus;
+  created_at?: string;
+}
+
+export interface AdoptionApplication {
+  id: string;
+  listing_id: string;
+  applicant_id: string;
+  status: AdoptionApplicationStatus;
+  housing_type?: string;
+  has_fenced_garden: boolean;
+  has_other_pets: boolean;
+  family_members_count?: number;
+  experience_with_pets?: string;
+  reason_for_adoption?: string;
+  reviewer_notes?: string;
+  rejection_reason?: string;
+  reviewed_at?: string;
+  created_at?: string;
+  listing?: AdoptionListing;
+  applicant?: {
+    id: string;
+    full_name: string;
+    phone?: string;
+    email?: string;
+  };
+  visits?: AdoptionVisit[];
+}
+
 
 

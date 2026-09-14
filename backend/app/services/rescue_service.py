@@ -216,6 +216,25 @@ class RescueService:
         if veterinary_facility_id:
             rescue_case.veterinary_facility_id = veterinary_facility_id
 
+        if new_status in [RescueStatus.READY_FOR_RELEASE, RescueStatus.RELEASED]:
+            from app.models.adoption_listing import AdoptionListing
+            from app.core.constants import AdoptionListingStatus
+            active_listing = (
+                db.query(AdoptionListing)
+                .filter(
+                    AdoptionListing.rescue_case_id == rescue_case.id,
+                    AdoptionListing.status.in_([
+                        AdoptionListingStatus.DRAFT.value,
+                        AdoptionListingStatus.PUBLISHED.value,
+                        AdoptionListingStatus.PAUSED.value,
+                    ])
+                )
+                .first()
+            )
+            if active_listing:
+                active_listing.status = AdoptionListingStatus.CLOSED.value
+                active_listing.closed_at = datetime.utcnow()
+
         if new_status == RescueStatus.CLOSED:
             rescue_case.closed_at = datetime.utcnow()
 
