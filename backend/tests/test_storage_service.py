@@ -135,3 +135,105 @@ def test_storage_rejects_decompression_bomb():
         with pytest.raises(BadRequestException) as exc_info:
             optimize_image(upload)
         assert "decompression bomb detected" in str(exc_info.value.detail)
+
+
+def test_aws_s3_works_without_s3_endpoint_url():
+    """Verify AWS S3 initializes normally without endpoint_url when S3_ENDPOINT_URL is empty."""
+    from app.services.storage_service import S3StorageProvider
+    with patch("boto3.client") as mock_boto:
+        with patch.object(settings, "S3_ENDPOINT_URL", ""):
+            with patch.object(settings, "AWS_ACCESS_KEY_ID", "test_ak"):
+                with patch.object(settings, "AWS_SECRET_ACCESS_KEY", "test_sk"):
+                    with patch.object(settings, "AWS_REGION", "ap-south-1"):
+                        with patch.object(settings, "S3_BUCKET_NAME", "mybucket"):
+                            provider = S3StorageProvider()
+                            assert provider.bucket == "mybucket"
+                            # Verify endpoint_url was NOT passed to boto3
+                            mock_boto.assert_called_once()
+                            call_kwargs = mock_boto.call_args[1]
+                            assert "endpoint_url" not in call_kwargs
+                            assert call_kwargs["region_name"] == "ap-south-1"
+                            assert call_kwargs["aws_access_key_id"] == "test_ak"
+                            assert call_kwargs["aws_secret_access_key"] == "test_sk"
+
+
+def test_custom_s3_endpoint_passed_to_boto3():
+    """Verify custom S3 endpoint URL and path-style addressing are passed to boto3 when configured."""
+    from app.services.storage_service import S3StorageProvider
+    custom_endpoint = "https://test-ref.supabase.co/storage/v1/s3"
+    with patch("boto3.client") as mock_boto:
+        with patch.object(settings, "S3_ENDPOINT_URL", custom_endpoint):
+            with patch.object(settings, "AWS_ACCESS_KEY_ID", "supabase_ak"):
+                with patch.object(settings, "AWS_SECRET_ACCESS_KEY", "supabase_sk"):
+                    with patch.object(settings, "AWS_REGION", "ap-south-1"):
+                        with patch.object(settings, "S3_BUCKET_NAME", "evidence"):
+                            provider = S3StorageProvider()
+                            assert provider.bucket == "evidence"
+                            mock_boto.assert_called_once()
+                            call_kwargs = mock_boto.call_args[1]
+                            assert call_kwargs["endpoint_url"] == custom_endpoint
+                            assert call_kwargs["aws_access_key_id"] == "supabase_ak"
+                            # Check path-style addressing in botocore config
+                            assert "config" in call_kwargs
+                            cfg = call_kwargs["config"]
+                            assert getattr(cfg, "s3", {}).get("addressing_style") == "path"
+
+
+@pytest.mark.asyncio
+async def test_canonical_object_keys_remain_unchanged():
+    """Verify upload_image produces stable canonical keys (rescues/uuid.ext) without endpoint or bucket prefixes."""
+    from app.services.storage_service import S3StorageProvider, normalize_image_key
+    custom_endpoint = "https://test-ref.supabase.co/storage/v1/s3"
+    with patch("boto3.client") as mock_boto:
+        mock_s3 = MagicMock()
+        mock_boto.return_value = mock_s3
+        with patch.object(settings, "S3_ENDPOINT_URL", custom_endpoint):
+            with patch.object(settings, "S3_BUCKET_NAME", "evidence"):
+                provider = S3StorageProvider()
+                img_bytes = create_test_image()
+                upload = UploadFile(
+                    filename="evidence.jpg",
+                    file=img_bytes,
+                    headers=Headers({"content-type": "image/jpeg"}),
+                )
+                key = await provider.upload_image(upload)
+
+                # Canonical key MUST start with rescues/ and end with .jpg, NOT a full URL
+                assert key.startswith("rescues/")
+                assert key.endswith(".jpg")
+                assert "http" not in key
+                assert "supabase" not in key
+                assert "evidence" not in key.split("/")[0]
+
+                # Normalization of full path-style URL returns same canonical key
+                full_url = f"{custom_endpoint}/evidence/{key}"
+                normalized = normalize_image_key(full_url)
+                assert normalized == key
+
+
+def test_presigned_url_generation_uses_configured_s3_endpoint():
+    """Verify presigned URL generation passes canonical key and bucket to client configured with custom endpoint."""
+    from app.services.storage_service import S3StorageProvider
+    custom_endpoint = "https://test-ref.supabase.co/storage/v1/s3"
+    with patch("boto3.client") as mock_boto:
+        mock_s3 = MagicMock()
+        mock_s3.generate_presigned_url.return_value = f"{custom_endpoint}/evidence/rescues/sample.jpg?token=test"
+        mock_boto.return_value = mock_s3
+
+        with patch.object(settings, "S3_ENDPOINT_URL", custom_endpoint):
+            with patch.object(settings, "S3_BUCKET_NAME", "evidence"):
+                provider = S3StorageProvider()
+
+                # Test with canonical key
+                url = provider.get_presigned_url("rescues/sample.jpg", expires_in=900)
+                assert f"{custom_endpoint}/evidence/rescues/sample.jpg" in url
+                mock_s3.generate_presigned_url.assert_called_with(
+                    "get_object",
+                    Params={"Bucket": "evidence", "Key": "rescues/sample.jpg"},
+                    ExpiresIn=900,
+                )
+
+                # Test with full custom endpoint URL (should normalize key and generate presigned URL)
+                full_custom_url = f"{custom_endpoint}/evidence/rescues/sample.jpg"
+                url2 = provider.get_presigned_url(full_custom_url, expires_in=900)
+                assert url2 == f"{custom_endpoint}/evidence/rescues/sample.jpg?token=test"

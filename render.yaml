@@ -1,80 +1,60 @@
 services:
-  # 1. FastAPI API Web Service
+  # 1. Combined FastAPI, Celery Worker, & Celery Beat Web Service (Render Free Tier)
   - type: web
-    name: pawreach-staging-api
+    name: pawreach-api
     runtime: python
     region: oregon
-    plan: starter
-    buildCommand: cd backend && pip install -r requirements.txt
-    preDeployCommand: cd backend && alembic upgrade head
-    startCommand: uvicorn app.main:app --app-dir backend --host 0.0.0.0 --port $PORT --workers 2
+    plan: free
+    buildCommand: chmod +x scripts/start_free_render.sh && cd backend && pip install -r requirements.txt
+    startCommand: ./scripts/start_free_render.sh
     healthCheckPath: /api/v1/health
     envVars:
-      - fromGroup: pawreach-staging-common
-      - key: DATABASE_URL
-        fromDatabase:
-          name: pawreach-staging-db
-          property: connectionString
-      - key: REDIS_URL
-        fromService:
-          type: keyvalue
-          name: pawreach-staging-redis
-          property: connectionString
+      - key: ENVIRONMENT
+        value: staging
       - key: PROCESS_TYPE
-        value: api
+        value: all
+      - key: STORAGE_PROVIDER
+        value: s3
       - key: COOKIE_SECURE
         value: "true"
       - key: COOKIE_SAMESITE
         value: lax
-
-  # 2. Celery Worker Background Service
-  - type: worker
-    name: pawreach-staging-worker
-    runtime: python
-    region: oregon
-    plan: starter
-    buildCommand: cd backend && pip install -r requirements.txt
-    startCommand: celery -A app.tasks.celery_app.celery_app --workdir backend worker --loglevel=INFO -Q dispatch,notifications,default
-    envVars:
-      - fromGroup: pawreach-staging-common
+      - key: REQUIRE_FIREBASE
+        value: "false"
+      - key: JWT_SECRET_KEY
+        generateValue: true
+      - key: JWT_ALGORITHM
+        value: HS256
+      - key: ACCESS_TOKEN_EXPIRE_MINUTES
+        value: "30"
+      - key: REFRESH_TOKEN_EXPIRE_DAYS
+        value: "7"
+      - key: S3_PRESIGNED_URL_EXPIRE_SECONDS
+        value: "900"
       - key: DATABASE_URL
-        fromDatabase:
-          name: pawreach-staging-db
-          property: connectionString
+        sync: false
       - key: REDIS_URL
-        fromService:
-          type: keyvalue
-          name: pawreach-staging-redis
-          property: connectionString
-      - key: PROCESS_TYPE
-        value: worker
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+      - key: AWS_ACCESS_KEY_ID
+        sync: false
+      - key: AWS_SECRET_ACCESS_KEY
+        sync: false
+      - key: AWS_REGION
+        value: ap-south-1
+      - key: S3_BUCKET_NAME
+        sync: false
+      - key: S3_ENDPOINT_URL
+        sync: false
+      - key: FIREBASE_PROJECT_ID
+        sync: false
+      - key: FIREBASE_CREDENTIALS_JSON
+        sync: false
 
-  # 3. Celery Beat Periodic Scheduler (Singleton)
-  - type: worker
-    name: pawreach-staging-beat
-    runtime: python
-    region: oregon
-    plan: starter
-    numInstances: 1
-    buildCommand: cd backend && pip install -r requirements.txt
-    startCommand: celery -A app.tasks.celery_app.celery_app --workdir backend beat --loglevel=INFO --pidfile=/tmp/celerybeat.pid
-    envVars:
-      - fromGroup: pawreach-staging-common
-      - key: DATABASE_URL
-        fromDatabase:
-          name: pawreach-staging-db
-          property: connectionString
-      - key: REDIS_URL
-        fromService:
-          type: keyvalue
-          name: pawreach-staging-redis
-          property: connectionString
-      - key: PROCESS_TYPE
-        value: beat
-
-  # 4. Frontend Static PWA Site
+  # 2. Frontend Static PWA Site (Render Free Tier)
   - type: web
-    name: pawreach-staging-frontend
+    name: pawreach-frontend
     runtime: static
     buildCommand: npm --prefix frontend ci && npm --prefix frontend run build
     staticPublishPath: ./frontend/dist
@@ -99,48 +79,3 @@ services:
         sync: false
       - key: VITE_FIREBASE_VAPID_KEY
         sync: false
-
-  # 5. Managed Redis / Key Value Service
-  - type: keyvalue
-    name: pawreach-staging-redis
-    region: oregon
-    plan: starter
-    maxmemoryPolicy: noeviction
-    ipAllowList: []
-
-databases:
-  # Managed PostgreSQL with PostGIS (15+)
-  - name: pawreach-staging-db
-    region: oregon
-    plan: basic-256mb
-    postgresMajorVersion: "15"
-
-envVarGroups:
-  - name: pawreach-staging-common
-    envVars:
-      - key: ENVIRONMENT
-        value: staging
-      - key: STORAGE_PROVIDER
-        value: s3
-      - key: AWS_REGION
-        value: ap-south-1
-      - key: JWT_SECRET_KEY
-        generateValue: true
-      - key: JWT_ALGORITHM
-        value: HS256
-      - key: ACCESS_TOKEN_EXPIRE_MINUTES
-        value: "30"
-      - key: REFRESH_TOKEN_EXPIRE_DAYS
-        value: "7"
-      - key: CELERY_HEARTBEAT_INTERVAL_SECONDS
-        value: "10.0"
-      - key: CELERY_HEARTBEAT_TTL_SECONDS
-        value: "60"
-      - key: DISPATCH_BEAT_INTERVAL_SECONDS
-        value: "20.0"
-      - key: DISPATCH_OFFER_EXPIRY_SECONDS
-        value: "20"
-      - key: REQUIRE_FIREBASE
-        value: "false"
-      - key: S3_PRESIGNED_URL_EXPIRE_SECONDS
-        value: "900"

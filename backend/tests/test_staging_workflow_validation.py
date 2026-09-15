@@ -66,7 +66,9 @@ def test_staging_workflow_sha_handling_and_polling():
 
 
 def test_render_yaml_configuration_and_migration_architecture():
-    """Verify that render.yaml runs Alembic from backend dir, uses preDeployCommand, and sets PROCESS_TYPE."""
+    """Verify that render.yaml defines a 100% free deployment topology without paid resources,
+    running migrations and combined API + Celery worker + Beat via scripts/start_free_render.sh.
+    """
     assert RENDER_YAML.exists(), f"render.yaml not found at {RENDER_YAML}"
     with open(RENDER_YAML, "r", encoding="utf-8") as f:
         render_data = yaml.safe_load(f)
@@ -74,46 +76,53 @@ def test_render_yaml_configuration_and_migration_architecture():
     services = render_data.get("services", [])
     service_map = {s["name"]: s for s in services}
 
-    api_svc = service_map.get("pawreach-staging-api")
-    worker_svc = service_map.get("pawreach-staging-worker")
-    beat_svc = service_map.get("pawreach-staging-beat")
+    # 1. Verify single free web service (API + Celery + Beat combined)
+    api_svc = service_map.get("pawreach-api") or service_map.get("pawreach-staging-api")
+    assert api_svc, "Free web service (pawreach-api) missing in render.yaml"
+    assert api_svc.get("plan") == "free", f"Web service plan must be 'free', got '{api_svc.get('plan')}'"
 
-    assert api_svc, "pawreach-staging-api service missing in render.yaml"
-    assert worker_svc, "pawreach-staging-worker service missing in render.yaml"
-    assert beat_svc, "pawreach-staging-beat service missing in render.yaml"
+    # Verify no paid databases or separate managed services in render.yaml
+    assert "databases" not in render_data or len(render_data.get("databases", [])) == 0, "No paid databases allowed in render.yaml"
+    for s in services:
+        assert s.get("plan") in (None, "free"), f"Paid plan '{s.get('plan')}' detected in {s.get('name')}"
+        assert s.get("runtime") in ("python", "static"), f"Unexpected runtime '{s.get('runtime')}' in render.yaml"
 
-    # Migration check: preDeployCommand on api service runs in backend dir
-    pre_deploy = api_svc.get("preDeployCommand", "")
-    assert "cd backend" in pre_deploy and "alembic upgrade head" in pre_deploy, (
-        f"API preDeployCommand must execute 'cd backend && alembic upgrade head', got: '{pre_deploy}'"
-    )
+    # Start command uses combined startup script
+    start_cmd = api_svc.get("startCommand", "")
+    assert "start_free_render.sh" in start_cmd, f"Web service startCommand must use start_free_render.sh, got '{start_cmd}'"
 
-    # PROCESS_TYPE validation on each service
+    # Verify startup script exists and contains alembic migrations + worker + beat + uvicorn
+    script_path = REPO_ROOT / "scripts" / "start_free_render.sh"
+    assert script_path.exists(), f"start_free_render.sh missing at {script_path}"
+    with open(script_path, "r", encoding="utf-8") as sf:
+        script_content = sf.read()
+    assert "alembic upgrade head" in script_content
+    assert "celery" in script_content and "worker" in script_content
+    assert "celery" in script_content and "beat" in script_content
+    assert "uvicorn" in script_content
+
+    # PROCESS_TYPE validation on free web service
     def get_env_var(svc, key):
         for ev in svc.get("envVars", []):
             if ev.get("key") == key:
                 return ev.get("value")
         return None
 
-    assert get_env_var(api_svc, "PROCESS_TYPE") == "api"
-    assert get_env_var(worker_svc, "PROCESS_TYPE") == "worker"
-    assert get_env_var(beat_svc, "PROCESS_TYPE") == "beat"
+    assert get_env_var(api_svc, "PROCESS_TYPE") == "all"
+    assert get_env_var(api_svc, "STORAGE_PROVIDER") == "s3"
 
-    # Common env group check
-    env_groups = render_data.get("envVarGroups", [])
-    common_group = next((g for g in env_groups if g.get("name") == "pawreach-staging-common"), None)
-    assert common_group, "pawreach-staging-common envVarGroup missing"
-    common_keys = [ev.get("key") for ev in common_group.get("envVars", [])]
-    assert "REQUIRE_FIREBASE" in common_keys
-    assert "S3_PRESIGNED_URL_EXPIRE_SECONDS" in common_keys
-    assert "STORAGE_PROVIDER" in common_keys
+    # Check envVars wiring for external free services (DATABASE_URL, REDIS_URL, etc.)
+    env_keys = [ev.get("key") for ev in api_svc.get("envVars", [])]
+    assert "DATABASE_URL" in env_keys
+    assert "REDIS_URL" in env_keys
+    assert "CORS_ORIGINS" in env_keys
+    assert "JWT_SECRET_KEY" in env_keys
+    assert "S3_ENDPOINT_URL" in env_keys
 
-    # Service-level database and redis wiring check
-    for svc in [api_svc, worker_svc, beat_svc]:
-        db_var = next((ev for ev in svc.get("envVars", []) if ev.get("key") == "DATABASE_URL"), None)
-        assert db_var and "fromDatabase" in db_var, f"{svc['name']} missing fromDatabase wiring for DATABASE_URL"
-        redis_var = next((ev for ev in svc.get("envVars", []) if ev.get("key") == "REDIS_URL"), None)
-        assert redis_var and "fromService" in redis_var, f"{svc['name']} missing fromService wiring for REDIS_URL"
+    # Verify frontend static site
+    frontend_svc = service_map.get("pawreach-frontend") or service_map.get("pawreach-staging-frontend")
+    assert frontend_svc, "Static frontend service missing in render.yaml"
+    assert frontend_svc.get("runtime") == "static"
 
 
 def test_docker_compose_staging_process_types_and_fail_fast():

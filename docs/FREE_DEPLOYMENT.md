@@ -1,0 +1,142 @@
+# PawReach — Zero-Cost Free Live Deployment Guide
+
+This guide describes how to deploy **PawReach** as a free public portfolio / college demonstration project using 100% free-tier cloud services:
+
+* **Frontend**: Render Static Site (Free)
+* **Backend**: Render Web Service (Free — combined FastAPI, lightweight Celery worker, and Celery Beat scheduler)
+* **Database**: Supabase Free Tier (PostgreSQL with PostGIS)
+* **Image Storage**: Supabase Storage via S3-compatible API (Private bucket)
+* **Task Broker (Redis)**: Upstash Redis (Free tier)
+* **Push Notifications**: Firebase Cloud Messaging (Spark free plan — optional)
+
+---
+
+## Important Free-Tier Characteristics & Limitations
+
+> [!WARNING]
+> **Render Free Container Sleep Behavior**:
+> Render's free web service sleeps after 15 minutes of inactivity.
+> - **Cold Starts**: The first request after a period of inactivity may take 30–50 seconds while the container spins up.
+> - **Worker/Beat Suspension**: Because the Celery worker and Beat scheduler run inside the same free web container, background tasks (such as automated dispatch matching and heartbeat sweeps) will pause while the container sleeps, resuming automatically when incoming traffic wakes the service.
+> - This is completely normal and acceptable for a student portfolio / public demo.
+> - **Production Note**: If PawReach is ever promoted to an operational 24/7 rescue service, the backend can immediately be separated back into dedicated, always-on API, Celery worker, and Celery Beat services.
+
+---
+
+## Step-by-Step Operator Setup
+
+### Step 1: Create Supabase Free Project
+1. Navigate to [Supabase](https://supabase.com) and create a free account.
+2. Click **New Project**, choose a project name (e.g., `pawreach-demo`), set a strong database password, and select your nearest region.
+
+### Step 2: Enable PostGIS
+1. In the Supabase Dashboard, open the **SQL Editor** from the left sidebar.
+2. Run the following command to enable spatial extensions for geospatial rescue tracking:
+   ```sql
+   CREATE EXTENSION IF NOT EXISTS postgis;
+   ```
+3. Copy your project connection string from **Project Settings** → **Database** → **Connection string** (URI format with session pooling or direct connection):
+   ```text
+   postgresql://postgres.[project-ref]:[db-password]@aws-0-[region].pooler.supabase.com:6543/postgres?sslmode=require
+   ```
+
+### Step 3: Create Private Storage Bucket
+1. In the Supabase Dashboard, open **Storage**.
+2. Click **New bucket**.
+3. Set the name to `evidence` (or your preferred bucket name).
+4. Ensure the **Public bucket** toggle is **OFF** (the bucket must remain **PRIVATE** to protect sensitive rescue location photos).
+
+### Step 4: Generate Supabase S3 Credentials
+1. Go to **Project Settings** → **Storage**.
+2. Locate the **S3 Connection** / **S3 Access Keys** section.
+3. Click **Generate new key** and record:
+   - **Endpoint**: `https://<project-ref>.supabase.co/storage/v1/s3`
+   - **Access Key ID**: `<access_key_id>`
+   - **Secret Access Key**: `<secret_access_key>`
+   - **Region**: Your Supabase project region (e.g. `ap-south-1` or `us-east-1`)
+
+### Step 5: Create Upstash Free Redis
+1. Navigate to [Upstash](https://upstash.com) and create a free account.
+2. Create a new Redis database (free tier, 10,000 commands/day).
+3. Under the **Details** tab, copy the **UPSTASH_REDIS_REST_URL** or standard **rediss://** connection URL:
+   ```text
+   rediss://default:<password>@<endpoint>.upstash.io:<port>
+   ```
+
+### Step 6: Create Firebase Spark Project (Optional)
+*For initial deployment, you can leave `REQUIRE_FIREBASE=false`.*
+*If push notifications are needed:*
+1. Create a free project at [Firebase Console](https://console.firebase.google.com).
+2. Go to **Project Settings** → **Service Accounts** and click **Generate new private key**.
+3. Keep the JSON string handy for `FIREBASE_CREDENTIALS_JSON`.
+
+### Step 7: Deploy Render Blueprint
+1. Navigate to [Render](https://render.com) and sign in.
+2. Click **New** → **Blueprint**.
+3. Connect your GitHub repository (`https://github.com/Abhiram-C-Divakaran/PawSOS`).
+4. Render will parse `render.yaml` and discover two free services:
+   - `pawreach-api` (Web Service, Free)
+   - `pawreach-frontend` (Static Site, Free)
+
+### Step 8: Enter Environment Variables in Render Dashboard
+In the Render dashboard under `pawreach-api` → **Environment**, supply the required values:
+
+| Variable | Value Description |
+|---|---|
+| `DATABASE_URL` | Supabase PostgreSQL URI (from Step 2) |
+| `REDIS_URL` | Upstash Redis `rediss://...` URI (from Step 5) |
+| `STORAGE_PROVIDER` | `s3` |
+| `S3_ENDPOINT_URL` | Supabase S3 endpoint (from Step 4) |
+| `S3_BUCKET_NAME` | `evidence` (from Step 3) |
+| `AWS_ACCESS_KEY_ID` | Supabase S3 Access Key (from Step 4) |
+| `AWS_SECRET_ACCESS_KEY`| Supabase S3 Secret Key (from Step 4) |
+| `AWS_REGION` | Supabase Region (e.g. `ap-south-1`) |
+| `REQUIRE_FIREBASE` | `false` |
+| `JWT_SECRET_KEY` | Auto-generated by Render Blueprint |
+
+### Step 9: Obtain Backend & Frontend URLs
+1. Render will assign public URLs to both services:
+   - Backend API: `https://pawreach-api.onrender.com`
+   - Frontend: `https://pawreach-frontend.onrender.com`
+
+### Step 10: Set CORS and VITE_API_BASE_URL
+1. On `pawreach-api`, set:
+   - `CORS_ORIGINS`: `https://pawreach-frontend.onrender.com` (your exact frontend URL, no trailing slash).
+2. On `pawreach-frontend`, set:
+   - `VITE_API_BASE_URL`: `https://pawreach-api.onrender.com`
+
+### Step 11: Redeploy Services
+1. Trigger a manual deploy on `pawreach-api` and `pawreach-frontend` so the updated URLs and build arguments take effect.
+2. Watch build logs:
+   - Backend runs `alembic upgrade head`, starts Celery worker + beat in background, and launches Uvicorn.
+   - Frontend runs Vite production build and publishes to static CDN.
+
+### Step 12: Verify `/api/v1/health`
+Open in browser or terminal:
+```bash
+curl https://pawreach-api.onrender.com/api/v1/health
+```
+Expected response:
+```json
+{"status": "ok", "environment": "staging"}
+```
+
+### Step 13: Verify `/api/v1/health/ready`
+Open in browser or terminal:
+```bash
+curl https://pawreach-api.onrender.com/api/v1/health/ready
+```
+Expected response:
+```json
+{
+  "status": "ready",
+  "database": "connected",
+  "redis": "connected",
+  "storage": "connected"
+}
+```
+
+### Step 14: Test Live Core User Flows
+1. **Citizen Portal**: Register an account, submit an animal rescue report with photo upload.
+2. **NGO Command Center**: Log in as coordinator, inspect the rescue dispatch triage queue.
+3. **Foster & Adoption Hub**: Browse available animals, submit foster care updates, and submit adoption applications.

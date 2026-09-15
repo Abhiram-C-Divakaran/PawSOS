@@ -167,6 +167,14 @@ def normalize_image_key(raw: str | None) -> str | None:
     if not raw:
         return raw
     cleaned = raw.split("?")[0].strip()
+
+    endpoint = (settings.S3_ENDPOINT_URL or "").rstrip("/")
+    if endpoint and cleaned.startswith(endpoint):
+        after = cleaned[len(endpoint):].lstrip("/")
+        if after.startswith(f"{settings.S3_BUCKET_NAME}/"):
+            return after[len(settings.S3_BUCKET_NAME) + 1:]
+        return after
+
     if "amazonaws.com/" in cleaned:
         after = cleaned.split("amazonaws.com/", 1)[1]
         parts = after.split("/", 1)
@@ -179,12 +187,24 @@ def normalize_image_key(raw: str | None) -> str | None:
 class S3StorageProvider(BaseStorageProvider):
     def __init__(self):
         import boto3
-        self.s3_client = boto3.client(
-            "s3",
-            region_name=settings.AWS_REGION,
-            aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
-            aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
-        )
+        from botocore.config import Config
+
+        client_kwargs = {
+            "region_name": settings.AWS_REGION or None,
+            "aws_access_key_id": settings.AWS_ACCESS_KEY_ID or None,
+            "aws_secret_access_key": settings.AWS_SECRET_ACCESS_KEY or None,
+        }
+        if settings.S3_ENDPOINT_URL:
+            client_kwargs["endpoint_url"] = settings.S3_ENDPOINT_URL
+
+        s3_config = {}
+        if settings.S3_FORCE_PATH_STYLE or settings.S3_ENDPOINT_URL:
+            s3_config["addressing_style"] = "path"
+
+        if s3_config:
+            client_kwargs["config"] = Config(s3=s3_config)
+
+        self.s3_client = boto3.client("s3", **client_kwargs)
         self.bucket = settings.S3_BUCKET_NAME
 
     def check_health(self) -> bool:
@@ -212,6 +232,14 @@ class S3StorageProvider(BaseStorageProvider):
         key = key_or_url
         if "?" in key:
             key = key.split("?")[0]
+
+        endpoint = (settings.S3_ENDPOINT_URL or "").rstrip("/")
+        if endpoint and key.startswith(endpoint):
+            after = key[len(endpoint):].lstrip("/")
+            if after.startswith(f"{self.bucket}/"):
+                key = after[len(self.bucket) + 1:]
+            else:
+                key = after
 
         prefix = f"https://{self.bucket}.s3.{settings.AWS_REGION}.amazonaws.com/"
         alt_prefix = f"https://{self.bucket}.s3.amazonaws.com/"
