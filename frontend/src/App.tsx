@@ -103,6 +103,14 @@ function App() {
                   </ProtectedRoute>
                 }
               />
+              <Route
+                path="my-adoptions"
+                element={
+                  <ProtectedRoute allowedRoles={['CITIZEN', 'NGO_ADMIN', 'RESCUER', 'FOSTER', 'SUPER_ADMIN']}>
+                    <MyAdoptionApplications />
+                  </ProtectedRoute>
+                }
+              />
 
               {/* Foster Caregiver Hub */}
               <Route

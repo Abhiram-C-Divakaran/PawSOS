@@ -301,8 +301,9 @@ export type AdoptionVisitStatus = 'SCHEDULED' | 'COMPLETED' | 'CANCELLED' | 'RES
 export interface FosterCareUpdate {
   id: string;
   assignment_id: string;
-  update_type: string;
-  notes: string;
+  update_type?: string;
+  notes?: string;
+  general_notes?: string;
   appetite_status?: string;
   mobility_status?: string;
   medication_administered: boolean;
@@ -322,6 +323,9 @@ export interface FosterAssignment {
   actual_end_date?: string;
   notes?: string;
   created_at?: string;
+  case_number?: string;
+  animal_species?: string;
+  animal_description?: string;
   rescue_case?: {
     id: string;
     case_number: string;
@@ -418,6 +422,8 @@ export interface AdoptionApplication {
   rejection_reason?: string;
   reviewed_at?: string;
   created_at?: string;
+  listing_title?: string;
+  animal_species?: string;
   listing?: AdoptionListing;
   applicant?: {
     id: string;

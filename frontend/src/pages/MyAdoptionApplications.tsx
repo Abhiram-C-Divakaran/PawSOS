@@ -165,7 +165,7 @@ export const MyAdoptionApplications: React.FC = () => {
                   </div>
                   <div>
                     <h3 className="text-base font-bold text-gray-900">
-                      {app.listing?.title || 'Adoption Application'}
+                      {app.listing_title || app.listing?.title || 'Adoption Application'}
                     </h3>
                     <p className="text-xs text-gray-400">
                       Submitted on {app.created_at ? new Date(app.created_at).toLocaleDateString() : 'Recently'}

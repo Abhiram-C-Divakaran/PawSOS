@@ -54,9 +54,13 @@ class AdoptionApplicationCreate(BaseModel):
     owns_or_rents: Optional[str] = "OWNS"
     landlord_permission: Optional[bool] = None
     household_size: Optional[int] = 1
+    family_members_count: Optional[int] = None
     children_in_household: Optional[bool] = False
     existing_pets: Optional[str] = None
+    has_other_pets: Optional[bool] = None
+    has_fenced_garden: Optional[bool] = None
     animal_experience: Optional[str] = None
+    experience_with_pets: Optional[str] = None
     reason_for_adoption: str = Field(min_length=10)
     care_plan: Optional[str] = None
 
@@ -102,12 +106,18 @@ class AdoptionApplicationReviewerResponse(BaseModel):
     listing_title: Optional[str] = None
     animal_species: Optional[str] = None
     case_number: Optional[str] = None
+    rescue_case_id: Optional[uuid.UUID] = None
 
     model_config = ConfigDict(from_attributes=True)
 
 class AdoptionVisitCreate(BaseModel):
-    scheduled_at: datetime
+    scheduled_at: Optional[datetime] = None
+    visit_date: Optional[datetime] = None
     notes: Optional[str] = None
+    location_type: Optional[str] = None
+    visit_address: Optional[str] = None
+    visit_type: Optional[str] = None
+    location_address: Optional[str] = None
 
 class AdoptionVisitUpdate(BaseModel):
     scheduled_at: Optional[datetime] = None
@@ -126,4 +136,6 @@ class AdoptionVisitResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 class AdoptionDecisionRequest(BaseModel):
+    status: Optional[str] = None
     decision_notes: Optional[str] = None
+    review_notes: Optional[str] = None

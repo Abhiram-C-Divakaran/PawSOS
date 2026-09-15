@@ -19,6 +19,7 @@ from app.core.constants import (
     AdoptionListingStatus,
     AdoptionApplicationStatus,
     AdoptionVisitStatus,
+    RescueStatus,
 )
 from app.api.dependencies import get_current_active_user as get_current_user
 from app.services.adoption_service import AdoptionService
@@ -44,6 +45,7 @@ router = APIRouter()
 
 @router.get("", response_model=List[AdoptionListingPublicResponse])
 @router.get("/", response_model=List[AdoptionListingPublicResponse])
+@router.get("/listings", response_model=List[AdoptionListingPublicResponse])
 def browse_adoption_listings(
     species: Optional[str] = None,
     organization_id: Optional[uuid.UUID] = None,
@@ -92,20 +94,14 @@ def browse_adoption_listings(
     return results
 
 
-@router.get("/{listing_id}", response_model=AdoptionListingPublicResponse)
-def get_adoption_listing_detail(
+@router.get("/listings/{listing_id}", response_model=AdoptionListingPublicResponse)
+def get_adoption_listing_detail_by_id(
     listing_id: uuid.UUID,
     db: Session = Depends(get_db),
 ):
     listing = db.query(AdoptionListing).filter(AdoptionListing.id == listing_id).first()
     if not listing:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Adoption listing not found")
-
-    if listing.status != AdoptionListingStatus.PUBLISHED.value:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="This adoption listing is not currently active",
-        )
 
     animal = listing.animal
     org = listing.organization
@@ -128,7 +124,87 @@ def get_adoption_listing_detail(
     )
 
 
+@router.get("/applications", response_model=List[AdoptionApplicationReviewerResponse])
+def list_adoption_applications_alias(
+    listing_id: Optional[uuid.UUID] = None,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return list_all_ngo_adoption_applications(listing_id=listing_id, current_user=current_user, db=db)
+
+
+@router.post("/applications/{application_id}/schedule-visit", response_model=AdoptionVisitResponse)
+def schedule_adoption_visit_alias(
+    application_id: uuid.UUID,
+    payload: AdoptionVisitCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if current_user.role not in [UserRole.NGO_ADMIN, UserRole.SUPER_ADMIN, UserRole.MUNICIPAL_ADMIN]:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Unauthorized")
+    scheduled_at = payload.scheduled_at or payload.visit_date or datetime.utcnow()
+    visit = AdoptionService.schedule_visit(
+        db=db,
+        current_user=current_user,
+        application_id=application_id,
+        scheduled_at=scheduled_at,
+        notes=payload.notes,
+    )
+    return AdoptionVisitResponse(
+        id=visit.id,
+        application_id=visit.application_id,
+        scheduled_at=visit.scheduled_at,
+        status=visit.status,
+        notes=visit.notes,
+        created_by=visit.created_by,
+        created_at=visit.created_at,
+    )
+
+
+@router.post("/applications/{application_id}/decision", response_model=AdoptionApplicationReviewerResponse)
+def adoption_decision_alias(
+    application_id: uuid.UUID,
+    payload: Optional[AdoptionDecisionRequest] = None,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if current_user.role not in [UserRole.NGO_ADMIN, UserRole.SUPER_ADMIN, UserRole.MUNICIPAL_ADMIN]:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Unauthorized")
+
+    decision_notes = None
+    if payload:
+        decision_notes = payload.decision_notes or payload.review_notes
+
+    if payload and payload.status == "REJECTED":
+        app = AdoptionService.reject_application(
+            db=db,
+            current_user=current_user,
+            application_id=application_id,
+            decision_notes=decision_notes,
+        )
+    else:
+        app = AdoptionService.approve_application(
+            db=db,
+            current_user=current_user,
+            application_id=application_id,
+            decision_notes=decision_notes,
+        )
+
+    return AdoptionApplicationReviewerResponse(
+        id=app.id,
+        listing_id=app.listing_id,
+        applicant_id=app.applicant_id,
+        status=app.status,
+        reason_for_adoption=app.reason_for_adoption,
+        submitted_at=app.submitted_at,
+        reviewed_at=app.reviewed_at,
+        decision_notes=app.decision_notes,
+        rescue_case_id=app.listing.rescue_case_id if app.listing else None,
+    )
+
+
 @router.post("/{listing_id}/apply", response_model=AdoptionApplicationApplicantResponse)
+@router.post("/listings/{listing_id}/apply", response_model=AdoptionApplicationApplicantResponse)
 def apply_to_adopt(
     listing_id: uuid.UUID,
     payload: AdoptionApplicationCreate,
@@ -280,6 +356,59 @@ def withdraw_my_adoption_application(
         animal_species=listing.animal.species if listing and listing.animal else None,
         public_image_url=listing.public_image_url if listing else None,
         organization_name=listing.organization.name if listing and listing.organization else None,
+    )
+
+
+@router.get("/my-applications", response_model=List[AdoptionApplicationApplicantResponse])
+def get_my_adoption_applications_alias(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return get_my_adoption_applications(current_user=current_user, db=db)
+
+
+@router.post("/applications/{application_id}/withdraw", response_model=AdoptionApplicationApplicantResponse)
+def withdraw_my_adoption_application_alias(
+    application_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return withdraw_my_adoption_application(application_id=application_id, current_user=current_user, db=db)
+
+
+@router.get("/{listing_id}", response_model=AdoptionListingPublicResponse)
+def get_adoption_listing_detail(
+    listing_id: uuid.UUID,
+    db: Session = Depends(get_db),
+):
+    listing = db.query(AdoptionListing).filter(AdoptionListing.id == listing_id).first()
+    if not listing:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Adoption listing not found")
+
+    if listing.status != AdoptionListingStatus.PUBLISHED.value:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="This adoption listing is not currently active",
+        )
+
+    animal = listing.animal
+    org = listing.organization
+    return AdoptionListingPublicResponse(
+        id=listing.id,
+        title=listing.title,
+        public_description=listing.public_description,
+        public_image_url=listing.public_image_url,
+        status=listing.status,
+        published_at=listing.published_at,
+        species=animal.species if animal else None,
+        sex=animal.sex if animal else None,
+        approx_age=animal.approx_age if animal else None,
+        colour=animal.colour if animal else None,
+        identifying_marks=animal.identifying_marks if animal else None,
+        sterilization_status=animal.sterilization_status if animal else None,
+        vaccination_status=animal.vaccination_status if animal else None,
+        organization_name=org.name if org else None,
+        organization_operating_region=org.operating_region if org else None,
     )
 
 
@@ -543,8 +672,104 @@ def get_listing_applications(
                 listing_title=listing.title,
                 animal_species=listing.animal.species if listing.animal else None,
                 case_number=listing.rescue_case.case_number if listing.rescue_case else None,
+                rescue_case_id=listing.rescue_case_id if listing else None,
             )
         )
+    return results
+
+
+@ngo_router.get("/applications", response_model=List[AdoptionApplicationReviewerResponse])
+def list_all_ngo_adoption_applications(
+    listing_id: Optional[uuid.UUID] = None,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if current_user.role not in [UserRole.NGO_ADMIN, UserRole.SUPER_ADMIN, UserRole.MUNICIPAL_ADMIN]:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Unauthorized")
+
+    query = db.query(AdoptionApplication).join(AdoptionListing, AdoptionApplication.listing_id == AdoptionListing.id)
+    if current_user.role == UserRole.NGO_ADMIN:
+        if not current_user.organization_id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="NGO Admin has no organization associated")
+        query = query.filter(AdoptionListing.organization_id == current_user.organization_id)
+
+    if listing_id:
+        query = query.filter(AdoptionApplication.listing_id == listing_id)
+
+    apps = query.order_by(AdoptionApplication.submitted_at.desc()).all()
+    results = []
+    for app in apps:
+        applicant = app.applicant
+        reviewer = app.reviewed_by
+        listing = app.listing
+        visits_data = [
+            {
+                "id": str(v.id),
+                "scheduled_at": v.scheduled_at.isoformat(),
+                "status": v.status,
+                "notes": v.notes,
+            }
+            for v in app.visits
+        ]
+        results.append(
+            AdoptionApplicationReviewerResponse(
+                id=app.id,
+                listing_id=app.listing_id,
+                applicant_id=app.applicant_id,
+                applicant_name=applicant.full_name if applicant else None,
+                applicant_phone=applicant.phone if applicant else None,
+                applicant_email=applicant.email if applicant else None,
+                status=app.status,
+                housing_type=app.housing_type,
+                owns_or_rents=app.owns_or_rents,
+                landlord_permission=app.landlord_permission,
+                household_size=app.household_size,
+                children_in_household=app.children_in_household,
+                existing_pets=app.existing_pets,
+                animal_experience=app.animal_experience,
+                reason_for_adoption=app.reason_for_adoption,
+                care_plan=app.care_plan,
+                submitted_at=app.submitted_at,
+                reviewed_at=app.reviewed_at,
+                reviewed_by_name=reviewer.full_name if reviewer else None,
+                decision_notes=app.decision_notes,
+                visits=visits_data,
+                listing_title=listing.title if listing else None,
+                animal_species=listing.animal.species if listing and listing.animal else None,
+                case_number=listing.rescue_case.case_number if listing and listing.rescue_case else None,
+                rescue_case_id=listing.rescue_case_id if listing else None,
+            )
+        )
+    return results
+
+
+@ngo_router.get("/eligible-cases")
+def get_eligible_cases_for_adoption(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if current_user.role not in [UserRole.NGO_ADMIN, UserRole.SUPER_ADMIN, UserRole.MUNICIPAL_ADMIN]:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Unauthorized")
+
+    query = db.query(RescueCase).filter(
+        RescueCase.status.in_([RescueStatus.READY_FOR_ADOPTION.value, "READY_FOR_ADOPTION", "RECOVERED"])
+    )
+    if current_user.role == UserRole.NGO_ADMIN:
+        if not current_user.organization_id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="NGO Admin has no organization associated")
+        query = query.filter(RescueCase.organization_id == current_user.organization_id)
+
+    cases = query.all()
+    results = []
+    for c in cases:
+        animal = c.animal
+        results.append({
+            "id": str(c.id),
+            "case_number": c.case_number,
+            "species": animal.species if animal else (c.animal_type or "Animal"),
+            "description": c.description,
+            "status": c.status,
+        })
     return results
 
 
@@ -603,11 +828,12 @@ def schedule_adoption_visit(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    scheduled_at = payload.scheduled_at or payload.visit_date or datetime.utcnow()
     visit = AdoptionService.schedule_visit(
         db=db,
         current_user=current_user,
         application_id=application_id,
-        scheduled_at=payload.scheduled_at,
+        scheduled_at=scheduled_at,
         notes=payload.notes,
     )
     return AdoptionVisitResponse(
@@ -665,11 +891,12 @@ def approve_adoption_application(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    decision_notes = (payload.decision_notes or payload.review_notes) if payload else None
     app = AdoptionService.approve_application(
         db=db,
         current_user=current_user,
         application_id=application_id,
-        decision_notes=payload.decision_notes if payload else None,
+        decision_notes=decision_notes,
     )
     return AdoptionApplicationReviewerResponse(
         id=app.id,
@@ -680,7 +907,28 @@ def approve_adoption_application(
         submitted_at=app.submitted_at,
         reviewed_at=app.reviewed_at,
         decision_notes=app.decision_notes,
+        rescue_case_id=app.listing.rescue_case_id if app.listing else None,
     )
+
+
+@ngo_router.post("/applications/{application_id}/schedule-visit", response_model=AdoptionVisitResponse)
+def schedule_adoption_visit_ngo_alias(
+    application_id: uuid.UUID,
+    payload: AdoptionVisitCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return schedule_adoption_visit(application_id=application_id, payload=payload, current_user=current_user, db=db)
+
+
+@ngo_router.post("/applications/{application_id}/decision", response_model=AdoptionApplicationReviewerResponse)
+def adoption_decision_ngo_alias(
+    application_id: uuid.UUID,
+    payload: Optional[AdoptionDecisionRequest] = None,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return adoption_decision_alias(application_id=application_id, payload=payload, current_user=current_user, db=db)
 
 
 @ngo_router.post("/applications/{application_id}/reject", response_model=AdoptionApplicationReviewerResponse)

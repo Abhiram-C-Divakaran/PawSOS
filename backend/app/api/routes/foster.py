@@ -195,6 +195,24 @@ def list_foster_assignments(
     for a in assignments:
         case = a.rescue_case
         animal = a.animal
+        care_updates_list = [
+            FosterCareUpdateResponse(
+                id=u.id,
+                assignment_id=u.assignment_id,
+                created_by=u.created_by,
+                created_at=u.created_at,
+                general_notes=u.general_notes,
+                notes=u.general_notes,
+                appetite_status=u.appetite_status,
+                activity_status=u.activity_status,
+                weight_kg=u.weight_kg,
+                medication_administered=u.medication_administered,
+                concern_flag=u.concern_flag,
+                readiness_recommendation=u.readiness_recommendation,
+                author_name=u.author.full_name if u.author else None,
+            )
+            for u in (a.care_updates or [])
+        ]
         results.append(
             FosterAssignmentResponse(
                 id=a.id,
@@ -212,6 +230,7 @@ def list_foster_assignments(
                 case_number=case.case_number if case else None,
                 foster_home_locality=home.locality,
                 caregiver_name=current_user.full_name,
+                care_updates=care_updates_list,
             )
         )
     return results
@@ -260,6 +279,7 @@ def decline_foster_assignment(
 
 
 @router.post("/assignments/{assignment_id}/care-updates", response_model=FosterCareUpdateResponse)
+@router.post("/assignments/{assignment_id}/updates", response_model=FosterCareUpdateResponse)
 def submit_care_update(
     assignment_id: uuid.UUID,
     payload: FosterCareUpdateCreate,
@@ -287,15 +307,17 @@ def submit_care_update(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Unauthorized to submit care update")
 
     # Caregivers can record observations and recommendations, but NOT formal veterinary diagnosis
+    notes_val = payload.general_notes or payload.notes
+    act_status = payload.activity_status or payload.mobility_status or "NORMAL"
     update = FosterCareUpdate(
         assignment_id=assignment.id,
         created_by=current_user.id,
         created_at=datetime.utcnow(),
-        general_notes=payload.general_notes,
-        appetite_status=payload.appetite_status,
-        activity_status=payload.activity_status,
+        general_notes=notes_val,
+        appetite_status=payload.appetite_status or "NORMAL",
+        activity_status=act_status,
         weight_kg=payload.weight_kg,
-        medication_administered=payload.medication_administered,
+        medication_administered=str(payload.medication_administered) if payload.medication_administered is not None else None,
         concern_flag=payload.concern_flag,
         readiness_recommendation=payload.readiness_recommendation,
     )
@@ -319,6 +341,7 @@ def submit_care_update(
         created_by=update.created_by,
         created_at=update.created_at,
         general_notes=update.general_notes,
+        notes=update.general_notes,
         appetite_status=update.appetite_status,
         activity_status=update.activity_status,
         weight_kg=update.weight_kg,

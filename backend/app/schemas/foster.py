@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from typing import Optional, List
+from typing import Optional, List, Union
 from pydantic import BaseModel, ConfigDict, Field
 
 class FosterHomeBase(BaseModel):
@@ -68,6 +68,35 @@ class FosterAssignmentCreate(BaseModel):
     expected_end_date: Optional[datetime] = None
     notes: Optional[str] = None
 
+class FosterCareUpdateCreate(BaseModel):
+    general_notes: Optional[str] = None
+    notes: Optional[str] = None
+    appetite_status: Optional[str] = "NORMAL"
+    activity_status: Optional[str] = "NORMAL"
+    mobility_status: Optional[str] = None
+    behavioral_notes: Optional[str] = None
+    weight_kg: Optional[float] = None
+    medication_administered: Optional[Union[str, bool]] = None
+    concern_flag: bool = False
+    readiness_recommendation: Optional[str] = None
+
+class FosterCareUpdateResponse(BaseModel):
+    id: uuid.UUID
+    assignment_id: uuid.UUID
+    created_by: uuid.UUID
+    created_at: datetime
+    general_notes: Optional[str] = None
+    notes: Optional[str] = None
+    appetite_status: Optional[str] = None
+    activity_status: Optional[str] = None
+    weight_kg: Optional[float] = None
+    medication_administered: Optional[Union[str, bool]] = None
+    concern_flag: bool = False
+    readiness_recommendation: Optional[str] = None
+    author_name: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
 class FosterAssignmentResponse(BaseModel):
     id: uuid.UUID
     animal_id: uuid.UUID
@@ -84,31 +113,7 @@ class FosterAssignmentResponse(BaseModel):
     case_number: Optional[str] = None
     foster_home_locality: Optional[str] = None
     caregiver_name: Optional[str] = None
-
-    model_config = ConfigDict(from_attributes=True)
-
-class FosterCareUpdateCreate(BaseModel):
-    general_notes: Optional[str] = None
-    appetite_status: Optional[str] = "NORMAL"
-    activity_status: Optional[str] = "NORMAL"
-    weight_kg: Optional[float] = None
-    medication_administered: Optional[str] = None
-    concern_flag: bool = False
-    readiness_recommendation: Optional[str] = None
-
-class FosterCareUpdateResponse(BaseModel):
-    id: uuid.UUID
-    assignment_id: uuid.UUID
-    created_by: uuid.UUID
-    created_at: datetime
-    general_notes: Optional[str] = None
-    appetite_status: Optional[str] = None
-    activity_status: Optional[str] = None
-    weight_kg: Optional[float] = None
-    medication_administered: Optional[str] = None
-    concern_flag: bool = False
-    readiness_recommendation: Optional[str] = None
-    author_name: Optional[str] = None
+    care_updates: List[FosterCareUpdateResponse] = []
 
     model_config = ConfigDict(from_attributes=True)
 

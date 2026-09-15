@@ -351,9 +351,9 @@ export const FosterDashboard: React.FC = () => {
                       OFFER PENDING
                     </span>
                     <span className="text-sm font-bold text-gray-900">
-                      {assignment.rescue_case?.case_number || 'Rescue Animal'}
+                      {assignment.case_number || assignment.rescue_case?.case_number || 'Rescue Animal'}
                     </span>
-                    <span className="text-xs text-gray-400">({assignment.rescue_case?.species || 'Animal'})</span>
+                    <span className="text-xs text-gray-400">({assignment.animal_species || assignment.rescue_case?.species || 'Animal'})</span>
                   </div>
                   <p className="text-sm text-gray-600 max-w-xl">
                     {assignment.notes || assignment.rescue_case?.description || 'Caregiver assistance requested for post-treatment recovery.'}
@@ -403,9 +403,9 @@ export const FosterDashboard: React.FC = () => {
                         IN CARE
                       </span>
                       <h3 className="text-lg font-bold text-gray-900">
-                        {assignment.rescue_case?.case_number || 'Rescue Animal'}
+                        {assignment.case_number || assignment.rescue_case?.case_number || 'Rescue Animal'}
                       </h3>
-                      <span className="text-xs text-gray-500">({assignment.rescue_case?.species || 'Animal'})</span>
+                      <span className="text-xs text-gray-500">({assignment.animal_species || assignment.rescue_case?.species || 'Animal'})</span>
                     </div>
                     <p className="text-xs text-gray-400 mt-1">
                       Started: {assignment.start_date ? new Date(assignment.start_date).toLocaleDateString() : 'Active'}
@@ -437,7 +437,7 @@ export const FosterDashboard: React.FC = () => {
                       {assignment.care_updates.slice(0, 3).map((upd) => (
                         <div key={upd.id} className="bg-white p-3 rounded-lg border border-gray-100 text-xs text-gray-600 flex justify-between items-center">
                           <div>
-                            <span className="font-medium text-gray-800">{upd.notes}</span>
+                            <span className="font-medium text-gray-800">{upd.notes || upd.general_notes}</span>
                             <div className="text-gray-400 mt-0.5 space-x-2">
                               <span>Appetite: {upd.appetite_status || 'Normal'}</span>
                               <span>•</span>
@@ -476,9 +476,9 @@ export const FosterDashboard: React.FC = () => {
               <div key={assignment.id} className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm flex items-center justify-between">
                 <div>
                   <span className="font-semibold text-gray-900 text-sm">
-                    {assignment.rescue_case?.case_number || 'Past Placement'}
+                    {assignment.case_number || assignment.rescue_case?.case_number || 'Past Placement'}
                   </span>
-                  <span className="text-xs text-gray-400 ml-2">({assignment.rescue_case?.species || 'Animal'})</span>
+                  <span className="text-xs text-gray-400 ml-2">({assignment.animal_species || assignment.rescue_case?.species || 'Animal'})</span>
                   <div className="text-xs text-gray-500 mt-0.5">
                     Status: <span className="font-medium">{assignment.status}</span>
                   </div>

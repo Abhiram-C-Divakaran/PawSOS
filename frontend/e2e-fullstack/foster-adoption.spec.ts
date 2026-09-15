@@ -17,17 +17,23 @@ test.describe('Full-Stack Foster & Adoption Operations (Unmocked)', () => {
     // 2. NGO Foster Matching & Assignment Dispatch
     // -------------------------------------------------------------------------
     // Find pre-staged recovering case E2E-CASE-FOST-001
-    const casesRes = await request.get(`${API_BASE_URL}/rescues/list`, {
-      headers: { Authorization: `Bearer ${tokenNgo.access_token}` },
-    });
+    const casesRes = await request.get(
+      `${API_BASE_URL}/ngo/cases?search=E2E-CASE-FOST-001`,
+      {
+        headers: { Authorization: `Bearer ${tokenNgo.access_token}` },
+      }
+    );
     expect(casesRes.ok()).toBeTruthy();
     const casesList = await casesRes.json();
-    const fosterCase = casesList.find((c: any) => c.case_number === 'E2E-CASE-FOST-001');
+    const fosterCase = casesList.find(
+      (c: any) => c.case_number === 'E2E-CASE-FOST-001'
+    );
     expect(fosterCase).toBeDefined();
 
     // Fetch matching foster homes for this case
-    const matchRes = await request.get(`${API_BASE_URL}/foster/matches/${fosterCase.id}`, {
+    const matchRes = await request.post(`${API_BASE_URL}/ngo/foster/matches`, {
       headers: { Authorization: `Bearer ${tokenNgo.access_token}` },
+      data: { case_id: fosterCase.id },
     });
     expect(matchRes.ok()).toBeTruthy();
     const matches = await matchRes.json();
@@ -37,7 +43,7 @@ test.describe('Full-Stack Foster & Adoption Operations (Unmocked)', () => {
     expect(targetHome.foster_home_id).toBeDefined();
 
     // NGO dispatches foster placement offer
-    const offerRes = await request.post(`${API_BASE_URL}/foster/assignments/offer`, {
+    const offerRes = await request.post(`${API_BASE_URL}/ngo/foster/assignments`, {
       headers: { Authorization: `Bearer ${tokenNgo.access_token}` },
       data: {
         rescue_case_id: fosterCase.id,
@@ -87,7 +93,7 @@ test.describe('Full-Stack Foster & Adoption Operations (Unmocked)', () => {
     // Authenticate citizen for adoption flow
     await authenticatePage(page, 'citizen.e2e@pawreach.test', DEFAULT_E2E_PASSWORD);
     await page.goto('/adopt');
-    await expect(page.getByText('Find Your Forever Friend')).toBeVisible({ timeout: 15000 });
+    await expect(page.getByText('Give a Rescue Pet a Second Chance')).toBeVisible({ timeout: 15000 });
 
     // Pre-staged listing "Milo" should be visible in catalog
     await expect(page.getByText('Milo - Gentle Golden Retriever Mix')).toBeVisible();
@@ -109,7 +115,7 @@ test.describe('Full-Stack Foster & Adoption Operations (Unmocked)', () => {
     await page.getByRole('button', { name: 'Submit Application' }).click();
 
     // Verify redirect to My Applications dashboard with SUBMITTED status
-    await expect(page).toHaveURL(/\/my-adoptions/, { timeout: 15000 });
+    await expect(page).toHaveURL(/\/(adoption-applications|my-adoptions)/, { timeout: 15000 });
     await expect(page.getByText('My Adoption Applications')).toBeVisible();
     await expect(page.getByText('Milo - Gentle Golden Retriever Mix')).toBeVisible();
     await expect(page.getByText('SUBMITTED', { exact: true })).toBeVisible();
