@@ -65,7 +65,9 @@ def health_readiness(response: Response, db: Session = Depends(get_db)):
     if settings.REDIS_URL:
         try:
             import redis
-            r = redis.from_url(settings.REDIS_URL, socket_timeout=2)
+            from app.tasks.celery_app import normalize_celery_redis_url
+            redis_url = normalize_celery_redis_url(settings.REDIS_URL)
+            r = redis.from_url(redis_url, socket_timeout=2)
             r.ping()
             checks["redis"] = "connected"
 

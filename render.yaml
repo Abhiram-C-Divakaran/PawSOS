@@ -42,11 +42,21 @@ services:
       - key: AWS_SECRET_ACCESS_KEY
         sync: false
       - key: AWS_REGION
-        value: ap-south-1
+        sync: false
       - key: S3_BUCKET_NAME
         sync: false
       - key: S3_ENDPOINT_URL
         sync: false
+      - key: S3_FORCE_PATH_STYLE
+        value: "true"
+      - key: DISPATCH_BEAT_INTERVAL_SECONDS
+        value: "120.0"
+      - key: CELERY_HEARTBEAT_INTERVAL_SECONDS
+        value: "60.0"
+      - key: CELERY_HEARTBEAT_TTL_SECONDS
+        value: "180"
+      - key: CELERY_HEARTBEAT_THRESHOLD_SECONDS
+        value: "180"
       - key: FIREBASE_PROJECT_ID
         sync: false
       - key: FIREBASE_CREDENTIALS_JSON

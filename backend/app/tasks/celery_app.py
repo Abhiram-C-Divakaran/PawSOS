@@ -1,10 +1,41 @@
 import logging
+from urllib.parse import urlparse, urlunparse, parse_qsl, urlencode
 from celery import Celery
 from app.config import settings
 
 logger = logging.getLogger(__name__)
 
-redis_url = settings.REDIS_URL or "redis://localhost:6379/0"
+
+def normalize_celery_redis_url(url: str) -> str:
+    """
+    Normalize Redis connection URL for Celery and redis-py.
+    Ensures that TLS rediss:// connections enforce certificate verification (ssl_cert_reqs=required)
+    without duplicating parameters, corrupting existing queries, or altering plain redis:// URLs.
+    """
+    if not url:
+        return url
+    parsed = urlparse(url)
+    if parsed.scheme.lower() != "rediss":
+        return url
+
+    query_params = parse_qsl(parsed.query, keep_blank_values=True)
+    param_dict = dict(query_params)
+    if "ssl_cert_reqs" not in param_dict:
+        query_params.append(("ssl_cert_reqs", "required"))
+
+    new_query = urlencode(query_params)
+    return urlunparse((
+        parsed.scheme,
+        parsed.netloc,
+        parsed.path,
+        parsed.params,
+        new_query,
+        parsed.fragment,
+    ))
+
+
+raw_redis_url = settings.REDIS_URL or "redis://localhost:6379/0"
+redis_url = normalize_celery_redis_url(raw_redis_url)
 
 celery_app = Celery(
     "pawsos_dispatch",

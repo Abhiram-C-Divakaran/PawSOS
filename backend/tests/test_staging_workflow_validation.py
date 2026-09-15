@@ -101,7 +101,7 @@ def test_render_yaml_configuration_and_migration_architecture():
     assert "celery" in script_content and "beat" in script_content
     assert "uvicorn" in script_content
 
-    # PROCESS_TYPE validation on free web service
+    # PROCESS_TYPE and storage validation on free web service
     def get_env_var(svc, key):
         for ev in svc.get("envVars", []):
             if ev.get("key") == key:
@@ -110,6 +110,7 @@ def test_render_yaml_configuration_and_migration_architecture():
 
     assert get_env_var(api_svc, "PROCESS_TYPE") == "all"
     assert get_env_var(api_svc, "STORAGE_PROVIDER") == "s3"
+    assert get_env_var(api_svc, "S3_FORCE_PATH_STYLE") == "true"
 
     # Check envVars wiring for external free services (DATABASE_URL, REDIS_URL, etc.)
     env_keys = [ev.get("key") for ev in api_svc.get("envVars", [])]
@@ -118,6 +119,26 @@ def test_render_yaml_configuration_and_migration_architecture():
     assert "CORS_ORIGINS" in env_keys
     assert "JWT_SECRET_KEY" in env_keys
     assert "S3_ENDPOINT_URL" in env_keys
+
+    # AWS_REGION must be operator-supplied (sync: false), not hardcoded
+    aws_reg_ev = next((ev for ev in api_svc.get("envVars", []) if ev.get("key") == "AWS_REGION"), None)
+    assert aws_reg_ev and aws_reg_ev.get("sync") is False, "AWS_REGION must be operator-supplied with sync: false"
+
+    # Free-tier relaxed scheduling guardrails
+    dispatch_interval = float(get_env_var(api_svc, "DISPATCH_BEAT_INTERVAL_SECONDS"))
+    heartbeat_interval = float(get_env_var(api_svc, "CELERY_HEARTBEAT_INTERVAL_SECONDS"))
+    heartbeat_ttl = int(get_env_var(api_svc, "CELERY_HEARTBEAT_TTL_SECONDS"))
+    heartbeat_threshold = int(get_env_var(api_svc, "CELERY_HEARTBEAT_THRESHOLD_SECONDS"))
+
+    assert dispatch_interval >= 60.0, f"Free-tier dispatch beat interval should be relaxed (>=60s), got {dispatch_interval}"
+    assert heartbeat_interval >= 30.0, f"Free-tier heartbeat interval should be relaxed (>=30s), got {heartbeat_interval}"
+    assert heartbeat_interval < heartbeat_threshold, "Heartbeat interval must be smaller than staleness threshold"
+    assert heartbeat_ttl >= heartbeat_threshold, "Heartbeat TTL must cover threshold"
+
+    # No separate paid worker or beat services exist in render.yaml
+    assert "pawreach-staging-worker" not in service_map and "pawreach-worker" not in service_map
+    assert "pawreach-staging-beat" not in service_map and "pawreach-beat" not in service_map
+    assert "pawreach-staging-redis" not in service_map and "pawreach-redis" not in service_map
 
     # Verify frontend static site
     frontend_svc = service_map.get("pawreach-frontend") or service_map.get("pawreach-staging-frontend")
