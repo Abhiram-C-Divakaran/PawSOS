@@ -2,6 +2,7 @@ import json
 import logging
 import uuid
 from datetime import datetime
+from sqlalchemy.exc import IntegrityError
 from app.tasks.celery_app import celery_app
 from app.database import SessionLocal
 from app.models.rescue_case import RescueCase
@@ -47,25 +48,51 @@ def perform_ai_triage_task(self, case_id_str: str, image_id_str: str, db_session
             return {"status": "ABORTED", "reason": "Case not found"}
 
         image = db.query(AnimalImage).filter(AnimalImage.id == image_id).first() if image_id else None
+        if image and image.rescue_case_id != case.id:
+            logger.warning(
+                f"[AI_TRIAGE_TASK] Image {image_id_str} does not belong to case {case_id_str}. Aborting."
+            )
+            return {"status": "ABORTED", "reason": "Image case mismatch"}
 
         # Check feature flag
         if not settings.AI_TRIAGE_ENABLED:
             logger.info(f"[AI_TRIAGE_TASK] AI Triage is disabled in settings. Recording skipped assessment.")
-            assessment = TriageAssessment(
-                rescue_case_id=case.id,
-                animal_image_id=image.id if image else None,
-                source="RULES",
-                status="SKIPPED",
-                suggested_priority=case.triage_priority,
-                score=case.triage_score,
-                explanation="AI visual triage is disabled in configuration. Synchronous rule priority active.",
-                provider="disabled",
-                model_name=settings.AI_TRIAGE_MODEL_NAME,
-                model_version=settings.AI_TRIAGE_MODEL_VERSION,
-                completed_at=datetime.utcnow(),
+            existing_assessment = (
+                db.query(TriageAssessment)
+                .filter(
+                    TriageAssessment.rescue_case_id == case.id,
+                    TriageAssessment.model_name == settings.AI_TRIAGE_MODEL_NAME,
+                    TriageAssessment.model_version == settings.AI_TRIAGE_MODEL_VERSION,
+                )
+                .first()
             )
-            db.add(assessment)
-            db.commit()
+            if existing_assessment:
+                existing_assessment.status = "SKIPPED"
+                existing_assessment.explanation = "AI visual triage is disabled in configuration. Synchronous rule priority active."
+                existing_assessment.completed_at = datetime.utcnow()
+                db.commit()
+                return {"status": "SKIPPED", "reason": "Feature disabled"}
+
+            try:
+                with db.begin_nested():
+                    assessment = TriageAssessment(
+                        rescue_case_id=case.id,
+                        animal_image_id=image.id if image else None,
+                        source="RULES",
+                        status="SKIPPED",
+                        suggested_priority=case.triage_priority,
+                        score=case.triage_score,
+                        explanation="AI visual triage is disabled in configuration. Synchronous rule priority active.",
+                        provider="disabled",
+                        model_name=settings.AI_TRIAGE_MODEL_NAME,
+                        model_version=settings.AI_TRIAGE_MODEL_VERSION,
+                        completed_at=datetime.utcnow(),
+                    )
+                    db.add(assessment)
+                    db.flush()
+                db.commit()
+            except IntegrityError:
+                logger.info(f"[AI_TRIAGE_TASK] Concurrent skipped assessment insert detected for case={case.case_number}.")
             return {"status": "SKIPPED", "reason": "Feature disabled"}
 
         provider = get_vision_triage_provider()
@@ -86,18 +113,35 @@ def perform_ai_triage_task(self, case_id_str: str, image_id_str: str, db_session
             return {"status": "ALREADY_COMPLETED", "assessment_id": str(existing_assessment.id)}
 
         if not existing_assessment:
-            assessment = TriageAssessment(
-                rescue_case_id=case.id,
-                animal_image_id=image.id if image else None,
-                source="IMAGE_AI",
-                status="PENDING",
-                provider=provider.provider_name,
-                model_name=provider.model_name,
-                model_version=provider.model_version,
-            )
-            db.add(assessment)
-            db.commit()
-            db.refresh(assessment)
+            try:
+                with db.begin_nested():
+                    assessment = TriageAssessment(
+                        rescue_case_id=case.id,
+                        animal_image_id=image.id if image else None,
+                        source="IMAGE_AI",
+                        status="PENDING",
+                        provider=provider.provider_name,
+                        model_name=provider.model_name,
+                        model_version=provider.model_version,
+                    )
+                    db.add(assessment)
+                    db.flush()
+                db.commit()
+                db.refresh(assessment)
+            except IntegrityError:
+                logger.info(f"[AI_TRIAGE_TASK] Concurrent insert detected for case={case.case_number}. Reusing existing.")
+                existing_assessment = (
+                    db.query(TriageAssessment)
+                    .filter(
+                        TriageAssessment.rescue_case_id == case.id,
+                        TriageAssessment.model_name == provider.model_name,
+                        TriageAssessment.model_version == provider.model_version,
+                    )
+                    .first()
+                )
+                if existing_assessment and existing_assessment.status == "COMPLETED":
+                    return {"status": "ALREADY_COMPLETED", "assessment_id": str(existing_assessment.id)}
+                assessment = existing_assessment
         else:
             assessment = existing_assessment
             assessment.status = "PENDING"
@@ -186,17 +230,13 @@ def perform_ai_triage_task(self, case_id_str: str, image_id_str: str, db_session
             )
             db.add(history)
 
-            # If escalated to CRITICAL, alert NGO Admins immediately
+            # If escalated to CRITICAL, alert scoped NGO Admins and Super Admins immediately
             if case.triage_priority == RescuePriority.CRITICAL:
-                admins = (
-                    db.query(User)
-                    .filter(
-                        User.role.in_([UserRole.NGO_ADMIN, UserRole.SUPER_ADMIN]),
-                        User.is_active == True,
-                    )
-                    .all()
+                recipients = NotificationService.get_critical_alert_recipients(
+                    db=db,
+                    organization_id=case.organization_id,
                 )
-                for admin in admins:
+                for admin in recipients:
                     NotificationService.notify_user(
                         db=db,
                         user_id=admin.id,

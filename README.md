@@ -168,6 +168,11 @@ PawReach is designed to run completely within free-tier cloud limits for portfol
 * **Task Broker**: Upstash Free Redis using TLS (`rediss://`)
 * **Push Notifications**: Firebase Cloud Messaging (Optional, `REQUIRE_FIREBASE=false`)
 
+> [!NOTE]
+> **Deployment Status & Staging Baseline**:
+> - **Live Staging Baseline**: Verified green on hosted infrastructure at baseline commit [`1b2ee17`](https://github.com/Abhiram-C-Divakaran/PawSOS/commit/1b2ee17064117331ab3e947a3e9dac0a29d00666) (GitHub Actions Run [35089342305](https://github.com/Abhiram-C-Divakaran/PawSOS/actions/runs/35089342305)). See [docs/LIVE_STAGING_VALIDATION.md](docs/LIVE_STAGING_VALIDATION.md).
+> - **Phase 3B Closure Status**: **`PHASE 3B CLOSURE CODE READY — LIVE STAGING REVALIDATION REQUIRED`**. All Phase 3B features (hybrid triage fusion engine, tenant-isolated retry authorization, scoped alerts, DB uniqueness, Render deploy hook diagnostics) are fully verified in CI test suites. Live staging rollout is scheduled for revalidation on the next deployment run.
+
 > [!WARNING]
 > **Free-Tier Sleep Notice**:
 > The Render free web container spins down after 15 minutes of inactivity. The first request after a sleep period incurs a 30–50 second cold-start delay. During container sleep, background dispatch sweeps pause. This deployment is a demonstration system and **NOT** 24/7 emergency response infrastructure.

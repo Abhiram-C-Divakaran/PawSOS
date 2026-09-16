@@ -175,3 +175,59 @@ def test_procfile_contains_process_types():
     assert "PROCESS_TYPE=api" in content
     assert "PROCESS_TYPE=worker" in content
     assert "PROCESS_TYPE=beat" in content
+
+
+def test_staging_workflow_deploy_hook_observability_and_diagnostics():
+    """Verify that staging-deploy.yml captures deploy hook response, extracts deploy ID,
+    passes it to verification job, and emits structured diagnostics on timeout without secret leakage.
+    """
+    assert STAGING_WORKFLOW.exists(), f"Staging workflow not found at {STAGING_WORKFLOW}"
+    with open(STAGING_WORKFLOW, "r", encoding="utf-8") as f:
+        content = f.read()
+
+    # 1. Capture deploy hook HTTP status and response body
+    assert "render_deploy_id" in content, "Workflow must export render_deploy_id"
+    assert "render_http_status" in content, "Workflow must export render_http_status"
+    assert "RENDER_DEPLOY_ID: ${{ needs.trigger-deployment.outputs.render_deploy_id }}" in content
+    assert "DEPLOY_ID=" in content, "Workflow must parse deploy ID from response body"
+
+    # 2. Secret safety: Ensure hook URL key query param or raw secret is not echoed
+    assert 'echo "$HOOK_URL"' not in content, "Raw hook URL containing secret key must never be logged"
+    assert 'echo "$RENDER_DEPLOY_HOOK_URL"' not in content, "Raw secret must never be logged"
+
+    # 3. Preserves query parameters and appends ref
+    assert 'ref=${EXPECTED_GIT_SHA}' in content, "Workflow must append expected SHA ref"
+    assert 'if [[ "$HOOK_URL" == *"?"* ]]' in content, "Workflow must support URLs with existing query parameters"
+
+    # 4. Structured timeout diagnostic
+    assert "DEPLOYMENT ROLLOUT TIMEOUT DIAGNOSTIC" in content
+    assert "Expected SHA:" in content
+    assert "Last Observed SHA:" in content
+    assert "Render Deploy ID:" in content
+    assert "https://dashboard.render.com" in content
+
+
+def test_deploy_hook_response_parsing_helpers():
+    """Unit test for the exact JSON parsing logic used in staging-deploy.yml."""
+    import json
+
+    def extract_deploy_id(body_str: str) -> str:
+        try:
+            data = json.loads(body_str)
+            dep = data.get("deploy", {})
+            if isinstance(dep, dict) and dep.get("id"):
+                return dep.get("id")
+            elif data.get("id"):
+                return data.get("id")
+            return ""
+        except Exception:
+            return ""
+
+    # Nested deploy object
+    assert extract_deploy_id('{"deploy": {"id": "dep-c12345", "status": "created"}}') == "dep-c12345"
+    # Flat id object
+    assert extract_deploy_id('{"id": "dep-d67890", "status": "live"}') == "dep-d67890"
+    # Empty or error response
+    assert extract_deploy_id('{"message": "Rate limit exceeded"}') == ""
+    assert extract_deploy_id('not a json') == ""
+

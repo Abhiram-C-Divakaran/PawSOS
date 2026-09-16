@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import Column, String, DateTime, Enum, Float, ForeignKey, Integer, Text, Index
+from sqlalchemy import Column, String, DateTime, Enum, Float, ForeignKey, Integer, Text, Index, UniqueConstraint
 from sqlalchemy import Uuid as UUID
 from sqlalchemy.orm import relationship
 from app.database import Base
@@ -33,7 +33,7 @@ class TriageAssessment(Base):
     explanation = Column(Text, nullable=True)
 
     # Provider & Model Provenance
-    provider = Column(String(64), nullable=False, default="disabled") # disabled, mock, custom_vision
+    provider = Column(String(64), nullable=False, default="disabled") # disabled, mock (future: external vision provider)
     model_name = Column(String(128), nullable=False, default="pawreach-vision-safety")
     model_version = Column(String(64), nullable=False, default="v1.0")
     sanitized_error_code = Column(String(64), nullable=True)
@@ -47,5 +47,9 @@ class TriageAssessment(Base):
     animal_image = relationship("AnimalImage")
 
     __table_args__ = (
+        UniqueConstraint(
+            "rescue_case_id", "model_name", "model_version",
+            name="uq_triage_assessment_case_model",
+        ),
         Index("ix_triage_assessment_idempotency", "rescue_case_id", "model_name", "model_version"),
     )

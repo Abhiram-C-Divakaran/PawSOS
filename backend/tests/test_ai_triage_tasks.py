@@ -168,6 +168,7 @@ def test_task_no_image_attached(db, citizen_user, monkeypatch):
 def test_task_escalates_to_critical_and_notifies_admins(db, sample_rescue_case_with_image, ngo_admin_user, monkeypatch):
     case, img = sample_rescue_case_with_image
     case.status = RescueStatus.SEARCHING_RESPONDER
+    case.organization_id = ngo_admin_user.organization_id
     db.commit()
 
     monkeypatch.setattr(settings, "AI_TRIAGE_ENABLED", True)
@@ -216,4 +217,165 @@ def test_task_handles_provider_assessment_exception(db, sample_rescue_case_with_
     assessment = db.query(TriageAssessment).filter(TriageAssessment.rescue_case_id == case.id).first()
     assert assessment.status == "FAILED"
     assert assessment.sanitized_error_code == "PROVIDER_ERROR"
+
+def test_task_aborts_when_image_belongs_to_different_case(db, citizen_user):
+    case1 = RescueCase(
+        case_number="PR-CASE-1",
+        reporter_id=citizen_user.id,
+        species="Cat",
+        latitude=19.0760,
+        longitude=72.8777,
+        status=RescueStatus.REPORTED,
+    )
+    case2 = RescueCase(
+        case_number="PR-CASE-2",
+        reporter_id=citizen_user.id,
+        species="Dog",
+        latitude=19.0760,
+        longitude=72.8777,
+        status=RescueStatus.REPORTED,
+    )
+    db.add_all([case1, case2])
+    db.commit()
+
+    img2 = AnimalImage(
+        rescue_case_id=case2.id,
+        image_url="rescues/case2_image.jpg",
+        image_type="REPORT",
+        uploaded_by=citizen_user.id,
+    )
+    db.add(img2)
+    db.commit()
+
+    result = perform_ai_triage_task(str(case1.id), str(img2.id), db_session=db)
+    assert result["status"] == "ABORTED"
+    assert result["reason"] == "Image case mismatch"
+
+    # Verify no assessment was created for case1
+    assert db.query(TriageAssessment).filter(TriageAssessment.rescue_case_id == case1.id).count() == 0
+
+def test_task_critical_escalation_tenant_notification_scoping(db, sample_rescue_case_with_image, test_org, ngo_admin_user, admin_user, monkeypatch):
+    case, img = sample_rescue_case_with_image
+    case.organization_id = test_org.id
+    case.status = RescueStatus.SEARCHING_RESPONDER
+    db.commit()
+
+    from app.models.user import User
+    from app.models.organization import Organization
+    from app.core.constants import OrganizationType
+    other_org = Organization(
+        name="Other Distant NGO",
+        organization_type=OrganizationType.NGO,
+        email="other@ngo.org",
+        phone="+919988776655",
+        operating_region="Pune",
+        verification_status=True,
+    )
+    db.add(other_org)
+    db.commit()
+
+    other_admin = User(
+        full_name="Other NGO Admin",
+        email=f"other_admin_{uuid.uuid4().hex[:6]}@example.com",
+        phone=f"+9193{uuid.uuid4().hex[:8]}",
+        password_hash="dummy_hash",
+        role=UserRole.NGO_ADMIN,
+        organization_id=other_org.id,
+        is_active=True,
+        is_verified=True,
+    )
+    inactive_admin = User(
+        full_name="Inactive NGO Admin",
+        email=f"inactive_admin_{uuid.uuid4().hex[:6]}@example.com",
+        phone=f"+9192{uuid.uuid4().hex[:8]}",
+        password_hash="dummy_hash",
+        role=UserRole.NGO_ADMIN,
+        organization_id=test_org.id,
+        is_active=False,
+        is_verified=True,
+    )
+    db.add_all([other_admin, inactive_admin])
+    db.commit()
+
+    monkeypatch.setattr(settings, "AI_TRIAGE_ENABLED", True)
+    monkeypatch.setattr(settings, "AI_TRIAGE_PROVIDER", "mock")
+    monkeypatch.setattr(settings, "ENVIRONMENT", "test")
+    monkeypatch.setattr(settings, "AI_TRIAGE_MIN_CONFIDENCE", 0.70)
+
+    from app.ai.schemas import AITriageResult
+    critical_result = AITriageResult(
+        suggested_priority=RescuePriority.CRITICAL,
+        score=99,
+        confidence=0.98,
+        visible_signs=["Life threatening bleed"],
+        explanation="Severe trauma detected.",
+    )
+
+    with patch("app.services.storage_service.storage_service.get_image_bytes", return_value=b"valid_image"), \
+         patch("app.ai.mock.MockVisionTriageProvider.assess", return_value=critical_result):
+        result = perform_ai_triage_task(str(case.id), str(img.id), db_session=db)
+
+    assert result["status"] == "COMPLETED"
+    assert result["escalated"] is True
+    assert result["final_priority"] == "CRITICAL"
+
+    # Recipient verification:
+    # 1. Org A admin received alert
+    notif_org_admin = db.query(Notification).filter(
+        Notification.user_id == ngo_admin_user.id,
+        Notification.type == "CRITICAL_ALERT",
+        Notification.rescue_case_id == case.id,
+    ).first()
+    assert notif_org_admin is not None
+
+    # 2. Super Admin received alert
+    notif_super_admin = db.query(Notification).filter(
+        Notification.user_id == admin_user.id,
+        Notification.type == "CRITICAL_ALERT",
+        Notification.rescue_case_id == case.id,
+    ).first()
+    assert notif_super_admin is not None
+
+    # 3. Other Org Admin NEVER received alert
+    notif_other = db.query(Notification).filter(
+        Notification.user_id == other_admin.id,
+        Notification.rescue_case_id == case.id,
+    ).first()
+    assert notif_other is None
+
+    # 4. Inactive Admin NEVER received alert
+    notif_inactive = db.query(Notification).filter(
+        Notification.user_id == inactive_admin.id,
+        Notification.rescue_case_id == case.id,
+    ).first()
+    assert notif_inactive is None
+
+def test_task_handles_concurrent_race_integrity_error(db, sample_rescue_case_with_image, monkeypatch):
+    case, img = sample_rescue_case_with_image
+    monkeypatch.setattr(settings, "AI_TRIAGE_ENABLED", True)
+    monkeypatch.setattr(settings, "AI_TRIAGE_PROVIDER", "mock")
+    monkeypatch.setattr(settings, "ENVIRONMENT", "test")
+
+    # Pre-create an assessment for this case and mock provider (matching MockVisionTriageProvider constants)
+    existing = TriageAssessment(
+        rescue_case_id=case.id,
+        animal_image_id=img.id,
+        source="IMAGE_AI",
+        status="COMPLETED",
+        suggested_priority=RescuePriority.URGENT,
+        score=75,
+        confidence=0.85,
+        provider="mock",
+        model_name="pawreach-vision-mock",
+        model_version="test-v1.0",
+    )
+    db.add(existing)
+    db.commit()
+
+    # Now call perform_ai_triage_task; should detect already completed idempotently without re-running
+    res = perform_ai_triage_task(str(case.id), str(img.id), db_session=db)
+    assert res["status"] == "ALREADY_COMPLETED"
+    assert res["assessment_id"] == str(existing.id)
+
+
 

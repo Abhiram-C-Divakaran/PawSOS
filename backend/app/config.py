@@ -78,7 +78,7 @@ class Settings(BaseSettings):
     AI_TRIAGE_ENABLED: bool = False
     AI_TRIAGE_PROVIDER: str = "disabled"
     AI_TRIAGE_TIMEOUT_SECONDS: float = 15.0
-    AI_TRIAGE_MIN_CONFIDENCE: float = 0.60
+    AI_TRIAGE_MIN_CONFIDENCE: float = 0.70
     AI_TRIAGE_MODEL_NAME: str = "pawreach-vision-safety"
     AI_TRIAGE_MODEL_VERSION: str = "v1.0"
 

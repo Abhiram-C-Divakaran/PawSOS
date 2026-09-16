@@ -80,7 +80,7 @@ The AI subsystem is located in `backend/app/ai/`:
 | Variable | Default | Purpose |
 | :--- | :--- | :--- |
 | `AI_TRIAGE_ENABLED` | `false` | Master feature flag for visual triage. |
-| `AI_TRIAGE_PROVIDER` | `"disabled"` | Active provider (`disabled`, `mock`, `custom_vision`). |
+| `AI_TRIAGE_PROVIDER` | `"disabled"` | Active provider. Implemented: `disabled` (safe no-op default), `mock` (automated test suites only). Future external vision providers are planned post-Phase 3B. |
 | `AI_TRIAGE_MIN_CONFIDENCE` | `0.70` | Minimum confidence threshold for escalation eligibility. |
 | `AI_TRIAGE_MODEL_NAME` | `"pawreach-vision-safety"` | Model identifier for audit provenance. |
 | `AI_TRIAGE_MODEL_VERSION` | `"v1.0"` | Model version identifier for audit provenance. |
@@ -106,7 +106,8 @@ The `TriageAssessment` model (`backend/app/models/triage_assessment.py`) provide
 - `model_version`: Model release version.
 - `sanitized_error_code`: Error category if failed (`IMAGE_LOAD_ERROR`, `PROVIDER_ERROR`, etc.).
 - `created_at` & `completed_at`: Execution timing benchmarks.
-- `ix_triage_assessment_idempotency`: Index on `(rescue_case_id, model_name, model_version)` ensuring idempotent background processing.
+- `uq_triage_assessment_case_model`: Unique constraint and composite index on `(rescue_case_id, model_name, model_version)` guaranteeing database-level idempotency and concurrent race safety.
+
 
 ---
 

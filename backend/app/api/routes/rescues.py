@@ -368,6 +368,8 @@ def retry_rescue_triage(
     if not case:
         raise NotFoundException("Rescue case not found")
 
+    verify_case_access(case, current_user, db)
+
     if not case.images:
         raise ConflictException("No evidence image attached to rescue case to assess.")
 

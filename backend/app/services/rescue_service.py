@@ -116,17 +116,13 @@ class RescueService:
             },
         )
 
-        # If CRITICAL, notify NGO Admins immediately
+        # If CRITICAL, notify scoped NGO Admins and Super Admins immediately
         if db_case.triage_priority == RescuePriority.CRITICAL:
-            admins = (
-                db.query(User)
-                .filter(
-                    User.role.in_([UserRole.NGO_ADMIN, UserRole.SUPER_ADMIN]),
-                    User.is_active == True,
-                )
-                .all()
+            recipients = NotificationService.get_critical_alert_recipients(
+                db=db,
+                organization_id=db_case.organization_id,
             )
-            for admin in admins:
+            for admin in recipients:
                 NotificationService.notify_user(
                     db=db,
                     user_id=admin.id,

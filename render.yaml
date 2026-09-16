@@ -61,6 +61,12 @@ services:
         sync: false
       - key: FIREBASE_CREDENTIALS_JSON
         sync: false
+      - key: AI_TRIAGE_ENABLED
+        value: "false"
+      - key: AI_TRIAGE_PROVIDER
+        value: "disabled"
+      - key: AI_TRIAGE_MIN_CONFIDENCE
+        value: "0.70"
 
   # 2. Frontend Static PWA Site (Render Free Tier)
   - type: web

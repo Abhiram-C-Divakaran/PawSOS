@@ -81,8 +81,12 @@ jobs:
     needs: [check-prerequisites]
     if: needs.check-prerequisites.outputs.has_deploy_hook == 'true'
     environment: staging
+    outputs:
+      render_deploy_id: ${{ steps.deploy_hook.outputs.render_deploy_id }}
+      render_http_status: ${{ steps.deploy_hook.outputs.render_http_status }}
     steps:
       - name: Trigger Render Staging Deployment
+        id: deploy_hook
         env:
           RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
           EXPECTED_GIT_SHA: ${{ needs.check-prerequisites.outputs.expected_git_sha }}
@@ -96,11 +100,52 @@ jobs:
               HOOK_URL="${HOOK_URL}?ref=${EXPECTED_GIT_SHA}"
             fi
           fi
-          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$HOOK_URL")
+
+          RESPONSE_FILE=$(mktemp)
+          HTTP_STATUS=$(curl -s -S -w "%{http_code}" -o "$RESPONSE_FILE" -X POST "$HOOK_URL" || echo "000")
+          RESPONSE_BODY=$(cat "$RESPONSE_FILE" 2>/dev/null || echo "")
+          rm -f "$RESPONSE_FILE"
+
+          echo "render_http_status=$HTTP_STATUS" >> $GITHUB_OUTPUT
+
           if [ "$HTTP_STATUS" -ge 200 ] && [ "$HTTP_STATUS" -lt 300 ]; then
-            echo "Render deployment triggered successfully (HTTP $HTTP_STATUS)."
+            echo "Render deploy hook accepted with HTTP $HTTP_STATUS."
+            
+            DEPLOY_ID=$(echo "$RESPONSE_BODY" | python3 -c '
+              import sys, json
+              try:
+                  data = json.loads(sys.stdin.read())
+                  dep = data.get("deploy", {})
+                  if isinstance(dep, dict) and dep.get("id"):
+                      print(dep.get("id"))
+                  elif data.get("id"):
+                      print(data.get("id"))
+                  else:
+                      print("")
+              except Exception:
+                  print("")
+              ' 2>/dev/null || echo "")
+
+            if [ -n "$DEPLOY_ID" ]; then
+              echo "Render Deploy ID: $DEPLOY_ID"
+              echo "render_deploy_id=$DEPLOY_ID" >> $GITHUB_OUTPUT
+            else
+              echo "Render Deploy ID: not provided in response"
+              echo "render_deploy_id=unknown" >> $GITHUB_OUTPUT
+            fi
           else
             echo "Failed to trigger Render deployment. HTTP status: $HTTP_STATUS"
+            CLEAN_ERR=$(echo "$RESPONSE_BODY" | python3 -c '
+              import sys, json
+              try:
+                  data = json.loads(sys.stdin.read())
+                  print(data.get("message", ""))
+              except Exception:
+                  print("")
+              ' 2>/dev/null || echo "")
+            if [ -n "$CLEAN_ERR" ]; then
+              echo "Provider message: $CLEAN_ERR"
+            fi
             exit 1
           fi
 
@@ -126,8 +171,13 @@ jobs:
         env:
           STAGING_API_URL: ${{ secrets.STAGING_API_URL }}
           EXPECTED_GIT_SHA: ${{ needs.check-prerequisites.outputs.expected_git_sha }}
+          RENDER_DEPLOY_ID: ${{ needs.trigger-deployment.outputs.render_deploy_id }}
+          RENDER_HTTP_STATUS: ${{ needs.trigger-deployment.outputs.render_http_status }}
         run: |
           echo "Polling Staging API for expected deployment SHA: $EXPECTED_GIT_SHA"
+          if [ -n "$RENDER_DEPLOY_ID" ] && [ "$RENDER_DEPLOY_ID" != "unknown" ]; then
+            echo "Associated Render Deploy ID: $RENDER_DEPLOY_ID"
+          fi
           API_HEALTH_URL="${STAGING_API_URL%/}/api/v1/health"
           READY_URL="${STAGING_API_URL%/}/api/v1/health/ready"
           
@@ -135,6 +185,9 @@ jobs:
           POLL_INTERVAL=10
           DEPLOYED="false"
           LAST_RESPONSE=""
+          LAST_OBSERVED_SHA="none"
+          LAST_OBSERVED_ENV="unknown"
+          LAST_HTTP_STATUS="none"
 
           for i in $(seq 1 $MAX_ATTEMPTS); do
             echo "[$i/$MAX_ATTEMPTS] Probing $API_HEALTH_URL..."
@@ -142,11 +195,14 @@ jobs:
             STATUS_CODE=$(echo "$RESPONSE" | grep "HTTP_STATUS:" | cut -d':' -f2)
             BODY=$(echo "$RESPONSE" | grep -v "HTTP_STATUS:")
             LAST_RESPONSE="$BODY"
+            LAST_HTTP_STATUS="$STATUS_CODE"
 
             if [ "$STATUS_CODE" = "200" ]; then
               CURRENT_SHA=$(echo "$BODY" | python -c "import sys, json; print(json.load(sys.stdin).get('git_sha', ''))" 2>/dev/null || echo "")
               CURRENT_ENV=$(echo "$BODY" | python -c "import sys, json; print(json.load(sys.stdin).get('environment', ''))" 2>/dev/null || echo "")
               STATUS_VAL=$(echo "$BODY" | python -c "import sys, json; print(json.load(sys.stdin).get('status', ''))" 2>/dev/null || echo "")
+              LAST_OBSERVED_SHA="$CURRENT_SHA"
+              LAST_OBSERVED_ENV="$CURRENT_ENV"
               
               echo "  -> status: '$STATUS_VAL', env: '$CURRENT_ENV', deployed sha: '$CURRENT_SHA'"
 
@@ -167,8 +223,26 @@ jobs:
           done
 
           if [ "$DEPLOYED" != "true" ]; then
-            echo "ERROR: Deployment polling timed out after $((MAX_ATTEMPTS * POLL_INTERVAL)) seconds."
-            echo "Last API response: $LAST_RESPONSE"
+            echo ""
+            echo "========================================================================"
+            echo "DEPLOYMENT ROLLOUT TIMEOUT DIAGNOSTIC"
+            echo "========================================================================"
+            echo "Expected SHA:            $EXPECTED_GIT_SHA"
+            echo "Last Observed SHA:       $LAST_OBSERVED_SHA"
+            echo "Environment:             $LAST_OBSERVED_ENV"
+            echo "Last HTTP Status:        $LAST_HTTP_STATUS"
+            echo "Render Deploy ID:        ${RENDER_DEPLOY_ID:-unknown}"
+            echo ""
+            echo "Guidance:"
+            echo "The Staging API did not report the expected commit within $((MAX_ATTEMPTS * POLL_INTERVAL))s."
+            echo "Inspect the deploy status in the Render dashboard: https://dashboard.render.com"
+            if [ -n "$RENDER_DEPLOY_ID" ] && [ "$RENDER_DEPLOY_ID" != "unknown" ]; then
+              echo "Verify whether Render deploy '$RENDER_DEPLOY_ID' is currently queued, building, or failed."
+            else
+              echo "Verify whether a deployment build was queued or blocked by concurrency limits on the free tier."
+            fi
+            echo "========================================================================"
+            echo "Last raw API response: $LAST_RESPONSE"
             exit 1
           fi
 

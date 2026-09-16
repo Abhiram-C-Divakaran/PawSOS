@@ -284,3 +284,52 @@ class NotificationService:
                 rescue_case_id=rescue_case_id,
                 data=data,
             )
+
+    @classmethod
+    def get_critical_alert_recipients(
+        cls,
+        db: Session,
+        organization_id: Optional[uuid.UUID] = None,
+    ) -> List[User]:
+        """Resolve authorized recipients for critical rescue alerts.
+        
+        Policy:
+        - SUPER_ADMIN: global (always selected if active).
+        - NGO_ADMIN: strictly scoped to case.organization_id (only if active and organization_id is non-null).
+        - If organization_id is None, no NGO_ADMINs are selected (fail-closed tenant policy).
+        - Inactive users are excluded.
+        """
+        from app.core.constants import UserRole
+
+        # 1. Global Super Admins
+        super_admins = (
+            db.query(User)
+            .filter(
+                User.role == UserRole.SUPER_ADMIN,
+                User.is_active == True,
+            )
+            .all()
+        )
+
+        # 2. Scoped NGO Admins for this specific organization
+        ngo_admins: List[User] = []
+        if organization_id is not None:
+            ngo_admins = (
+                db.query(User)
+                .filter(
+                    User.role == UserRole.NGO_ADMIN,
+                    User.organization_id == organization_id,
+                    User.is_active == True,
+                )
+                .all()
+            )
+
+        seen_ids = set()
+        recipients = []
+        for user in super_admins + ngo_admins:
+            if user.id not in seen_ids:
+                seen_ids.add(user.id)
+                recipients.append(user)
+
+        return recipients
+
