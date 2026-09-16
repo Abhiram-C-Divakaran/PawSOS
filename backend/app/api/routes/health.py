@@ -17,7 +17,7 @@ def health_liveness():
     return {
         "status": "ok",
         "environment": settings.ENVIRONMENT,
-        "version": "2.0.0",
+        "version": settings.APP_VERSION,
         "git_sha": settings.GIT_SHA,
     }
 
@@ -36,6 +36,7 @@ def health_readiness(response: Response, db: Session = Depends(get_db)):
         "worker": "skipped",
         "storage": "unknown",
         "firebase": "unconfigured",
+        "ai_triage": "disabled",
     }
     healthy = True
 
@@ -146,6 +147,17 @@ def health_readiness(response: Response, db: Session = Depends(get_db)):
         else:
             checks["firebase"] = "unconfigured"
 
+    # 5. AI Triage diagnostic status (optional, non-blocking)
+    if not settings.AI_TRIAGE_ENABLED:
+        checks["ai_triage"] = "disabled"
+    else:
+        try:
+            from app.ai.factory import get_vision_triage_provider
+            get_vision_triage_provider()
+            checks["ai_triage"] = "configured"
+        except Exception as e:
+            logger.warning(f"AI triage diagnostic warning: {e}")
+            checks["ai_triage"] = "degraded"
 
     # Map to standardized operational status strings
     if checks["worker"] == "active":
@@ -162,6 +174,7 @@ def health_readiness(response: Response, db: Session = Depends(get_db)):
         "celery": celery_status,
         "storage": checks["storage"] if checks["storage"] == "healthy" else "unavailable",
         "firebase": checks["firebase"],
+        "ai_triage": checks["ai_triage"],
     }
 
     if not healthy:

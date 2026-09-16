@@ -1,6 +1,6 @@
-# PawReach (PawSOS) — MVP Phase 2.9E: Real Staging Provisioning, Deployment Verification & Controlled Pilot Validation
+# PawReach — Stray Animal Rescue Coordination Platform
 
-PawReach is an enterprise-grade stray animal rescue coordination platform connecting citizens, field rescuers, veterinary clinics, foster caregivers, NGOs, and municipal authorities.
+PawReach is an animal rescue and foster-to-adoption coordination platform connecting citizens, field rescuers, veterinary clinics, foster caregivers, NGOs, and municipal authorities.
 
 ---
 
@@ -157,58 +157,26 @@ E2E specifications:
 
 ---
 
-## Staging & Production Deployment
+## Zero-Cost Free Staging & Demo Deployment
 
-### 1. Database (PostgreSQL + PostGIS)
-- Deploy PostgreSQL 15+ with PostGIS extension enabled (`CREATE EXTENSION IF NOT EXISTS postgis;`).
-- Run database migrations: `alembic upgrade head`.
-- Seed initial staging data with secure operator-defined password:
-  ```bash
-  STAGING_SEED_PASSWORD="<STRONG_UNIQUE_PASSWORD_MIN_14_CHARS>" ENVIRONMENT=staging python scripts/seed_staging.py
-  ```
+PawReach is designed to run completely within free-tier cloud limits for portfolio and college demonstration purposes:
 
-### 2. Redis & Background Workers (Worker & Beat)
-- Provision a Redis instance (e.g. Railway, Redis Cloud, Upstash).
-- Set `REDIS_URL=redis://<user>:<pass>@<host>:<port>/0`.
-- In staging and production, run Worker and Beat as separate services:
-  ```bash
-  # Background Task Worker
-  celery -A app.tasks.celery_app.celery_app worker --loglevel=info
+* **Backend**: Render Free Web Service (`pawreach-api` executing combined FastAPI, Celery solo worker, and Celery Beat via `./scripts/start_free_render.sh`)
+* **Frontend**: Render Free Static Site (`pawreach-frontend`)
+* **Database**: Supabase Free PostgreSQL 15+ with PostGIS via Session Pooler on **Port 5432**
+* **Image Storage**: Supabase Storage via S3-compatible API (Private bucket `evidence` with presigned URLs)
+* **Task Broker**: Upstash Free Redis using TLS (`rediss://`)
+* **Push Notifications**: Firebase Cloud Messaging (Optional, `REQUIRE_FIREBASE=false`)
 
-  # Periodic Beat Scheduler
-  celery -A app.tasks.celery_app.celery_app beat --loglevel=info
-  ```
+> [!WARNING]
+> **Free-Tier Sleep Notice**:
+> The Render free web container spins down after 15 minutes of inactivity. The first request after a sleep period incurs a 30–50 second cold-start delay. During container sleep, background dispatch sweeps pause. This deployment is a demonstration system and **NOT** 24/7 emergency response infrastructure.
 
-### 3. Cloud Storage (S3)
-- Set in backend environment:
-  ```text
-  STORAGE_PROVIDER=s3
-  AWS_ACCESS_KEY_ID=<key>
-  AWS_SECRET_ACCESS_KEY=<secret>
-  AWS_REGION=<region>
-  S3_BUCKET_NAME=<bucket>
-  S3_PRESIGNED_URL_EXPIRE_SECONDS=900
-  ```
-- Images are automatically resized (max dimension 2048px), compressed, and EXIF metadata stripped via Pillow. S3 objects remain strictly private with temporary presigned URLs.
-
-### 4. Firebase Cloud Messaging (Web Push)
-- Supply credentials via environment variable (preferred in cloud PaaS) or file path:
-  ```text
-  FIREBASE_CREDENTIALS_JSON={"type": "service_account", ...}
-  # OR: FIREBASE_CREDENTIALS_PATH=/etc/secrets/firebase-adminsdk.json
-  REQUIRE_FIREBASE=true
-  FIREBASE_PROJECT_ID=pawsos-staging
-  ```
-- Configure frontend environment:
-  ```text
-  VITE_FIREBASE_API_KEY=...
-  VITE_FIREBASE_PROJECT_ID=...
-  VITE_FIREBASE_VAPID_KEY=...
-  ```
-
-### 5. Frontend SPA Deployment (Vercel / Netlify / Cloudflare Pages)
-- Set `VITE_API_BASE_URL=https://<your-api-domain>/api/v1`.
-- SPA rewrites are preconfigured in `frontend/public/_redirects` and `frontend/vercel.json`.
+### Canonical Frontend Contract
+```text
+VITE_API_BASE_URL=https://<your-render-subdomain>.onrender.com/api/v1
+```
+The frontend automatically normalizes this value via `src/utils/apiConfig.ts`.
 
 ---
 
@@ -232,11 +200,9 @@ All staging accounts are provisioned with the password set via `STAGING_SEED_PAS
 ---
 
 ## Operational Documentation
-- [Phase 2.9 Certification Report](docs/PHASE_2_9_CERTIFICATION.md)
-- [Phase 2.9E Staging Execution Record](docs/PHASE_2_9E_STAGING_EXECUTION.md)
-- [Staging Activation & Operator Checklist](docs/STAGING_ACTIVATION_CHECKLIST.md)
-- [Staging Deployment Architecture](docs/STAGING_DEPLOYMENT.md)
-- [Staging Rollback Plan](docs/STAGING_ROLLBACK.md)
+- [Live Staging Verification Record](docs/LIVE_STAGING_VALIDATION.md) (Authoritative staging run)
+- [Zero-Cost Free Live Deployment Guide](docs/FREE_DEPLOYMENT.md) (20-step setup sequence)
+- [System Architecture](ARCHITECTURE.md) (Current implemented vs future/AI architecture)
 - [Operations Incident Runbook](docs/OPERATIONS_RUNBOOK.md)
-- [Pilot Verification Checklist](docs/PILOT_CHECKLIST.md)
-- [Staging Deployment & Pilot Results](docs/STAGING_PILOT_RESULTS.md)
+- [Historical Staging Records](docs/PHASE_2_9E_STAGING_EXECUTION.md) *(Superseded)*
+

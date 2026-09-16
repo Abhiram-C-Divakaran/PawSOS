@@ -1,5 +1,8 @@
 # PawReach Phase 2.9E — Staging Execution & Validation Record
 
+> [!NOTE]
+> **SUPERSEDED**: This document is preserved for historical audit purposes. The authoritative live staging deployment validation is documented in [LIVE_STAGING_VALIDATION.md](LIVE_STAGING_VALIDATION.md) and the current zero-cost architecture in [FREE_DEPLOYMENT.md](FREE_DEPLOYMENT.md).
+
 ## 1. Execution Environment & Baseline Metadata
 
 | Parameter | Recorded Value |

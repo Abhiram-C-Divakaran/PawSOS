@@ -51,9 +51,9 @@ if settings.ENVIRONMENT in ["production", "staging"]:
 os.makedirs("uploads", exist_ok=True)
 
 app = FastAPI(
-    title="PawReach API",
-    description="Backend API for PawReach rescue coordination platform (MVP Phase 2).",
-    version="2.0.0"
+    title=settings.APP_TITLE,
+    description=settings.APP_DESCRIPTION,
+    version=settings.APP_VERSION,
 )
 
 # Rate Limiter state & handler
@@ -111,7 +111,7 @@ app.include_router(adoptions.ngo_router, prefix="/api/v1/ngo/adoptions", tags=["
 @app.get("/")
 def root():
     return {
-        "message": "Welcome to PawReach API (Phase 2)",
-        "version": "2.0.0",
+        "message": f"Welcome to {settings.APP_TITLE}",
+        "version": settings.APP_VERSION,
         "environment": settings.ENVIRONMENT
     }

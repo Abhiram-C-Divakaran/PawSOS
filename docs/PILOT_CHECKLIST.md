@@ -1,5 +1,8 @@
 # PawReach Pilot Checklist: Phase 2.9 Staging Validation, Security Hardening & Pilot Certification
 
+> [!NOTE]
+> **SUPERSEDED**: Historical checklist preserved for audit reference. Current operational procedures and live validation results are documented in [LIVE_STAGING_VALIDATION.md](LIVE_STAGING_VALIDATION.md) and [FREE_DEPLOYMENT.md](FREE_DEPLOYMENT.md).
+
 This checklist defines the sign-off criteria required before opening the PawReach pilot to real field responders, citizens, and partner veterinary clinics.
 
 ---

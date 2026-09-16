@@ -1,6 +1,9 @@
 # PawReach — Staging Deployment & Operations Guide
 **Phase 2.9 — Staging Deployment, Security Hardening & Pilot Certification**
 
+> [!NOTE]
+> **SUPERSEDED**: This document described an early multi-service dedicated deployment topology. It is superseded by the verified zero-cost free architecture documented in [FREE_DEPLOYMENT.md](FREE_DEPLOYMENT.md) and [LIVE_STAGING_VALIDATION.md](LIVE_STAGING_VALIDATION.md).
+
 This document outlines the architecture, environment configurations, deployment manifests, database initialization, process management, readiness verification, and operational procedures for deploying PawReach to a staging environment.
 
 ---

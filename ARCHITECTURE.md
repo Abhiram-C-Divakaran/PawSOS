@@ -1,4 +1,10 @@
-# PAWSOS – System Architecture
+# PawReach – System Architecture
+
+> [!IMPORTANT]
+> **Implementation Status**:
+> - **Current Implemented Architecture**: React 19 / TypeScript / Vite PWA frontend + FastAPI Python 3.12 backend + PostgreSQL/PostGIS + Upstash Redis over TLS + Celery background worker + Supabase S3 private storage. Hosted on zero-cost free-tier cloud infrastructure (Render + Supabase + Upstash).
+> - **Phase 3B AI Triage Architecture**: Lightweight decision-support visual urgency triage engine via provider-neutral interface (`backend/app/ai/`). Strictly non-diagnostic and fail-safe (hard-rule priorities can never be downgraded).
+> - **Conceptual / Future Notes**: Historical references in this document to native Flutter apps, heavy local deep-learning frameworks (PyTorch/YOLO), or multi-container enterprise setups represent early conceptual planning and are not part of the active free-tier demo implementation.
 
 ## 1. Architecture Overview
 

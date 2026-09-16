@@ -1,5 +1,8 @@
 # PawReach Phase 2.9E — Staging Deployment & Pilot Validation Results
 
+> [!NOTE]
+> **SUPERSEDED**: This document records historical pre-activation results. See [LIVE_STAGING_VALIDATION.md](LIVE_STAGING_VALIDATION.md) for authoritative verified staging deployment evidence.
+
 ## 1. Staging Environment Overview
 
 | Parameter | Configuration / Observed Value |

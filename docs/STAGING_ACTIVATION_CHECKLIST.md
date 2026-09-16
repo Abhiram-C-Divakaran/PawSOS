@@ -1,6 +1,9 @@
 # PawReach Staging Activation & Operator Handoff Checklist
 **Phase 2.9E — Real Cloud Staging Provisioning & Controlled Pilot Validation**
 
+> [!NOTE]
+> **SUPERSEDED**: This checklist is preserved for historical audit. The active zero-cost setup sequence is in [FREE_DEPLOYMENT.md](FREE_DEPLOYMENT.md) and live validation record in [LIVE_STAGING_VALIDATION.md](LIVE_STAGING_VALIDATION.md).
+
 ```text
 ================================================================================
 STAGING STATUS:
