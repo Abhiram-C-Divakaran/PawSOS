@@ -19,6 +19,7 @@ from app.core.exceptions import ConflictException, ForbiddenException, NotFoundE
 from app.schemas.rescue import RescueCreate
 from app.services.triage_service import TriageService
 from app.services.notification_service import NotificationService
+from app.config import settings
 
 
 class RescueService:
@@ -60,6 +61,7 @@ class RescueService:
         db.refresh(db_case)
 
         # Record images if provided
+        img_id = None
         if case_in.image_url:
             from app.services.storage_service import normalize_image_key
             canonical_key = normalize_image_key(case_in.image_url) or case_in.image_url
@@ -70,6 +72,8 @@ class RescueService:
                 uploaded_by=reporter_id,
             )
             db.add(img)
+            db.flush()
+            img_id = img.id
 
         # Log status history
         history1 = RescueStatusHistory(
@@ -136,6 +140,15 @@ class RescueService:
         # Automatically trigger dispatch engine
         from app.services.dispatch_service import DispatchService
         DispatchService.dispatch_case(db, db_case.id)
+
+        # Trigger asynchronous AI triage assessment if enabled and image attached
+        if settings.AI_TRIAGE_ENABLED and img_id:
+            try:
+                from app.tasks.ai_triage_tasks import perform_ai_triage_task
+                perform_ai_triage_task.delay(str(db_case.id), str(img_id))
+            except Exception as task_err:
+                import logging
+                logging.getLogger(__name__).warning(f"Could not enqueue AI triage task: {task_err}")
 
         return db_case
 

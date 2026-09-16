@@ -8,6 +8,8 @@ from app.models.user import User
 from app.models.rescue_case import RescueCase
 from app.models.rescue_status_history import RescueStatusHistory
 from app.models.rescue_assignment import RescueAssignment
+import json
+import logging
 from app.schemas.rescue import (
     RescueCreate,
     RescueResponse,
@@ -15,10 +17,15 @@ from app.schemas.rescue import (
     RescueTimelineResponse,
     AnimalImageResponse,
     AssignedResponderResponse,
+    TriageDetailResponse,
+    RuleAssessmentDetail,
+    AIAssessmentDetail,
 )
 from app.api.dependencies import get_current_active_user
 from app.services.rescue_service import RescueService
 from app.services.dispatch_service import DispatchService
+from app.services.triage_service import TriageService
+from app.models.triage_assessment import TriageAssessment
 from app.core.permissions import RoleChecker
 from app.core.constants import UserRole, RescueStatus, AssignmentStatus
 from app.core.exceptions import NotFoundException, ConflictException, ForbiddenException
@@ -26,6 +33,8 @@ from app.core.exceptions import NotFoundException, ConflictException, ForbiddenE
 from app.services.storage_service import storage_service
 from app.config import settings
 from app.core.case_access import verify_case_access, can_view_case_private_details, can_access_case_evidence
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -263,3 +272,131 @@ def update_status(
         veterinary_facility_id=status_update.veterinary_facility_id
     )
     return build_rescue_response(updated_case, include_evidence=True, presign_images=False)
+
+
+@router.get("/{case_id}/triage", response_model=TriageDetailResponse)
+def get_rescue_triage(
+    case_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    case = db.query(RescueCase).filter(RescueCase.id == case_id).first()
+    if not case:
+        raise NotFoundException("Rescue case not found")
+
+    verify_case_access(case, current_user, db)
+
+    # Compute deterministic rule assessment
+    rule_calc = TriageService.calculate_triage({
+        "bleeding": case.bleeding,
+        "can_walk": case.can_walk,
+        "conscious": case.conscious,
+        "vehicle_accident": case.vehicle_accident,
+        "breathing_difficulty": case.breathing_difficulty,
+    })
+    rule_detail = RuleAssessmentDetail(
+        priority=rule_calc["priority"],
+        score=rule_calc["score"],
+        reasons=rule_calc["reasons"],
+    )
+
+    # Fetch latest triage assessment if present
+    latest_assessment = (
+        db.query(TriageAssessment)
+        .filter(TriageAssessment.rescue_case_id == case.id)
+        .order_by(TriageAssessment.created_at.desc())
+        .first()
+    )
+
+    if not latest_assessment:
+        ai_detail = AIAssessmentDetail(
+            status="NOT_REQUESTED" if not case.images else "PENDING",
+            source="IMAGE_AI",
+            provider="disabled" if not settings.AI_TRIAGE_ENABLED else settings.AI_TRIAGE_PROVIDER,
+            explanation=(
+                "No visual triage assessment has been performed."
+                if not case.images
+                else "Visual assessment queued or pending execution."
+            ),
+        )
+    else:
+        signs = []
+        if latest_assessment.visible_signs:
+            try:
+                parsed = json.loads(latest_assessment.visible_signs)
+                if isinstance(parsed, list):
+                    signs = parsed
+                else:
+                    signs = [str(parsed)]
+            except Exception:
+                signs = [latest_assessment.visible_signs]
+
+        ai_detail = AIAssessmentDetail(
+            status=latest_assessment.status,
+            source=latest_assessment.source,
+            suggested_priority=latest_assessment.suggested_priority,
+            score=latest_assessment.score,
+            confidence=latest_assessment.confidence,
+            visible_signs=signs,
+            explanation=latest_assessment.explanation,
+            provider=latest_assessment.provider,
+            model_name=latest_assessment.model_name,
+            model_version=latest_assessment.model_version,
+            created_at=latest_assessment.created_at,
+            completed_at=latest_assessment.completed_at,
+        )
+
+    return TriageDetailResponse(
+        case_id=case.id,
+        case_number=case.case_number,
+        final_priority=case.triage_priority or rule_detail.priority,
+        final_score=case.triage_score if case.triage_score is not None else rule_detail.score,
+        final_reason=case.triage_reason or ", ".join(rule_detail.reasons),
+        rule_assessment=rule_detail,
+        ai_assessment=ai_detail,
+    )
+
+
+@router.post("/{case_id}/triage/retry", response_model=dict)
+def retry_rescue_triage(
+    case_id: UUID,
+    force: bool = Query(False, description="Force retry even if previously completed"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(RoleChecker([UserRole.NGO_ADMIN, UserRole.SUPER_ADMIN]))
+):
+    case = db.query(RescueCase).filter(RescueCase.id == case_id).first()
+    if not case:
+        raise NotFoundException("Rescue case not found")
+
+    if not case.images:
+        raise ConflictException("No evidence image attached to rescue case to assess.")
+
+    image = case.images[0]
+
+    existing = (
+        db.query(TriageAssessment)
+        .filter(TriageAssessment.rescue_case_id == case.id)
+        .first()
+    )
+
+    if existing and existing.status == "COMPLETED" and not force:
+        return {
+            "success": True,
+            "message": "Visual assessment is already completed. Use force=true to re-run.",
+            "status": "COMPLETED",
+        }
+
+    if existing:
+        existing.status = "PENDING"
+        existing.completed_at = None
+        db.commit()
+
+    try:
+        from app.tasks.ai_triage_tasks import perform_ai_triage_task
+        perform_ai_triage_task.delay(str(case.id), str(image.id))
+    except Exception as e:
+        logger.warning(f"Could not enqueue retry triage task: {e}")
+        return {"success": False, "message": f"Could not enqueue assessment: {str(e)}"}
+
+    return {"success": True, "message": "Visual triage assessment queued for execution."}
+

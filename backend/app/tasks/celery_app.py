@@ -44,6 +44,7 @@ celery_app = Celery(
     include=[
         "app.tasks.dispatch_tasks",
         "app.tasks.notification_tasks",
+        "app.tasks.ai_triage_tasks",
     ],
 )
 

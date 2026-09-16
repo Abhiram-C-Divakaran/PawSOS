@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import { formatApiError } from '../utils/error';
-import { Camera, AlertTriangle, CheckCircle, UploadCloud, Loader2 } from 'lucide-react';
+import { Camera, CheckCircle, UploadCloud, Loader2, ShieldAlert } from 'lucide-react';
 import { MapPicker } from '../components/MapPicker';
 import { Toast, type ToastMessage } from '../components/Toast';
 
@@ -246,6 +246,14 @@ export const ReportRescue = () => {
               </label>
             </div>
 
+            {/* Non-Diagnostic Visual Triage Disclaimer */}
+            <div className="bg-blue-50/70 border border-blue-200/80 p-3.5 rounded-lg flex items-start text-xs text-blue-900">
+              <ShieldAlert className="w-4 h-4 text-brand-teal mr-2 flex-shrink-0 mt-0.5" />
+              <p>
+                <strong>AI Visual Triage Notice:</strong> Uploaded evidence photos are evaluated by automated decision-support algorithms strictly to assess dispatch urgency and expedite emergency responder routing. Visual triage does <em>not</em> provide veterinary medical diagnosis, clinical injury classification, or treatment instructions.
+              </p>
+            </div>
+
             <div className="flex space-x-4 pt-4">
               <button
                 type="button"
@@ -326,9 +334,9 @@ export const ReportRescue = () => {
             <h2 className="text-2xl font-bold text-brand-darkNavy">Visible Emergency Condition</h2>
 
             <div className="bg-orange-50 border border-orange-200 p-4 rounded-lg flex items-start">
-              <AlertTriangle className="w-5 h-5 text-orange-600 mr-2 flex-shrink-0 mt-0.5" />
+              <ShieldAlert className="w-5 h-5 text-orange-600 mr-2 flex-shrink-0 mt-0.5" />
               <p className="text-sm text-orange-800">
-                <strong>Safety Notice:</strong> Do not put yourself or the animal at risk. This triage helps responders prioritize dispatch, not diagnose.
+                <strong>Dispatch Decision-Support Only:</strong> Do not put yourself or the animal at risk. Condition indicators and visual AI triage are used exclusively to prioritize responder dispatch. They do not constitute a veterinary medical diagnosis, clinical prognosis, or treatment prescription.
               </p>
             </div>
 

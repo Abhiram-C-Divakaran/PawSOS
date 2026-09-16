@@ -3,6 +3,10 @@ from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
+    APP_TITLE: str = "PawReach API"
+    APP_DESCRIPTION: str = "Backend API for PawReach rescue coordination platform."
+    APP_VERSION: str = "2.0.0"
+
     DATABASE_URL: str = "sqlite:///./pawsos.db"
     JWT_SECRET_KEY: str = "secret"
     JWT_ALGORITHM: str = "HS256"
@@ -69,6 +73,14 @@ class Settings(BaseSettings):
     RATE_LIMIT_PER_MINUTE: int = 60
     DISABLE_RATE_LIMITING: bool = False
     SENTRY_DSN: str = ""
+
+    # Phase 3B: AI-Assisted Visual Triage & Safety
+    AI_TRIAGE_ENABLED: bool = False
+    AI_TRIAGE_PROVIDER: str = "disabled"
+    AI_TRIAGE_TIMEOUT_SECONDS: float = 15.0
+    AI_TRIAGE_MIN_CONFIDENCE: float = 0.60
+    AI_TRIAGE_MODEL_NAME: str = "pawreach-vision-safety"
+    AI_TRIAGE_MODEL_VERSION: str = "v1.0"
 
     @model_validator(mode="after")
     def validate_production_settings(self):
@@ -142,6 +154,11 @@ class Settings(BaseSettings):
                     raise ValueError(
                         "REQUIRE_FIREBASE is enabled but neither FIREBASE_CREDENTIALS_JSON nor FIREBASE_CREDENTIALS_PATH is configured."
                     )
+            # 7. AI Triage Safety: Mock provider strictly forbidden in production and staging
+            if self.AI_TRIAGE_PROVIDER.lower() == "mock":
+                raise ValueError(
+                    f"Mock AI triage provider is strictly prohibited in {env} environment."
+                )
         return self
     
     class Config:

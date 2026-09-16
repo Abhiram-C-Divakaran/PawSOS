@@ -44,7 +44,7 @@ celery -A app.tasks.celery_app.celery_app worker \
   --loglevel=INFO \
   --concurrency=1 \
   --pool=solo \
-  -Q dispatch,notifications,default &
+  -Q dispatch,notifications,ai_triage,default &
 WORKER_PID=$!
 
 # 3. Start Celery Beat scheduler

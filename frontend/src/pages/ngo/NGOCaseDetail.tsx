@@ -15,6 +15,7 @@ import { formatApiError } from '../../utils/error';
 import { MapView } from '../../components/MapView';
 import { Toast, type ToastMessage } from '../../components/Toast';
 import { ProtectedImage } from '../../components/ProtectedImage';
+import { TriageAdvisoryCard } from '../../components/TriageAdvisoryCard';
 import type { NGOResponderSummary, VeterinaryFacility } from '../../types';
 
 export const NGOCaseDetail = () => {
@@ -225,14 +226,17 @@ export const NGOCaseDetail = () => {
             Triage & Scene Intelligence
           </h2>
 
+          <TriageAdvisoryCard
+            caseId={caseData.id}
+            canRetry={true}
+            onTriageUpdated={fetchDossier}
+          />
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <span className="text-xs text-slate-400 font-semibold uppercase">Triage Evaluation</span>
-              <p className="text-[#12213A] font-bold text-base mt-1">
-                Score: {caseData.triage_score}/100 ({caseData.triage_priority})
-              </p>
-              <p className="text-xs text-slate-600 mt-1 bg-slate-50 p-3 rounded-xl border border-slate-100">
-                {caseData.triage_reason || caseData.description}
+              <span className="text-xs text-slate-400 font-semibold uppercase">Initial Condition / Reported Reason</span>
+              <p className="text-xs text-slate-600 mt-1 bg-slate-50 p-3 rounded-xl border border-slate-100 leading-relaxed">
+                {caseData.triage_reason || caseData.description || 'No additional details provided.'}
               </p>
             </div>
 

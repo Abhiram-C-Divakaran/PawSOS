@@ -82,3 +82,36 @@ class RescueTimelineResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+class RuleAssessmentDetail(BaseModel):
+    priority: RescuePriority
+    score: int
+    reasons: List[str]
+
+class AIAssessmentDetail(BaseModel):
+    status: str
+    source: str
+    suggested_priority: Optional[RescuePriority] = None
+    score: Optional[int] = None
+    confidence: Optional[float] = None
+    visible_signs: List[str] = []
+    explanation: Optional[str] = None
+    provider: Optional[str] = None
+    model_name: Optional[str] = None
+    model_version: Optional[str] = None
+    created_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+
+class TriageDetailResponse(BaseModel):
+    case_id: UUID
+    case_number: str
+    final_priority: RescuePriority
+    final_score: int
+    final_reason: str
+    rule_assessment: RuleAssessmentDetail
+    ai_assessment: AIAssessmentDetail
+    disclaimer: str = (
+        "AI visual triage provides decision-support for rescue dispatch urgency only. "
+        "It does not constitute a veterinary medical diagnosis, injury assessment, or treatment prescription."
+    )
+

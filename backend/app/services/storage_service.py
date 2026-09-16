@@ -110,6 +110,10 @@ class BaseStorageProvider(ABC):
     def get_presigned_url(self, key_or_url: str, expires_in: int = 3600) -> str:
         pass
 
+    @abstractmethod
+    def get_image_bytes(self, key_or_url: str, max_bytes: int = MAX_FILE_SIZE_BYTES) -> bytes:
+        pass
+
 class LocalStorageProvider(BaseStorageProvider):
     def __init__(self, upload_dir: str = "uploads"):
         self.upload_dir = upload_dir
@@ -157,6 +161,35 @@ class LocalStorageProvider(BaseStorageProvider):
     def get_presigned_url(self, key_or_url: str, expires_in: int = 3600) -> str:
         """For local storage, return the URL as is."""
         return key_or_url
+
+    def get_image_bytes(self, key_or_url: str, max_bytes: int = MAX_FILE_SIZE_BYTES) -> bytes:
+        """Safely load local image bytes for internal backend processing with size/integrity checks."""
+        if not key_or_url:
+            raise BadRequestException("Image key or path is required.")
+        cleaned = key_or_url.split("?")[0].strip()
+        filename = os.path.basename(cleaned)
+        filepath = os.path.join(self.upload_dir, filename)
+        if not os.path.exists(filepath):
+            raise BadRequestException(f"Image not found on storage: {filename}")
+
+        file_size = os.path.getsize(filepath)
+        if file_size > max_bytes:
+            raise BadRequestException(f"Image size ({file_size} bytes) exceeds maximum limit of {max_bytes} bytes.")
+
+        with open(filepath, "rb") as f:
+            raw = f.read(max_bytes + 1)
+        if len(raw) > max_bytes:
+            raise BadRequestException("Image file exceeds maximum allowable bytes.")
+
+        try:
+            check_img = Image.open(io.BytesIO(raw))
+            check_img.verify()
+        except Image.DecompressionBombError:
+            raise BadRequestException("Image exceeds safe decompression limits.")
+        except Exception as e:
+            raise BadRequestException(f"Invalid or corrupted image data: {e}")
+
+        return raw
 
 def normalize_image_key(raw: str | None) -> str | None:
     """
@@ -308,6 +341,40 @@ class S3StorageProvider(BaseStorageProvider):
         except Exception as e:
             logger.error(f"S3 delete error: {e}")
             return False
+
+    def get_image_bytes(self, key_or_url: str, max_bytes: int = MAX_FILE_SIZE_BYTES) -> bytes:
+        """Safely load S3 image bytes by canonical key for internal backend processing with size/integrity checks."""
+        if not key_or_url:
+            raise BadRequestException("Image key or URL is required.")
+        key = normalize_image_key(key_or_url) or key_or_url
+        if not key:
+            raise BadRequestException("Invalid S3 object key.")
+
+        try:
+            head = self.s3_client.head_object(Bucket=self.bucket, Key=key)
+            size = head.get("ContentLength", 0)
+            if size > max_bytes:
+                raise BadRequestException(f"S3 image object ({size} bytes) exceeds maximum limit of {max_bytes} bytes.")
+
+            response = self.s3_client.get_object(Bucket=self.bucket, Key=key)
+            raw = response["Body"].read(max_bytes + 1)
+            if len(raw) > max_bytes:
+                raise BadRequestException("S3 image object exceeds maximum allowable bytes.")
+        except BadRequestException:
+            raise
+        except Exception as e:
+            logger.error(f"Failed to fetch image from S3: {e}")
+            raise BadRequestException(f"Could not retrieve image from storage: {e}")
+
+        try:
+            check_img = Image.open(io.BytesIO(raw))
+            check_img.verify()
+        except Image.DecompressionBombError:
+            raise BadRequestException("Image exceeds safe decompression limits.")
+        except Exception as e:
+            raise BadRequestException(f"Invalid or corrupted image data: {e}")
+
+        return raw
 
 def get_storage_provider() -> BaseStorageProvider:
     provider = settings.STORAGE_PROVIDER.lower()

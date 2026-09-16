@@ -66,6 +66,7 @@ class RescueCase(Base):
     history = relationship("RescueStatusHistory", back_populates="rescue_case")
     assignments = relationship("RescueAssignment", back_populates="rescue_case")
     treatments = relationship("Treatment", back_populates="rescue_case")
+    triage_assessments = relationship("TriageAssessment", back_populates="rescue_case", cascade="all, delete-orphan")
 
     @property
     def image_url(self):

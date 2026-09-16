@@ -3,9 +3,10 @@ import { useParams } from 'react-router-dom';
 import api from '../services/api';
 import { formatApiError } from '../utils/error';
 import type { RescueCase, RescueTimeline } from '../types';
-import { MapPin, AlertTriangle, Clock, CheckCircle, UserCheck, ShieldAlert } from 'lucide-react';
+import { MapPin, Clock, CheckCircle, UserCheck, ShieldAlert } from 'lucide-react';
 import { MapView } from '../components/MapView';
 import { ProtectedImage } from '../components/ProtectedImage';
+import { TriageAdvisoryCard } from '../components/TriageAdvisoryCard';
 
 export const CaseTracking = () => {
   const { id } = useParams<{ id: string }>();
@@ -149,15 +150,7 @@ export const CaseTracking = () => {
             />
           </div>
           
-          <div>
-            <h3 className="font-semibold text-brand-darkNavy mb-2 flex items-center text-base">
-              <AlertTriangle className="w-4 h-4 mr-2 text-brand-coral" /> Triage Assessment
-            </h3>
-            <div className="bg-orange-50 border border-orange-100 p-3.5 rounded-lg">
-              <p className="text-xs font-bold text-orange-900 uppercase mb-1">Reason for Priority:</p>
-              <p className="text-sm text-orange-800">{rescueCase.triage_reason || 'Standard rescue protocol'}</p>
-            </div>
-          </div>
+          <TriageAdvisoryCard caseId={rescueCase.id} />
 
           {rescueCase.description && (
             <div>

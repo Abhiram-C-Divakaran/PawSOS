@@ -434,5 +434,34 @@ export interface AdoptionApplication {
   visits?: AdoptionVisit[];
 }
 
+export interface RuleAssessmentDetail {
+  priority: RescuePriority;
+  score: number;
+  reasons: string[];
+}
 
+export interface AIAssessmentDetail {
+  status: 'PENDING' | 'COMPLETED' | 'FAILED' | 'SKIPPED' | 'NOT_REQUESTED';
+  source: string;
+  suggested_priority?: RescuePriority;
+  score?: number;
+  confidence?: number;
+  visible_signs?: string[];
+  explanation?: string;
+  provider?: string;
+  model_name?: string;
+  model_version?: string;
+  created_at?: string;
+  completed_at?: string;
+}
 
+export interface TriageDetailResponse {
+  case_id: string;
+  case_number: string;
+  final_priority: RescuePriority;
+  final_score: number;
+  final_reason: string;
+  rule_assessment: RuleAssessmentDetail;
+  ai_assessment: AIAssessmentDetail;
+  disclaimer: string;
+}

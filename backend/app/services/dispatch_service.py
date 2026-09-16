@@ -790,3 +790,96 @@ class DispatchService:
             )
         )
         return results
+
+    @classmethod
+    def handle_priority_escalation(
+        cls, db: Session, case: RescueCase, new_priority: RescuePriority
+    ) -> List[RescueAssignment]:
+        """
+        Adjust active dispatch when AI visual triage escalates case priority.
+        If more offers are permitted by the higher priority, dispatches to additional
+        eligible responders without duplicating existing or previously contacted responders.
+        """
+        if case.status != RescueStatus.SEARCHING_RESPONDER:
+            return []
+
+        pending_offers = (
+            db.query(RescueAssignment)
+            .filter(
+                RescueAssignment.rescue_case_id == case.id,
+                RescueAssignment.assignment_status == AssignmentStatus.PENDING,
+            )
+            .all()
+        )
+
+        max_offers = PRIORITY_MAX_OFFERS.get(new_priority, 1)
+        needed = max_offers - len(pending_offers)
+        if needed <= 0:
+            return []
+
+        all_assignments = (
+            db.query(RescueAssignment)
+            .filter(RescueAssignment.rescue_case_id == case.id)
+            .all()
+        )
+        excluded_ids = {a.rescuer_id for a in all_assignments}
+
+        candidates = cls.find_eligible_responders(
+            db=db,
+            case=case,
+            radius_km=case.dispatch_radius_km,
+            excluded_rescuer_ids=excluded_ids,
+        )
+
+        if not candidates:
+            return []
+
+        selected = candidates[:needed]
+        now = datetime.utcnow()
+        expires_at = now + timedelta(seconds=settings.DISPATCH_OFFER_EXPIRY_SECONDS)
+        new_offers: List[RescueAssignment] = []
+
+        for user, profile, dist_km, score in selected:
+            offer = RescueAssignment(
+                rescue_case_id=case.id,
+                rescuer_id=user.id,
+                assigned_at=now,
+                offered_at=now,
+                expires_at=expires_at,
+                assignment_status=AssignmentStatus.PENDING,
+                distance_km=dist_km,
+                dispatch_score=score,
+            )
+            db.add(offer)
+            new_offers.append(offer)
+
+        db.commit()
+
+        for offer in new_offers:
+            db.refresh(offer)
+            payload = {
+                "type": "DISPATCH_OFFER",
+                "offer_id": str(offer.id),
+                "case_id": str(case.id),
+                "case_number": case.case_number,
+                "priority": new_priority.value,
+                "species": case.species,
+                "distance_km": offer.distance_km,
+                "expires_at": expires_at.isoformat(),
+                "route": "/rescuer",
+            }
+            NotificationService.notify_user(
+                db=db,
+                user_id=offer.rescuer_id,
+                title=f"🚨 Escalated {new_priority.value} Rescue Alert: {case.species}",
+                message=f"Urgent {case.species} alert escalated to {new_priority.value}! Offer expires in {settings.DISPATCH_OFFER_EXPIRY_SECONDS}s.",
+                notification_type="DISPATCH_OFFER",
+                rescue_case_id=case.id,
+                data=payload,
+            )
+
+        logger.info(
+            f"[EVENT: DISPATCH_ESCALATED] Dispatched {len(new_offers)} additional offers for escalated case {case.case_number}"
+        )
+        return new_offers
+
