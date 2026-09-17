@@ -153,7 +153,7 @@ export const TriageAdvisoryCard: React.FC<TriageAdvisoryCardProps> = ({
           >
             {final_priority} ({final_score}/100)
           </span>
-          {canRetry && (
+          {canRetry && ai_assessment?.provider !== 'disabled' && (
             <button
               onClick={handleRetry}
               disabled={retrying || isPending}
@@ -302,13 +302,17 @@ export const TriageAdvisoryCard: React.FC<TriageAdvisoryCardProps> = ({
 
             {isSkipped && (
               <p className="text-gray-600">
-                {ai_assessment.explanation || 'Visual triage is currently inactive or no image was supplied.'}
+                {ai_assessment?.provider === 'disabled'
+                  ? 'Visual urgency review is not enabled. Rule-based dispatch priority remains active.'
+                  : (ai_assessment?.explanation || 'Visual triage is currently inactive or no image was supplied.')}
               </p>
             )}
 
             {isNotRequested && (
               <p className="text-gray-600">
-                {ai_assessment.explanation || (ai_assessment?.provider === 'disabled' ? 'Visual AI triage is disabled in system configuration.' : 'Visual triage has not been requested.')}
+                {ai_assessment?.provider === 'disabled'
+                  ? 'Visual urgency review is not enabled. Rule-based dispatch priority remains active.'
+                  : (ai_assessment?.explanation || 'Visual triage has not been requested.')}
               </p>
             )}
           </div>

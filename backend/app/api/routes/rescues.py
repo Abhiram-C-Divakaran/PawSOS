@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.orm import Session
 from uuid import UUID
 from typing import List, Optional
@@ -29,6 +29,7 @@ from app.models.triage_assessment import TriageAssessment
 from app.core.permissions import RoleChecker
 from app.core.constants import UserRole, RescueStatus, AssignmentStatus
 from app.core.exceptions import NotFoundException, ConflictException, ForbiddenException, ServiceUnavailableException
+from app.core.rate_limiter import limiter
 
 from app.services.storage_service import storage_service
 from app.config import settings
@@ -309,7 +310,7 @@ def get_rescue_triage(
     )
 
     if not latest_assessment:
-        if not settings.AI_TRIAGE_ENABLED:
+        if not settings.AI_TRIAGE_ENABLED or settings.AI_TRIAGE_PROVIDER == "disabled":
             ai_detail = AIAssessmentDetail(
                 status="NOT_REQUESTED",
                 source="IMAGE_AI",
@@ -325,10 +326,10 @@ def get_rescue_triage(
             )
         else:
             ai_detail = AIAssessmentDetail(
-                status="PENDING",
+                status="NOT_REQUESTED",
                 source="IMAGE_AI",
                 provider=settings.AI_TRIAGE_PROVIDER,
-                explanation="Visual assessment queued or pending execution.",
+                explanation="Visual AI triage was not requested for this case.",
             )
     else:
         signs = []
@@ -369,7 +370,9 @@ def get_rescue_triage(
 
 
 @router.post("/{case_id}/triage/retry", response_model=dict)
+@limiter.limit("5/minute")
 def retry_rescue_triage(
+    request: Request,
     case_id: UUID,
     force: bool = Query(False, description="Force retry even if previously completed"),
     db: Session = Depends(get_db),
@@ -381,14 +384,24 @@ def retry_rescue_triage(
 
     verify_case_access(case, current_user, db)
 
+    if not settings.AI_TRIAGE_ENABLED or settings.AI_TRIAGE_PROVIDER == "disabled":
+        raise ConflictException("Visual triage is not enabled for this environment.")
+
     if not case.images:
         raise ConflictException("No evidence image attached to rescue case to assess.")
 
     image = case.images[0]
 
+    model_name = settings.AI_TRIAGE_MODEL_NAME
+    model_version = settings.AI_TRIAGE_MODEL_VERSION
+
     existing = (
         db.query(TriageAssessment)
-        .filter(TriageAssessment.rescue_case_id == case.id)
+        .filter(
+            TriageAssessment.rescue_case_id == case.id,
+            TriageAssessment.model_name == model_name,
+            TriageAssessment.model_version == model_version,
+        )
         .first()
     )
 
@@ -398,6 +411,27 @@ def retry_rescue_triage(
             "message": "Visual assessment is already completed. Use force=true to re-run.",
             "status": "COMPLETED",
         }
+
+    if not existing:
+        existing = TriageAssessment(
+            rescue_case_id=case.id,
+            animal_image_id=image.id,
+            source="IMAGE_AI",
+            status="PENDING",
+            provider=settings.AI_TRIAGE_PROVIDER,
+            model_name=model_name,
+            model_version=model_version,
+            explanation="Visual assessment queued for execution.",
+        )
+        db.add(existing)
+    else:
+        existing.status = "PENDING"
+        existing.sanitized_error_code = None
+        existing.explanation = "Visual assessment queued for execution."
+        existing.completed_at = None
+
+    db.commit()
+    db.refresh(existing)
 
     try:
         from app.tasks.ai_triage_tasks import perform_ai_triage_task
@@ -409,17 +443,17 @@ def retry_rescue_triage(
             case.case_number,
             exc_info=True,
         )
-        if existing and existing.status == "PENDING":
-            existing.status = "FAILED"
-            existing.sanitized_error_code = "PROVIDER_ERROR"
-            existing.explanation = "Visual triage service is temporarily unavailable."
-            db.commit()
+        existing.status = "FAILED"
+        existing.sanitized_error_code = "QUEUE_ERROR"
+        existing.explanation = "Visual triage service is temporarily unavailable."
+        existing.completed_at = datetime.utcnow()
+        db.commit()
         raise ServiceUnavailableException("Visual triage service is temporarily unavailable.")
 
-    if existing:
-        existing.status = "PENDING"
-        existing.completed_at = None
-        db.commit()
+    return {
+        "success": True,
+        "message": "Visual triage assessment queued for execution.",
+        "status": "PENDING",
+    }
 
-    return {"success": True, "message": "Visual triage assessment queued for execution."}
 

@@ -36,10 +36,11 @@ class VisionTriageProvider(ABC):
         pass
 
     @abstractmethod
-    def assess(self, image_bytes: bytes, context: Dict[str, Any]) -> AITriageResult:
+    def assess(self, image_bytes: bytes, context: Dict[str, Any], timeout: float = 15.0) -> AITriageResult:
         """
         Assess animal image bytes for urgency signs.
         Context may contain animal species, reported symptoms, or test parameters.
         Must NOT receive sensitive PII (reporter email/phone/name/GPS coordinates).
+        The provider implementation is responsible for enforcing the timeout at its network/client boundary.
         """
         pass

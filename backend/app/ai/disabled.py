@@ -17,5 +17,5 @@ class DisabledVisionTriageProvider(VisionTriageProvider):
     def model_version(self) -> str:
         return settings.AI_TRIAGE_MODEL_VERSION
 
-    def assess(self, image_bytes: bytes, context: Dict[str, Any]) -> AITriageResult:
+    def assess(self, image_bytes: bytes, context: Dict[str, Any], timeout: float = 15.0) -> AITriageResult:
         raise AITriageDisabledException("AI visual triage provider is currently disabled.")

@@ -6,6 +6,7 @@ from app.models.rescue_case import RescueCase
 from app.models.rescue_status_history import RescueStatusHistory
 from app.models.animal_image import AnimalImage
 from app.models.rescue_assignment import RescueAssignment
+from app.models.triage_assessment import TriageAssessment
 from app.models.user import User
 from app.core.constants import (
     RescueStatus,
@@ -138,13 +139,36 @@ class RescueService:
         DispatchService.dispatch_case(db, db_case.id)
 
         # Trigger asynchronous AI triage assessment if enabled and image attached
-        if settings.AI_TRIAGE_ENABLED and img_id:
+        if settings.AI_TRIAGE_ENABLED and settings.AI_TRIAGE_PROVIDER != "disabled" and img_id:
+            assessment = TriageAssessment(
+                rescue_case_id=db_case.id,
+                animal_image_id=img_id,
+                source="IMAGE_AI",
+                status="PENDING",
+                provider=settings.AI_TRIAGE_PROVIDER,
+                model_name=settings.AI_TRIAGE_MODEL_NAME,
+                model_version=settings.AI_TRIAGE_MODEL_VERSION,
+                explanation="Visual assessment queued for execution.",
+            )
+            db.add(assessment)
+            db.commit()
+            db.refresh(assessment)
+
             try:
                 from app.tasks.ai_triage_tasks import perform_ai_triage_task
                 perform_ai_triage_task.delay(str(db_case.id), str(img_id))
             except Exception as task_err:
                 import logging
-                logging.getLogger(__name__).warning(f"Could not enqueue AI triage task: {task_err}")
+                logging.getLogger(__name__).warning(
+                    "[AI_TRIAGE_QUEUE] Failed to enqueue visual triage for case %s: %s",
+                    db_case.case_number,
+                    type(task_err).__name__,
+                )
+                assessment.status = "FAILED"
+                assessment.sanitized_error_code = "QUEUE_ERROR"
+                assessment.explanation = "Visual triage task could not be queued."
+                assessment.completed_at = datetime.utcnow()
+                db.commit()
 
         return db_case
 

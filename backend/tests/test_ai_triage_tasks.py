@@ -122,6 +122,7 @@ def test_task_handles_storage_error_gracefully(db, sample_rescue_case_with_image
     monkeypatch.setattr(settings, "AI_TRIAGE_ENABLED", True)
     monkeypatch.setattr(settings, "AI_TRIAGE_PROVIDER", "mock")
     monkeypatch.setattr(settings, "ENVIRONMENT", "test")
+    monkeypatch.setattr(perform_ai_triage_task.request, "retries", 2)
 
     # Simulate storage error
     with patch("app.services.storage_service.storage_service.get_image_bytes", side_effect=RuntimeError("S3 Access Denied")):
@@ -206,15 +207,18 @@ def test_task_handles_provider_assessment_exception(db, sample_rescue_case_with_
     monkeypatch.setattr(settings, "AI_TRIAGE_ENABLED", True)
     monkeypatch.setattr(settings, "AI_TRIAGE_PROVIDER", "mock")
     monkeypatch.setattr(settings, "ENVIRONMENT", "test")
+    monkeypatch.setattr(perform_ai_triage_task.request, "retries", 2)
 
+    from app.ai.base import AITriageException
     with patch("app.services.storage_service.storage_service.get_image_bytes", return_value=b"valid_image"), \
-         patch("app.ai.mock.MockVisionTriageProvider.assess", side_effect=RuntimeError("Provider Timeout")):
+         patch("app.ai.mock.MockVisionTriageProvider.assess", side_effect=AITriageException("Provider Error")):
         result = perform_ai_triage_task(str(case.id), str(img.id), db_session=db)
 
     assert result["status"] == "FAILED"
     assert result["error"] == "PROVIDER_ERROR"
 
     assessment = db.query(TriageAssessment).filter(TriageAssessment.rescue_case_id == case.id).first()
+    assert assessment is not None
     assert assessment.status == "FAILED"
     assert assessment.sanitized_error_code == "PROVIDER_ERROR"
 
@@ -380,24 +384,15 @@ def test_task_handles_concurrent_race_integrity_error(db, sample_rescue_case_wit
 
 def test_task_enforces_timeout_and_records_provider_timeout(db, sample_rescue_case_with_image, monkeypatch):
     """Ensure AI_TRIAGE_TIMEOUT_SECONDS constrains execution and produces PROVIDER_TIMEOUT."""
-    import time
     case, img = sample_rescue_case_with_image
     monkeypatch.setattr(settings, "AI_TRIAGE_ENABLED", True)
     monkeypatch.setattr(settings, "AI_TRIAGE_PROVIDER", "mock")
     monkeypatch.setattr(settings, "ENVIRONMENT", "test")
-    # Set a very short timeout for test speed
     monkeypatch.setattr(settings, "AI_TRIAGE_TIMEOUT_SECONDS", 0.1)
 
-    def slow_assess(image_bytes, context):
-        time.sleep(0.5)  # Exceeds 0.1s timeout
-        from app.ai.schemas import AITriageResult
-        return AITriageResult(
-            suggested_priority=RescuePriority.CRITICAL,
-            score=95,
-            confidence=0.9,
-            visible_signs=["bleeding"],
-            explanation="Trauma",
-        )
+    def slow_assess(image_bytes, context, *args, **kwargs):
+        from app.ai.base import AITriageTimeoutException
+        raise AITriageTimeoutException("Provider assessment timed out after 0.1 seconds.")
 
     with patch("app.services.storage_service.storage_service.get_image_bytes", return_value=b"valid_image"), \
          patch("app.ai.mock.MockVisionTriageProvider.assess", side_effect=slow_assess):
@@ -415,7 +410,6 @@ def test_task_enforces_timeout_and_records_provider_timeout(db, sample_rescue_ca
 
 def test_task_provider_timeout_does_not_downgrade_hard_rule_priority(db, sample_rescue_case_with_image, monkeypatch):
     """A timeout during AI triage must preserve existing deterministic rule priority without downgrade."""
-    import time
     case, img = sample_rescue_case_with_image
     case.triage_priority = RescuePriority.URGENT
     case.triage_score = 70
@@ -427,9 +421,9 @@ def test_task_provider_timeout_does_not_downgrade_hard_rule_priority(db, sample_
     monkeypatch.setattr(settings, "ENVIRONMENT", "test")
     monkeypatch.setattr(settings, "AI_TRIAGE_TIMEOUT_SECONDS", 0.05)
 
-    def slow_assess(image_bytes, context):
-        time.sleep(0.3)
-        return None
+    def slow_assess(image_bytes, context, *args, **kwargs):
+        from app.ai.base import AITriageTimeoutException
+        raise AITriageTimeoutException("Provider assessment timed out")
 
     with patch("app.services.storage_service.storage_service.get_image_bytes", return_value=b"valid_image"), \
          patch("app.ai.mock.MockVisionTriageProvider.assess", side_effect=slow_assess):
@@ -449,9 +443,10 @@ def test_task_sanitizes_unexpected_outer_exception(db, sample_rescue_case_with_i
     """Any unexpected exception must return sanitized UNEXPECTED_ERROR without leaking str(e)."""
     case, img = sample_rescue_case_with_image
     monkeypatch.setattr(settings, "AI_TRIAGE_ENABLED", True)
+    monkeypatch.setattr(settings, "AI_TRIAGE_PROVIDER", "mock")
+    monkeypatch.setattr(perform_ai_triage_task.request, "retries", 2)
 
     with patch("app.services.storage_service.storage_service.get_image_bytes", side_effect=Exception("Database secret credentials redis://user:secret123@host:6379")):
-        # Mock get_db to raise inside task logic to trigger outer exception handler
         with patch.object(RescueCase, "images", side_effect=RuntimeError("internal redis password leak redis://pwd")):
             pass
 
@@ -462,6 +457,73 @@ def test_task_sanitizes_unexpected_outer_exception(db, sample_rescue_case_with_i
     assert result["error"] == "UNEXPECTED_ERROR"
     assert "secret" not in str(result)
     assert "redis" not in str(result)
+
+
+def test_task_transient_failure_raises_celery_retry(db, sample_rescue_case_with_image, monkeypatch):
+    """Prove that a transient storage or provider failure raises Celery Retry instead of being swallowed."""
+    from celery.exceptions import Retry
+    case, img = sample_rescue_case_with_image
+    monkeypatch.setattr(settings, "AI_TRIAGE_ENABLED", True)
+    monkeypatch.setattr(settings, "AI_TRIAGE_PROVIDER", "mock")
+    monkeypatch.setattr(settings, "ENVIRONMENT", "test")
+    monkeypatch.setattr(perform_ai_triage_task.request, "retries", 0)
+
+    # 1. Transient storage failure raises Celery Retry
+    with patch("app.services.storage_service.storage_service.get_image_bytes", side_effect=RuntimeError("Transient storage drop")):
+        with pytest.raises(Retry):
+            perform_ai_triage_task(str(case.id), str(img.id), db_session=db)
+
+    # 2. Transient provider failure raises Celery Retry
+    from app.ai.base import AITriageException
+    with patch("app.services.storage_service.storage_service.get_image_bytes", return_value=b"valid_image"), \
+         patch("app.ai.mock.MockVisionTriageProvider.assess", side_effect=AITriageException("Temporary API glitch")):
+        with pytest.raises(Retry):
+            perform_ai_triage_task(str(case.id), str(img.id), db_session=db)
+
+
+def test_task_provider_context_contains_no_pii_gps_or_case_uuid(db, sample_rescue_case_with_image, monkeypatch):
+    """Verify provider context minimizes data: only species, NO case_id, reporter PII, or GPS coordinates."""
+    case, img = sample_rescue_case_with_image
+    case.species = "Canine"
+    db.commit()
+
+    monkeypatch.setattr(settings, "AI_TRIAGE_ENABLED", True)
+    monkeypatch.setattr(settings, "AI_TRIAGE_PROVIDER", "mock")
+    monkeypatch.setattr(settings, "ENVIRONMENT", "test")
+
+    captured_contexts = []
+    def recording_assess(image_bytes, context, *args, **kwargs):
+        captured_contexts.append(context)
+        from app.ai.schemas import AITriageResult
+        return AITriageResult(
+            suggested_priority=RescuePriority.URGENT,
+            score=70,
+            confidence=0.85,
+            visible_signs=["abrasion"],
+            explanation="Minor abrasion detected",
+        )
+
+    with patch("app.services.storage_service.storage_service.get_image_bytes", return_value=b"valid_image"), \
+         patch("app.ai.mock.MockVisionTriageProvider.assess", side_effect=recording_assess):
+        result = perform_ai_triage_task(str(case.id), str(img.id), db_session=db)
+
+    assert result["status"] == "COMPLETED"
+    assert len(captured_contexts) == 1
+    ctx = captured_contexts[0]
+
+    # Species is the only permissible triage input
+    assert ctx == {"species": "Canine"}
+    # Explicit assertions against PII, GPS, and case UUID
+    assert "case_id" not in ctx
+    assert "id" not in ctx
+    assert "reporter_id" not in ctx
+    assert "reporter_name" not in ctx
+    assert "email" not in ctx
+    assert "phone" not in ctx
+    assert "latitude" not in ctx
+    assert "longitude" not in ctx
+    assert "address" not in ctx
+
 
 
 

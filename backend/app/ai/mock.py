@@ -21,11 +21,14 @@ class MockVisionTriageProvider(VisionTriageProvider):
     def model_version(self) -> str:
         return "test-v1.0"
 
-    def assess(self, image_bytes: bytes, context: Dict[str, Any]) -> AITriageResult:
+    def assess(self, image_bytes: bytes, context: Dict[str, Any], timeout: float = 15.0) -> AITriageResult:
+        mock_delay = context.get("mock_delay", 0)
+        if context.get("mock_timeout") or mock_delay > timeout:
+            raise AITriageTimeoutException(
+                f"Simulated provider timeout for test assertion (delay {mock_delay}s > timeout {timeout}s)."
+            )
         if context.get("mock_fail"):
             raise AITriageException("Simulated provider failure for test assertion.")
-        if context.get("mock_timeout"):
-            raise AITriageTimeoutException("Simulated provider timeout for test assertion.")
 
         suggested = context.get("mock_priority", RescuePriority.URGENT)
         confidence = float(context.get("mock_confidence", 0.88))

@@ -179,7 +179,7 @@ describe('TriageAdvisoryCard Component', () => {
     });
   });
 
-  it('renders disabled / not requested state without active analyzing animation when AI is disabled', async () => {
+  it('renders disabled / not requested state without active analyzing animation and hides retry when AI is disabled', async () => {
     const mockTriage: TriageDetailResponse = {
       case_id: 'test-case-disabled',
       case_number: 'PR-2026-300',
@@ -202,15 +202,70 @@ describe('TriageAdvisoryCard Component', () => {
 
     (api.get as any).mockResolvedValueOnce({ data: mockTriage });
 
-    render(<TriageAdvisoryCard caseId="test-case-disabled" />);
+    render(<TriageAdvisoryCard caseId="test-case-disabled" canRetry={true} />);
 
     await waitFor(() => {
-      expect(screen.getByText(/Visual AI triage is disabled in system configuration/i)).toBeInTheDocument();
+      expect(
+        screen.getByText(/Visual urgency review is not enabled. Rule-based dispatch priority remains active./i)
+      ).toBeInTheDocument();
     });
 
     expect(screen.getByText('Disabled')).toBeInTheDocument();
     expect(screen.queryByText(/Analyzing attached image/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Pending/i)).not.toBeInTheDocument();
+    // Retry button MUST NOT be displayed when provider is disabled
+    expect(screen.queryByTitle(/Re-run visual triage assessment/i)).not.toBeInTheDocument();
+  });
+
+  it('displays safe user-facing message on API 503 retry failure', async () => {
+    const mockTriage: TriageDetailResponse = {
+      case_id: 'test-case-fail-503',
+      case_number: 'PR-2026-503',
+      final_priority: 'URGENT',
+      final_score: 70,
+      final_reason: 'Severe injury',
+      rule_assessment: {
+        priority: 'URGENT',
+        score: 70,
+        reasons: ['Severe injury'],
+      },
+      ai_assessment: {
+        status: 'FAILED',
+        source: 'IMAGE_AI',
+        provider: 'mock',
+        explanation: 'Visual triage service is temporarily unavailable.',
+      },
+      disclaimer: 'Decision-support only.',
+    };
+
+    (api.get as any).mockResolvedValue({ data: mockTriage });
+    (api.post as any).mockRejectedValueOnce({
+      response: {
+        status: 503,
+        data: {
+          success: false,
+          error: {
+            code: 'SERVICE_UNAVAILABLE',
+            message: 'Visual triage service is temporarily unavailable.',
+          },
+        },
+      },
+    });
+
+    render(<TriageAdvisoryCard caseId="test-case-fail-503" canRetry={true} />);
+
+    await waitFor(() => {
+      expect(screen.getByTitle(/Re-run visual triage assessment/i)).toBeInTheDocument();
+    });
+
+    const retryBtn = screen.getByTitle(/Re-run visual triage assessment/i);
+    fireEvent.click(retryBtn);
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(/Visual triage service is temporarily unavailable/i)
+      ).toBeInTheDocument();
+    });
   });
 });
 

@@ -90,7 +90,7 @@ python scripts/seed_staging.py
 uvicorn app.main:app --reload --port 8000
 
 # In a separate terminal, start the Celery Worker & Beat scheduler (local development only)
-# (Note: -B embedded beat scheduler is for local development only; staging and production run dedicated worker and beat services)
+# (Note: In the free-tier staging deployment on Render, FastAPI, the Celery solo worker, and Celery Beat run combined in a single free web container via ./scripts/start_free_render.sh)
 celery -A app.tasks.celery_app worker -B --loglevel=info
 ```
 
@@ -169,9 +169,10 @@ PawReach is designed to run completely within free-tier cloud limits for portfol
 * **Push Notifications**: Firebase Cloud Messaging (Optional, `REQUIRE_FIREBASE=false`)
 
 > [!NOTE]
-> **Deployment Status & Staging Baseline**:
-> - **Live Staging Baseline**: Verified green on hosted infrastructure at baseline commit [`1b2ee17`](https://github.com/Abhiram-C-Divakaran/PawSOS/commit/1b2ee17064117331ab3e947a3e9dac0a29d00666) (GitHub Actions Run [35089342305](https://github.com/Abhiram-C-Divakaran/PawSOS/actions/runs/35089342305)). See [docs/LIVE_STAGING_VALIDATION.md](docs/LIVE_STAGING_VALIDATION.md).
-> - **Phase 3B Closure Status**: **`PHASE 3B CLOSURE CODE READY — LIVE STAGING REVALIDATION REQUIRED`**. All Phase 3B features (hybrid triage fusion engine, tenant-isolated retry authorization, scoped alerts, DB uniqueness, Render deploy hook diagnostics) are fully verified in CI test suites. Live staging rollout is scheduled for revalidation on the next deployment run.
+> **Deployment Status & Staging Baselines**:
+> - **Historical Staging Baseline (Phase 3A)**: Verified green on hosted infrastructure at baseline commit [`1b2ee17`](https://github.com/Abhiram-C-Divakaran/PawSOS/commit/1b2ee17064117331ab3e947a3e9dac0a29d00666) (GitHub Actions Run [35089342305](https://github.com/Abhiram-C-Divakaran/PawSOS/actions/runs/35089342305)).
+> - **Historical Staging Baseline (Phase 3B)**: Verified green on hosted infrastructure at commit [`baf39e3`](https://github.com/Abhiram-C-Divakaran/PawSOS/commit/baf39e3bc19d21cc423186ed78bca13c3dc569c3) (GitHub Actions Run [35186238652](https://github.com/Abhiram-C-Divakaran/PawSOS/actions/runs/35186238652)). See [docs/LIVE_STAGING_VALIDATION.md](docs/LIVE_STAGING_VALIDATION.md).
+> - **Current Status**: **`PHASE 3B FINAL CLEANUP CODE READY — LIVE STAGING REVALIDATION REQUIRED`**. All Phase 3B hardening fixes (truthful durable triage state, safe queue failure handling, HTTP 503 retry error sanitization, provider client-side timeout enforcement, data minimization, Celery bounded retry propagation) are verified locally and in CI. Live staging rollout is scheduled for revalidation on the next deployment run.
 
 > [!WARNING]
 > **Free-Tier Sleep Notice**:
