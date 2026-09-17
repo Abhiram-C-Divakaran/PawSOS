@@ -148,8 +148,63 @@ The frontend normalization layer (`frontend/src/utils/apiConfig.ts`) automatical
 | **Trigger Staging Cloud Deployment** | Completed | `SUCCESS` | Render deployment webhook dispatched for ref `4e94602` |
 | **Await Deployment & Run Staging Smoke Tests** | Completed | `SUCCESS` | Live Render API verified deployed SHA `4e94602`, automated smoke suite passed |
 
+---
+
+## 7. Staging Celery Worker Heartbeat Recovery & Readiness Hardening Validation Record
+
+* **Verification Date**: September 18, 2026
+* **Target Environment**: Staging (Free Cloud Demo)
+* **Authoritative Git Commit**: `53f26260d7d393d9721c6246d37d3a382caa5e76`
+* **Commit Message**: `fix(deploy): initialize supervisor termination state in start_free_render.sh`
+* **GitHub Actions Deployment Workflow**: `Staging Deployment & Smoke Tests`
+* **Workflow Run ID**: `35280706164`
+* **Workflow Overall Conclusion**: `SUCCESS` (All jobs green)
+* **Preceding CI Workflow**: `PawReach CI / CD Pipeline` (Run ID `35280290241`, `SUCCESS`)
+
+### Job Execution Summary
+
+| Job | Status | Conclusion | Note |
+|-----|--------|------------|------|
+| **Check Deployment Prerequisites** | Completed | `SUCCESS` | Staging secrets and environment validated |
+| **Trigger Staging Cloud Deployment** | Completed | `SUCCESS` | Render deploy hook triggered with ref `53f2626` |
+| **Await Deployment & Run Staging Smoke Tests** | Completed | `SUCCESS` | Exact SHA `53f2626` confirmed, automated smoke test suite passed |
+
+### Live Readiness Verification
+
+* **Endpoint**: `GET /api/v1/health/ready`
+* **Status**: `HTTP 200 OK`
+* **Payload**:
+```json
+{
+  "status": "ready",
+  "environment": "staging",
+  "services": {
+    "database": "healthy",
+    "postgis": "healthy",
+    "redis": "healthy",
+    "celery": "healthy",
+    "storage": "healthy",
+    "firebase": "unconfigured",
+    "ai_triage": "disabled"
+  },
+  "checks": {
+    "database": "connected",
+    "postgis": "available",
+    "redis": "connected",
+    "worker": "active",
+    "storage": "healthy",
+    "firebase": "unconfigured",
+    "ai_triage": "disabled",
+    "worker_heartbeat_age_seconds": 35.8
+  }
+}
+```
+
+---
+
 > [!NOTE]
-> **Operational Status**: **`PHASE 3B FINAL CLEANUP — LIVE STAGING VALIDATED ✅`**.
-> All Phase 3B correctness, durable state, queue resilience, HTTP 503 retry error sanitization, provider socket timeout enforcement, Celery bounded retry semantics, and data minimization fixes are live in staging and validated against hosted PostgreSQL/PostGIS, Upstash Redis, and Supabase Storage.
+> **Operational Status**: **`STAGING CELERY WORKER HEARTBEAT RECOVERY — LIVE STAGING VALIDATED ✅`**.
+> Celery worker and beat tasks are unified on the `default` queue, canonical Redis URL normalization is enforced across Celery broker/backend, health readiness, and heartbeat tasks, the combined process supervisor in `scripts/start_free_render.sh` actively supervises Worker, Beat, and Uvicorn with fail-closed non-zero exit, readiness exposes safe heartbeat age diagnostics, and automated smoke test suite passed with HTTP 200 `ready` and `worker=active`.
+
 
 
