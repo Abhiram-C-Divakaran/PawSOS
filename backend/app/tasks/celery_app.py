@@ -62,13 +62,6 @@ celery_app = Celery(
 
 celery_app.conf.update(
     task_default_queue="default",
-    task_routes={
-        "app.tasks.dispatch_tasks.dispatch_case_task": {"queue": "dispatch"},
-        "app.tasks.dispatch_tasks.expire_dispatch_offers_task": {"queue": "dispatch"},
-        "app.tasks.dispatch_tasks.worker_heartbeat_task": {"queue": "default"},
-        "app.tasks.notification_tasks.send_push_notification_task": {"queue": "notifications"},
-        "app.tasks.ai_triage_tasks.perform_ai_triage_task": {"queue": "ai_triage"},
-    },
     task_serializer="json",
     accept_content=["json"],
     result_serializer="json",
@@ -80,7 +73,7 @@ celery_app.conf.update(
         "expire-dispatch-offers": {
             "task": "app.tasks.dispatch_tasks.expire_dispatch_offers_task",
             "schedule": float(settings.DISPATCH_BEAT_INTERVAL_SECONDS),
-            "options": {"queue": "dispatch"},
+            "options": {"queue": "default"},
         },
         "worker-heartbeat": {
             "task": "app.tasks.dispatch_tasks.worker_heartbeat_task",

@@ -79,17 +79,11 @@ class TestWorkerHeartbeatTask:
     def test_celery_task_routing_configuration(self):
         """Verify Celery task queues route deterministically to worker queues."""
         assert celery_app.conf.task_default_queue == "default"
-        routes = celery_app.conf.task_routes
-        assert routes["app.tasks.dispatch_tasks.worker_heartbeat_task"]["queue"] == "default"
-        assert routes["app.tasks.dispatch_tasks.expire_dispatch_offers_task"]["queue"] == "dispatch"
-        assert routes["app.tasks.dispatch_tasks.dispatch_case_task"]["queue"] == "dispatch"
-        assert routes["app.tasks.notification_tasks.send_push_notification_task"]["queue"] == "notifications"
-        assert routes["app.tasks.ai_triage_tasks.perform_ai_triage_task"]["queue"] == "ai_triage"
 
         # Check beat schedule queues
         beat = celery_app.conf.beat_schedule
         assert beat["worker-heartbeat"]["options"]["queue"] == "default"
-        assert beat["expire-dispatch-offers"]["options"]["queue"] == "dispatch"
+        assert beat["expire-dispatch-offers"]["options"]["queue"] == "default"
 
 
 class TestHealthReadinessWorkerSemantics:
