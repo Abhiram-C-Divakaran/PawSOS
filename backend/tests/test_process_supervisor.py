@@ -133,3 +133,20 @@ done
         finally:
             if os.path.exists(script_path):
                 os.remove(script_path)
+
+    def test_start_free_render_script_syntax_and_variables(self):
+        """Validate that the actual scripts/start_free_render.sh passes bash syntax check and has TERMINATING initialized."""
+        bash = get_bash_executable()
+        repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+        script_path = os.path.join(repo_root, "scripts", "start_free_render.sh")
+        assert os.path.exists(script_path), f"Script not found at {script_path}"
+
+        # 1. Syntax check
+        res = subprocess.run([bash, "-n", script_path], capture_output=True, text=True)
+        assert res.returncode == 0, f"Syntax error in {script_path}: {res.stderr}"
+
+        # 2. Variable initialization check
+        with open(script_path, "r", encoding="utf-8") as f:
+            content = f.read()
+        assert "TERMINATING=0" in content, "TERMINATING must be explicitly initialized to 0"
+

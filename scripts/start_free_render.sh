@@ -15,6 +15,7 @@ rm -f /tmp/celerybeat.pid
 WORKER_PID=""
 BEAT_PID=""
 UVICORN_PID=""
+TERMINATING=0
 
 # Cleanup function to terminate all child processes cleanly on container stop or failure
 cleanup() {
@@ -106,7 +107,7 @@ done
 
 # 6. Active process supervision loop
 echo "[start_free_render] All processes verified healthy. Entering process supervisor loop..."
-while [ "$TERMINATING" -eq 0 ]; do
+while [ "${TERMINATING:-0}" -eq 0 ]; do
     if ! kill -0 "$WORKER_PID" 2>/dev/null; then
         set +e
         wait "$WORKER_PID" 2>/dev/null
