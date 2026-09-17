@@ -126,6 +126,9 @@ export const TriageAdvisoryCard: React.FC<TriageAdvisoryCardProps> = ({
   }
 
   const { rule_assessment, ai_assessment, final_priority, final_score, final_reason } = triage;
+  const rulePriority = rule_assessment?.priority || final_priority || 'GENERAL';
+  const ruleScore = rule_assessment?.score ?? final_score ?? 0;
+  const ruleReasons = rule_assessment?.reasons ?? [];
   const isPending = ai_assessment?.status === 'PENDING' && ai_assessment?.provider !== 'disabled';
   const isCompleted = ai_assessment?.status === 'COMPLETED';
   const isFailed = ai_assessment?.status === 'FAILED';
@@ -183,22 +186,22 @@ export const TriageAdvisoryCard: React.FC<TriageAdvisoryCardProps> = ({
             </span>
             <span
               className={`text-[10px] font-bold px-2 py-0.5 rounded border ${getPriorityBadgeClass(
-                rule_assessment.priority
+                rulePriority
               )}`}
             >
-              {rule_assessment.priority}
+              {rulePriority}
             </span>
           </div>
 
           <div className="text-xs text-gray-600 space-y-1.5">
             <p>
-              <span className="font-semibold text-gray-700">Calculated Score:</span> {rule_assessment.score} / 100
+              <span className="font-semibold text-gray-700">Calculated Score:</span> {ruleScore} / 100
             </p>
             <div>
               <span className="font-semibold text-gray-700 block mb-1">Reported Factors:</span>
-              {rule_assessment.reasons.length > 0 ? (
+              {ruleReasons.length > 0 ? (
                 <ul className="list-disc pl-4 space-y-0.5 text-gray-600">
-                  {rule_assessment.reasons.map((r, idx) => (
+                  {ruleReasons.map((r, idx) => (
                     <li key={idx}>{r}</li>
                   ))}
                 </ul>
