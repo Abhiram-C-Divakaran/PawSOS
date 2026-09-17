@@ -7,6 +7,7 @@ from app.models.triage_assessment import TriageAssessment
 from app.core.constants import RescuePriority, RescueStatus
 from app.core.security import create_access_token
 from app.tasks.celery_app import celery_app
+from app.config import settings
 
 # Set Celery to eager mode for API tests
 celery_app.conf.task_always_eager = True
@@ -348,5 +349,163 @@ def test_retry_triage_super_admin_global_success(client, db, citizen_user, admin
         data = res.json()
         assert data["success"] is True
         mock_delay.assert_called_once()
+
+
+def test_get_triage_ai_disabled_with_image_returns_not_requested(client, db, citizen_user, test_org, citizen_token, monkeypatch):
+    """When AI is disabled, GET triage returns NOT_REQUESTED even if case has an image."""
+    monkeypatch.setattr(settings, "AI_TRIAGE_ENABLED", False)
+
+    case = RescueCase(
+        case_number="PR-AI-DIS-01",
+        reporter_id=citizen_user.id,
+        organization_id=test_org.id,
+        species="Dog",
+        latitude=19.0760,
+        longitude=72.8777,
+        status=RescueStatus.SEARCHING_RESPONDER,
+    )
+    db.add(case)
+    db.commit()
+
+    img = AnimalImage(
+        rescue_case_id=case.id,
+        image_url="rescues/dog_ai_dis.jpg",
+        image_type="REPORT",
+        uploaded_by=citizen_user.id,
+    )
+    db.add(img)
+    db.commit()
+
+    res = client.get(
+        f"/api/v1/rescues/{case.id}/triage",
+        headers={"Authorization": f"Bearer {citizen_token}"}
+    )
+    assert res.status_code == 200
+    ai = res.json()["ai_assessment"]
+    assert ai["status"] == "NOT_REQUESTED"
+    assert ai["provider"] == "disabled"
+    assert "disabled in system configuration" in ai["explanation"]
+
+
+def test_get_triage_ai_disabled_without_image_returns_not_requested(client, db, citizen_user, test_org, citizen_token, monkeypatch):
+    """When AI is disabled and no image exists, GET triage returns NOT_REQUESTED."""
+    monkeypatch.setattr(settings, "AI_TRIAGE_ENABLED", False)
+
+    case = RescueCase(
+        case_number="PR-AI-DIS-02",
+        reporter_id=citizen_user.id,
+        organization_id=test_org.id,
+        species="Cat",
+        latitude=19.0760,
+        longitude=72.8777,
+        status=RescueStatus.SEARCHING_RESPONDER,
+    )
+    db.add(case)
+    db.commit()
+
+    res = client.get(
+        f"/api/v1/rescues/{case.id}/triage",
+        headers={"Authorization": f"Bearer {citizen_token}"}
+    )
+    assert res.status_code == 200
+    ai = res.json()["ai_assessment"]
+    assert ai["status"] == "NOT_REQUESTED"
+    assert ai["provider"] == "disabled"
+
+
+def test_get_triage_ai_enabled_with_image_returns_pending(client, db, citizen_user, test_org, citizen_token, monkeypatch):
+    """When AI is enabled and an image exists without assessment, returns PENDING."""
+    monkeypatch.setattr(settings, "AI_TRIAGE_ENABLED", True)
+    monkeypatch.setattr(settings, "AI_TRIAGE_PROVIDER", "mock")
+
+    case = RescueCase(
+        case_number="PR-AI-EN-01",
+        reporter_id=citizen_user.id,
+        organization_id=test_org.id,
+        species="Dog",
+        latitude=19.0760,
+        longitude=72.8777,
+        status=RescueStatus.SEARCHING_RESPONDER,
+    )
+    db.add(case)
+    db.commit()
+
+    img = AnimalImage(
+        rescue_case_id=case.id,
+        image_url="rescues/dog_ai_en.jpg",
+        image_type="REPORT",
+        uploaded_by=citizen_user.id,
+    )
+    db.add(img)
+    db.commit()
+
+    res = client.get(
+        f"/api/v1/rescues/{case.id}/triage",
+        headers={"Authorization": f"Bearer {citizen_token}"}
+    )
+    assert res.status_code == 200
+    ai = res.json()["ai_assessment"]
+    assert ai["status"] == "PENDING"
+    assert ai["provider"] == "mock"
+
+
+def test_retry_triage_enqueue_failure_returns_503_and_sanitizes_error(client, case_with_completed_triage, ngo_admin_token):
+    """When enqueueing task fails, endpoint returns 503 with sanitized message and leaks no secrets."""
+    case, _ = case_with_completed_triage
+    with patch(
+        "app.tasks.ai_triage_tasks.perform_ai_triage_task.delay",
+        side_effect=Exception("Redis connection refused redis://admin:super_secret_redis_pass@upstash.io:6379")
+    ):
+        res = client.post(
+            f"/api/v1/rescues/{case.id}/triage/retry?force=true",
+            headers={"Authorization": f"Bearer {ngo_admin_token}"}
+        )
+        assert res.status_code == 503
+        data = res.json()
+        # Ensure secret and raw exception are never leaked
+        assert "super_secret_redis_pass" not in str(data)
+        assert "Redis connection refused" not in str(data)
+        assert "Visual triage service is temporarily unavailable." in str(data)
+
+
+def test_retry_triage_enqueue_failure_preserves_db_consistency(client, db, case_with_completed_triage, ngo_admin_token):
+    """Enqueue failure must not leave existing assessment falsely in PENDING state."""
+    case, _ = case_with_completed_triage
+
+    # Case 1: Assessment was COMPLETED, force retry enqueue fails -> remains COMPLETED
+    assessment = db.query(TriageAssessment).filter(TriageAssessment.rescue_case_id == case.id).first()
+    assert assessment.status == "COMPLETED"
+
+    with patch(
+        "app.tasks.ai_triage_tasks.perform_ai_triage_task.delay",
+        side_effect=Exception("Broker unreachable")
+    ):
+        res = client.post(
+            f"/api/v1/rescues/{case.id}/triage/retry?force=true",
+            headers={"Authorization": f"Bearer {ngo_admin_token}"}
+        )
+        assert res.status_code == 503
+
+    db.refresh(assessment)
+    assert assessment.status == "COMPLETED"  # NOT mutated to PENDING
+
+    # Case 2: Assessment was previously PENDING, retry enqueue fails -> transitioned to FAILED
+    assessment.status = "PENDING"
+    db.commit()
+
+    with patch(
+        "app.tasks.ai_triage_tasks.perform_ai_triage_task.delay",
+        side_effect=Exception("Broker down")
+    ):
+        res2 = client.post(
+            f"/api/v1/rescues/{case.id}/triage/retry?force=true",
+            headers={"Authorization": f"Bearer {ngo_admin_token}"}
+        )
+        assert res2.status_code == 503
+
+    db.refresh(assessment)
+    assert assessment.status == "FAILED"  # NOT falsely left in PENDING
+    assert assessment.sanitized_error_code == "PROVIDER_ERROR"
+
 
 

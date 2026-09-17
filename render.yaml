@@ -9,6 +9,8 @@ services:
     startCommand: ./scripts/start_free_render.sh
     healthCheckPath: /api/v1/health
     envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.14"
       - key: ENVIRONMENT
         value: staging
       - key: PROCESS_TYPE

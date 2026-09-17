@@ -126,10 +126,11 @@ export const TriageAdvisoryCard: React.FC<TriageAdvisoryCardProps> = ({
   }
 
   const { rule_assessment, ai_assessment, final_priority, final_score, final_reason } = triage;
-  const isPending = ai_assessment?.status === 'PENDING';
+  const isPending = ai_assessment?.status === 'PENDING' && ai_assessment?.provider !== 'disabled';
   const isCompleted = ai_assessment?.status === 'COMPLETED';
   const isFailed = ai_assessment?.status === 'FAILED';
   const isSkipped = ai_assessment?.status === 'SKIPPED';
+  const isNotRequested = ai_assessment?.status === 'NOT_REQUESTED' || (ai_assessment?.status === 'PENDING' && ai_assessment?.provider === 'disabled');
   const confidencePct = ai_assessment?.confidence ? Math.round(ai_assessment.confidence * 100) : null;
 
   return (
@@ -237,6 +238,11 @@ export const TriageAdvisoryCard: React.FC<TriageAdvisoryCardProps> = ({
                 Skipped
               </span>
             )}
+            {isNotRequested && (
+              <span className="inline-flex items-center text-[10px] font-semibold px-2 py-0.5 rounded bg-gray-100 text-gray-700 border border-gray-200">
+                {ai_assessment?.provider === 'disabled' ? 'Disabled' : 'Not Requested'}
+              </span>
+            )}
           </div>
 
           <div className="text-xs space-y-2">
@@ -297,6 +303,12 @@ export const TriageAdvisoryCard: React.FC<TriageAdvisoryCardProps> = ({
             {isSkipped && (
               <p className="text-gray-600">
                 {ai_assessment.explanation || 'Visual triage is currently inactive or no image was supplied.'}
+              </p>
+            )}
+
+            {isNotRequested && (
+              <p className="text-gray-600">
+                {ai_assessment.explanation || (ai_assessment?.provider === 'disabled' ? 'Visual AI triage is disabled in system configuration.' : 'Visual triage has not been requested.')}
               </p>
             )}
           </div>

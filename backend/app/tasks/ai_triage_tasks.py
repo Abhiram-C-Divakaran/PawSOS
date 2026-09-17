@@ -1,6 +1,7 @@
 import json
 import logging
 import uuid
+import concurrent.futures
 from datetime import datetime
 from sqlalchemy.exc import IntegrityError
 from app.tasks.celery_app import celery_app
@@ -15,10 +16,31 @@ from app.services.storage_service import storage_service
 from app.services.notification_service import NotificationService
 from app.ai.factory import get_vision_triage_provider
 from app.ai.fusion import HybridTriageFusionEngine
-from app.ai.base import AITriageDisabledException
+from app.ai.base import AITriageDisabledException, AITriageTimeoutException
 from app.config import settings
 
 logger = logging.getLogger(__name__)
+
+def run_provider_with_timeout(provider, image_bytes: bytes, context: dict, timeout_seconds: float):
+    """
+    Execute provider.assess with real timeout enforcement using ThreadPoolExecutor.
+    Guarantees cross-platform timeout enforcement without crashing Celery --pool=solo workers.
+    """
+    executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+    future = executor.submit(provider.assess, image_bytes, context)
+    try:
+        return future.result(timeout=timeout_seconds)
+    except concurrent.futures.TimeoutError:
+        executor.shutdown(wait=False, cancel_futures=True)
+        raise AITriageTimeoutException(
+            f"Provider assessment timed out after {timeout_seconds} seconds."
+        )
+    except Exception:
+        executor.shutdown(wait=False)
+        raise
+    else:
+        executor.shutdown(wait=False)
+
 
 @celery_app.task(
     name="app.tasks.ai_triage_tasks.perform_ai_triage_task",
@@ -45,14 +67,14 @@ def perform_ai_triage_task(self, case_id_str: str, image_id_str: str, db_session
         case = db.query(RescueCase).filter(RescueCase.id == case_id).first()
         if not case:
             logger.warning(f"[AI_TRIAGE_TASK] Rescue case {case_id_str} not found. Aborting.")
-            return {"status": "ABORTED", "reason": "Case not found"}
+            return {"status": "ABORTED", "reason": "CASE_NOT_FOUND"}
 
         image = db.query(AnimalImage).filter(AnimalImage.id == image_id).first() if image_id else None
         if image and image.rescue_case_id != case.id:
             logger.warning(
                 f"[AI_TRIAGE_TASK] Image {image_id_str} does not belong to case {case_id_str}. Aborting."
             )
-            return {"status": "ABORTED", "reason": "Image case mismatch"}
+            return {"status": "ABORTED", "reason": "IMAGE_CASE_MISMATCH"}
 
         # Check feature flag
         if not settings.AI_TRIAGE_ENABLED:
@@ -159,13 +181,13 @@ def perform_ai_triage_task(self, case_id_str: str, image_id_str: str, db_session
         try:
             image_bytes = storage_service.get_image_bytes(image.image_url)
         except Exception as img_err:
-            logger.error(f"[AI_TRIAGE_TASK] Could not load image bytes for case={case.case_number}: {img_err}")
+            logger.error(f"[AI_TRIAGE_TASK] Could not load image bytes for case={case.case_number}: {type(img_err).__name__}")
             assessment.status = "FAILED"
             assessment.sanitized_error_code = "IMAGE_LOAD_ERROR"
             assessment.explanation = "Evidence image could not be loaded from storage."
             assessment.completed_at = datetime.utcnow()
             db.commit()
-            return {"status": "FAILED", "error": "Image load error"}
+            return {"status": "FAILED", "error": "IMAGE_LOAD_ERROR"}
 
         # Invoke provider with non-PII context only
         context = {
@@ -174,21 +196,35 @@ def perform_ai_triage_task(self, case_id_str: str, image_id_str: str, db_session
         }
 
         try:
-            ai_result = provider.assess(image_bytes, context)
+            ai_result = run_provider_with_timeout(
+                provider, image_bytes, context, timeout_seconds=settings.AI_TRIAGE_TIMEOUT_SECONDS
+            )
         except AITriageDisabledException:
             assessment.status = "SKIPPED"
             assessment.explanation = "AI visual triage provider is unconfigured or disabled."
             assessment.completed_at = datetime.utcnow()
             db.commit()
-            return {"status": "SKIPPED"}
+            return {"status": "SKIPPED", "reason": "PROVIDER_DISABLED"}
+        except AITriageTimeoutException:
+            logger.warning(
+                f"[AI_TRIAGE_TASK] Provider assessment timed out after {settings.AI_TRIAGE_TIMEOUT_SECONDS}s for case={case.case_number}"
+            )
+            assessment.status = "FAILED"
+            assessment.sanitized_error_code = "PROVIDER_TIMEOUT"
+            assessment.explanation = "Visual assessment service timed out."
+            assessment.completed_at = datetime.utcnow()
+            db.commit()
+            return {"status": "FAILED", "error": "PROVIDER_TIMEOUT"}
         except Exception as assess_err:
-            logger.warning(f"[AI_TRIAGE_TASK] Provider assessment failed for case={case.case_number}: {assess_err}")
+            logger.warning(
+                f"[AI_TRIAGE_TASK] Provider assessment failed for case={case.case_number}: {type(assess_err).__name__}"
+            )
             assessment.status = "FAILED"
             assessment.sanitized_error_code = "PROVIDER_ERROR"
             assessment.explanation = "Visual assessment service temporarily unavailable."
             assessment.completed_at = datetime.utcnow()
             db.commit()
-            return {"status": "FAILED", "error": "Provider error"}
+            return {"status": "FAILED", "error": "PROVIDER_ERROR"}
 
         # Apply non-downgrade Hybrid Fusion Policy
         existing_reasons = [r.strip() for r in (case.triage_reason or "").split(",") if r.strip()]
@@ -262,13 +298,34 @@ def perform_ai_triage_task(self, case_id_str: str, image_id_str: str, db_session
 
     except Exception as e:
         db.rollback()
-        logger.error(f"[AI_TRIAGE_TASK] Unexpected failure during visual triage: {e}", exc_info=True)
+        logger.error(
+            f"[AI_TRIAGE_TASK] Unexpected failure during visual triage for case={case_id_str}",
+            exc_info=True,
+        )
         # Attempt retry if Celery retry count remains
         try:
             self.retry(exc=e)
         except Exception:
-            pass
-        return {"status": "ERROR", "error": str(e)}
+            try:
+                cleanup_db = SessionLocal()
+                failed_assessment = (
+                    cleanup_db.query(TriageAssessment)
+                    .filter(
+                        TriageAssessment.rescue_case_id == uuid.UUID(case_id_str),
+                        TriageAssessment.status == "PENDING",
+                    )
+                    .first()
+                )
+                if failed_assessment:
+                    failed_assessment.status = "FAILED"
+                    failed_assessment.sanitized_error_code = "UNEXPECTED_ERROR"
+                    failed_assessment.explanation = "Visual assessment encountered an unexpected error."
+                    failed_assessment.completed_at = datetime.utcnow()
+                    cleanup_db.commit()
+                cleanup_db.close()
+            except Exception:
+                pass
+        return {"status": "ERROR", "error": "UNEXPECTED_ERROR"}
     finally:
         if db_session is None:
             db.close()

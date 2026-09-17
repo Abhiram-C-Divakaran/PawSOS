@@ -178,4 +178,39 @@ describe('TriageAdvisoryCard Component', () => {
       expect(screen.getByText(/Visual triage assessment queued for execution/i)).toBeInTheDocument();
     });
   });
+
+  it('renders disabled / not requested state without active analyzing animation when AI is disabled', async () => {
+    const mockTriage: TriageDetailResponse = {
+      case_id: 'test-case-disabled',
+      case_number: 'PR-2026-300',
+      final_priority: 'MODERATE',
+      final_score: 30,
+      final_reason: 'Reported symptoms',
+      rule_assessment: {
+        priority: 'MODERATE',
+        score: 30,
+        reasons: ['Reported symptoms'],
+      },
+      ai_assessment: {
+        status: 'NOT_REQUESTED',
+        source: 'IMAGE_AI',
+        provider: 'disabled',
+        explanation: 'Visual AI triage is disabled in system configuration.',
+      },
+      disclaimer: 'Decision-support only.',
+    };
+
+    (api.get as any).mockResolvedValueOnce({ data: mockTriage });
+
+    render(<TriageAdvisoryCard caseId="test-case-disabled" />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Visual AI triage is disabled in system configuration/i)).toBeInTheDocument();
+    });
+
+    expect(screen.getByText('Disabled')).toBeInTheDocument();
+    expect(screen.queryByText(/Analyzing attached image/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Pending/i)).not.toBeInTheDocument();
+  });
 });
+

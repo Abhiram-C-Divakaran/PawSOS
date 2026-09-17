@@ -128,7 +128,7 @@ def test_task_handles_storage_error_gracefully(db, sample_rescue_case_with_image
         result = perform_ai_triage_task(str(case.id), str(img.id), db_session=db)
 
     assert result["status"] == "FAILED"
-    assert result["error"] == "Image load error"
+    assert result["error"] == "IMAGE_LOAD_ERROR"
 
     assessment = db.query(TriageAssessment).filter(TriageAssessment.rescue_case_id == case.id).first()
     assert assessment is not None
@@ -142,7 +142,7 @@ def test_task_handles_storage_error_gracefully(db, sample_rescue_case_with_image
 def test_task_case_not_found(db):
     result = perform_ai_triage_task(str(uuid.uuid4()), None, db_session=db)
     assert result["status"] == "ABORTED"
-    assert result["reason"] == "Case not found"
+    assert result["reason"] == "CASE_NOT_FOUND"
 
 def test_task_no_image_attached(db, citizen_user, monkeypatch):
     case = RescueCase(
@@ -212,7 +212,7 @@ def test_task_handles_provider_assessment_exception(db, sample_rescue_case_with_
         result = perform_ai_triage_task(str(case.id), str(img.id), db_session=db)
 
     assert result["status"] == "FAILED"
-    assert result["error"] == "Provider error"
+    assert result["error"] == "PROVIDER_ERROR"
 
     assessment = db.query(TriageAssessment).filter(TriageAssessment.rescue_case_id == case.id).first()
     assert assessment.status == "FAILED"
@@ -249,7 +249,7 @@ def test_task_aborts_when_image_belongs_to_different_case(db, citizen_user):
 
     result = perform_ai_triage_task(str(case1.id), str(img2.id), db_session=db)
     assert result["status"] == "ABORTED"
-    assert result["reason"] == "Image case mismatch"
+    assert result["reason"] == "IMAGE_CASE_MISMATCH"
 
     # Verify no assessment was created for case1
     assert db.query(TriageAssessment).filter(TriageAssessment.rescue_case_id == case1.id).count() == 0
@@ -376,6 +376,93 @@ def test_task_handles_concurrent_race_integrity_error(db, sample_rescue_case_wit
     res = perform_ai_triage_task(str(case.id), str(img.id), db_session=db)
     assert res["status"] == "ALREADY_COMPLETED"
     assert res["assessment_id"] == str(existing.id)
+
+
+def test_task_enforces_timeout_and_records_provider_timeout(db, sample_rescue_case_with_image, monkeypatch):
+    """Ensure AI_TRIAGE_TIMEOUT_SECONDS constrains execution and produces PROVIDER_TIMEOUT."""
+    import time
+    case, img = sample_rescue_case_with_image
+    monkeypatch.setattr(settings, "AI_TRIAGE_ENABLED", True)
+    monkeypatch.setattr(settings, "AI_TRIAGE_PROVIDER", "mock")
+    monkeypatch.setattr(settings, "ENVIRONMENT", "test")
+    # Set a very short timeout for test speed
+    monkeypatch.setattr(settings, "AI_TRIAGE_TIMEOUT_SECONDS", 0.1)
+
+    def slow_assess(image_bytes, context):
+        time.sleep(0.5)  # Exceeds 0.1s timeout
+        from app.ai.schemas import AITriageResult
+        return AITriageResult(
+            suggested_priority=RescuePriority.CRITICAL,
+            score=95,
+            confidence=0.9,
+            visible_signs=["bleeding"],
+            explanation="Trauma",
+        )
+
+    with patch("app.services.storage_service.storage_service.get_image_bytes", return_value=b"valid_image"), \
+         patch("app.ai.mock.MockVisionTriageProvider.assess", side_effect=slow_assess):
+        result = perform_ai_triage_task(str(case.id), str(img.id), db_session=db)
+
+    assert result["status"] == "FAILED"
+    assert result["error"] == "PROVIDER_TIMEOUT"
+
+    assessment = db.query(TriageAssessment).filter(TriageAssessment.rescue_case_id == case.id).first()
+    assert assessment is not None
+    assert assessment.status == "FAILED"
+    assert assessment.sanitized_error_code == "PROVIDER_TIMEOUT"
+    assert "timed out" in assessment.explanation
+
+
+def test_task_provider_timeout_does_not_downgrade_hard_rule_priority(db, sample_rescue_case_with_image, monkeypatch):
+    """A timeout during AI triage must preserve existing deterministic rule priority without downgrade."""
+    import time
+    case, img = sample_rescue_case_with_image
+    case.triage_priority = RescuePriority.URGENT
+    case.triage_score = 70
+    case.triage_reason = "Severe bleeding reported"
+    db.commit()
+
+    monkeypatch.setattr(settings, "AI_TRIAGE_ENABLED", True)
+    monkeypatch.setattr(settings, "AI_TRIAGE_PROVIDER", "mock")
+    monkeypatch.setattr(settings, "ENVIRONMENT", "test")
+    monkeypatch.setattr(settings, "AI_TRIAGE_TIMEOUT_SECONDS", 0.05)
+
+    def slow_assess(image_bytes, context):
+        time.sleep(0.3)
+        return None
+
+    with patch("app.services.storage_service.storage_service.get_image_bytes", return_value=b"valid_image"), \
+         patch("app.ai.mock.MockVisionTriageProvider.assess", side_effect=slow_assess):
+        result = perform_ai_triage_task(str(case.id), str(img.id), db_session=db)
+
+    assert result["status"] == "FAILED"
+    assert result["error"] == "PROVIDER_TIMEOUT"
+
+    # Deterministic priority must remain completely invariant
+    db.refresh(case)
+    assert case.triage_priority == RescuePriority.URGENT
+    assert case.triage_score == 70
+    assert "Severe bleeding reported" in case.triage_reason
+
+
+def test_task_sanitizes_unexpected_outer_exception(db, sample_rescue_case_with_image, monkeypatch):
+    """Any unexpected exception must return sanitized UNEXPECTED_ERROR without leaking str(e)."""
+    case, img = sample_rescue_case_with_image
+    monkeypatch.setattr(settings, "AI_TRIAGE_ENABLED", True)
+
+    with patch("app.services.storage_service.storage_service.get_image_bytes", side_effect=Exception("Database secret credentials redis://user:secret123@host:6379")):
+        # Mock get_db to raise inside task logic to trigger outer exception handler
+        with patch.object(RescueCase, "images", side_effect=RuntimeError("internal redis password leak redis://pwd")):
+            pass
+
+    with patch("app.tasks.ai_triage_tasks.get_vision_triage_provider", side_effect=RuntimeError("redis://secret_token@host")):
+        result = perform_ai_triage_task(str(case.id), str(img.id), db_session=db)
+
+    assert result["status"] == "ERROR"
+    assert result["error"] == "UNEXPECTED_ERROR"
+    assert "secret" not in str(result)
+    assert "redis" not in str(result)
+
 
 
 

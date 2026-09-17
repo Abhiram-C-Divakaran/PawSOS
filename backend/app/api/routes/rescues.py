@@ -28,7 +28,7 @@ from app.services.triage_service import TriageService
 from app.models.triage_assessment import TriageAssessment
 from app.core.permissions import RoleChecker
 from app.core.constants import UserRole, RescueStatus, AssignmentStatus
-from app.core.exceptions import NotFoundException, ConflictException, ForbiddenException
+from app.core.exceptions import NotFoundException, ConflictException, ForbiddenException, ServiceUnavailableException
 
 from app.services.storage_service import storage_service
 from app.config import settings
@@ -309,16 +309,27 @@ def get_rescue_triage(
     )
 
     if not latest_assessment:
-        ai_detail = AIAssessmentDetail(
-            status="NOT_REQUESTED" if not case.images else "PENDING",
-            source="IMAGE_AI",
-            provider="disabled" if not settings.AI_TRIAGE_ENABLED else settings.AI_TRIAGE_PROVIDER,
-            explanation=(
-                "No visual triage assessment has been performed."
-                if not case.images
-                else "Visual assessment queued or pending execution."
-            ),
-        )
+        if not settings.AI_TRIAGE_ENABLED:
+            ai_detail = AIAssessmentDetail(
+                status="NOT_REQUESTED",
+                source="IMAGE_AI",
+                provider="disabled",
+                explanation="Visual AI triage is disabled in system configuration.",
+            )
+        elif not case.images:
+            ai_detail = AIAssessmentDetail(
+                status="NOT_REQUESTED",
+                source="IMAGE_AI",
+                provider=settings.AI_TRIAGE_PROVIDER,
+                explanation="No evidence image attached to rescue report.",
+            )
+        else:
+            ai_detail = AIAssessmentDetail(
+                status="PENDING",
+                source="IMAGE_AI",
+                provider=settings.AI_TRIAGE_PROVIDER,
+                explanation="Visual assessment queued or pending execution.",
+            )
     else:
         signs = []
         if latest_assessment.visible_signs:
@@ -388,17 +399,27 @@ def retry_rescue_triage(
             "status": "COMPLETED",
         }
 
+    try:
+        from app.tasks.ai_triage_tasks import perform_ai_triage_task
+        perform_ai_triage_task.delay(str(case.id), str(image.id))
+    except Exception:
+        logger.error(
+            "[AI_TRIAGE_RETRY] Failed to enqueue visual triage task for case_id=%s, case_number=%s",
+            str(case.id),
+            case.case_number,
+            exc_info=True,
+        )
+        if existing and existing.status == "PENDING":
+            existing.status = "FAILED"
+            existing.sanitized_error_code = "PROVIDER_ERROR"
+            existing.explanation = "Visual triage service is temporarily unavailable."
+            db.commit()
+        raise ServiceUnavailableException("Visual triage service is temporarily unavailable.")
+
     if existing:
         existing.status = "PENDING"
         existing.completed_at = None
         db.commit()
-
-    try:
-        from app.tasks.ai_triage_tasks import perform_ai_triage_task
-        perform_ai_triage_task.delay(str(case.id), str(image.id))
-    except Exception as e:
-        logger.warning(f"Could not enqueue retry triage task: {e}")
-        return {"success": False, "message": f"Could not enqueue assessment: {str(e)}"}
 
     return {"success": True, "message": "Visual triage assessment queued for execution."}
 

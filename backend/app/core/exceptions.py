@@ -26,3 +26,8 @@ class BadRequestException(BaseAPIException):
 class ConflictException(BaseAPIException):
     def __init__(self, message: str = "Conflict"):
         super().__init__(status.HTTP_409_CONFLICT, "CONFLICT", message)
+
+class ServiceUnavailableException(BaseAPIException):
+    def __init__(self, message: str = "Service Unavailable"):
+        super().__init__(status.HTTP_503_SERVICE_UNAVAILABLE, "SERVICE_UNAVAILABLE", message)
+
