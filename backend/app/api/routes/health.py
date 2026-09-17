@@ -65,10 +65,8 @@ def health_readiness(response: Response, db: Session = Depends(get_db)):
     # 2. Redis and Worker Heartbeat check (fail-closed)
     if settings.REDIS_URL:
         try:
-            import redis
-            from app.tasks.celery_app import normalize_celery_redis_url
-            redis_url = normalize_celery_redis_url(settings.REDIS_URL)
-            r = redis.from_url(redis_url, socket_timeout=2)
+            from app.tasks.celery_app import get_redis_client
+            r = get_redis_client(settings.REDIS_URL, socket_timeout=2)
             r.ping()
             checks["redis"] = "connected"
 
@@ -84,6 +82,8 @@ def health_readiness(response: Response, db: Session = Depends(get_db)):
                     if age_sec < 0:
                         age_sec = 0.0
 
+                    checks["worker_heartbeat_age_seconds"] = round(age_sec, 1)
+
                     if age_sec <= settings.CELERY_HEARTBEAT_THRESHOLD_SECONDS:
                         checks["worker"] = "active"
                     else:
@@ -95,7 +95,9 @@ def health_readiness(response: Response, db: Session = Depends(get_db)):
                         if require_full:
                             healthy = False
                 except Exception as parse_err:
-                    logger.warning(f"Invalid Celery worker heartbeat content in Redis: {parse_err}")
+                    logger.warning(
+                        f"Invalid Celery worker heartbeat content in Redis: {type(parse_err).__name__}"
+                    )
                     checks["worker"] = "invalid_heartbeat"
                     if require_full:
                         healthy = False
@@ -105,7 +107,7 @@ def health_readiness(response: Response, db: Session = Depends(get_db)):
                 if require_full:
                     healthy = False
         except Exception as e:
-            logger.warning(f"Health check warning on Redis/Worker: {e}")
+            logger.warning(f"Health check warning on Redis/Worker: {type(e).__name__}")
             checks["redis"] = "disconnected"
             checks["worker"] = "unavailable"
             if require_full:

@@ -3,6 +3,7 @@ Mocks HTTP responses to verify deterministic failure and pass modes without netw
 """
 import sys
 from pathlib import Path
+from unittest.mock import patch
 import httpx
 import pytest
 
@@ -157,11 +158,66 @@ class TestSmokeTestUnitSuite:
             readiness_state="degraded",
             subsystems_override={"celery": "unavailable"},
         )
-        passed = run_smoke_tests(
-            api_url="https://api-staging.pawreach.org",
-            client=client,
-        )
+        with patch("time.sleep"):
+            passed = run_smoke_tests(
+                api_url="https://api-staging.pawreach.org",
+                client=client,
+            )
         assert passed is False
+
+    def test_readiness_polling_succeeds_after_initial_startup_delay(self):
+        """Readiness polling recovers when worker becomes active on second attempt."""
+        attempts = 0
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            nonlocal attempts
+            url = str(request.url)
+            if "/api/v1/health" in url and not url.endswith("/ready"):
+                return httpx.Response(200, json={"status": "ok", "environment": "staging", "version": "2.0.0", "git_sha": "abc1234"}, headers={"x-content-type-options": "nosniff", "strict-transport-security": "max-age=31536000", "referrer-policy": "strict-origin-when-cross-origin"})
+            if url.endswith("/api/v1/health/ready"):
+                attempts += 1
+                if attempts == 1:
+                    # First attempt: worker still initializing
+                    return httpx.Response(503, json={"status": "degraded", "services": {"database": "healthy", "postgis": "healthy", "redis": "healthy", "celery": "unavailable", "storage": "healthy", "firebase": "unconfigured"}, "checks": {"worker": "missing"}})
+                else:
+                    # Second attempt: worker ready and active
+                    return httpx.Response(200, json={"status": "ready", "services": {"database": "healthy", "postgis": "healthy", "redis": "healthy", "celery": "healthy", "storage": "healthy", "firebase": "unconfigured"}, "checks": {"worker": "active", "worker_heartbeat_age_seconds": 1.5}})
+            if "/api/v1/auth/login" in url and request.method == "OPTIONS":
+                origin = request.headers.get("origin")
+                return httpx.Response(204, headers={"access-control-allow-origin": origin, "access-control-allow-credentials": "true"}) if origin != "https://unauthorized.example" else httpx.Response(204)
+            return httpx.Response(404)
+
+        client = httpx.Client(transport=httpx.MockTransport(handler))
+        with patch("time.sleep"):
+            passed = run_smoke_tests(
+                api_url="https://api-staging.pawreach.org",
+                client=client,
+            )
+        assert passed is True
+        assert attempts == 2
+
+    def test_readiness_polling_fails_on_persistent_worker_missing(self):
+        """Persistent worker missing after all poll attempts causes smoke test failure."""
+        attempts = 0
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            nonlocal attempts
+            url = str(request.url)
+            if "/api/v1/health" in url and not url.endswith("/ready"):
+                return httpx.Response(200, json={"status": "ok", "environment": "staging", "version": "2.0.0", "git_sha": "abc1234"}, headers={"x-content-type-options": "nosniff", "strict-transport-security": "max-age=31536000"})
+            if url.endswith("/api/v1/health/ready"):
+                attempts += 1
+                return httpx.Response(503, json={"status": "degraded", "services": {"database": "healthy", "postgis": "healthy", "redis": "healthy", "celery": "unavailable", "storage": "healthy", "firebase": "unconfigured"}, "checks": {"worker": "missing"}})
+            return httpx.Response(404)
+
+        client = httpx.Client(transport=httpx.MockTransport(handler))
+        with patch("time.sleep"):
+            passed = run_smoke_tests(
+                api_url="https://api-staging.pawreach.org",
+                client=client,
+            )
+        assert passed is False
+        assert attempts >= 15
 
     def test_cors_mismatch_fails(self):
         client = make_mock_client(cors_allowed_origin="https://wrong-frontend.example")

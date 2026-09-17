@@ -7,17 +7,23 @@ from app.config import settings
 logger = logging.getLogger(__name__)
 
 @celery_app.task(name="app.tasks.dispatch_tasks.worker_heartbeat_task")
-def worker_heartbeat_task() -> dict:
-    """Periodic task updating Redis worker heartbeat key."""
+def worker_heartbeat_task(is_initial: bool = False) -> dict:
+    """Periodic task updating Redis worker heartbeat key with normalized Redis client."""
     try:
-        import redis
-        r = redis.from_url(settings.REDIS_URL, socket_timeout=2)
+        from app.tasks.celery_app import get_redis_client
+        r = get_redis_client(socket_timeout=2)
         now_iso = datetime.now(timezone.utc).isoformat()
         r.set("celery_worker_heartbeat", now_iso, ex=settings.CELERY_HEARTBEAT_TTL_SECONDS)
+        if is_initial:
+            logger.info("Initial worker heartbeat recorded successfully in Redis.")
+        else:
+            logger.debug("Worker heartbeat refreshed in Redis.")
         return {"status": "ok", "heartbeat_at": now_iso}
     except Exception as e:
-        logger.warning(f"Could not record worker heartbeat in Redis: {e}")
-        return {"status": "error", "detail": str(e)}
+        logger.warning(
+            f"Could not record worker heartbeat in Redis (exception: {type(e).__name__}): [sanitized]"
+        )
+        return {"status": "error", "error_code": "REDIS_HEARTBEAT_ERROR"}
 
 @celery_app.task(name="app.tasks.dispatch_tasks.expire_dispatch_offers_task")
 def expire_dispatch_offers_task(db_session=None) -> dict:

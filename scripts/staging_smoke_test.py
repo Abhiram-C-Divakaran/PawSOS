@@ -89,35 +89,58 @@ def run_smoke_tests(
             print(f"      [FAIL] HTTP {resp.status_code} | Response: {resp.text}")
             all_passed = False
 
-        # 2. Backend Subsystem Readiness (/api/v1/health/ready)
+        # 2. Backend Subsystem Readiness (/api/v1/health/ready) with bounded polling
         print("\n[2/5] Testing Subsystem Deep Readiness (/api/v1/health/ready)...")
         readiness_url = f"{api_url.rstrip('/')}/api/v1/health/ready"
-        ready_resp = client.get(readiness_url)
-        if ready_resp.status_code == 200:
-            ready_data = ready_resp.json()
-            ready_status = ready_data.get("status")
-            services = ready_data.get("services", {})
-            print(f"      HTTP 200 | Overall Status: '{ready_status}'")
-            for s_name, s_stat in services.items():
-                print(f"            - {s_name}: {s_stat}")
+        
+        max_ready_attempts = 15  # 15 attempts * 3s = 45s max grace period
+        ready_poll_interval = 3.0
+        ready_success = False
+        last_ready_resp = None
+        last_ready_data = {}
 
-            if ready_status not in ["ready", "ok"]:
-                print(f"      [FAIL] Overall readiness status is '{ready_status}', expected 'ready'")
-                all_passed = False
-            else:
-                print("      [PASS] Overall readiness status is 'ready'")
+        import time
 
-            # Mandatory core subsystems
-            mandatory_subsystems = ["database", "postgis", "redis", "celery", "storage"]
-            for sub in mandatory_subsystems:
-                stat = services.get(sub)
-                if stat != "healthy":
-                    print(f"      [FAIL] Mandatory subsystem '{sub}' is not healthy (status: '{stat}')")
-                    all_passed = False
+        for attempt in range(1, max_ready_attempts + 1):
+            try:
+                ready_resp = client.get(readiness_url)
+                last_ready_resp = ready_resp
+                if ready_resp.status_code == 200:
+                    ready_data = ready_resp.json()
+                    last_ready_data = ready_data
+                    ready_status = ready_data.get("status")
+                    services = ready_data.get("services", {})
+                    checks = ready_data.get("checks", {})
+                    
+                    mandatory_subsystems = ["database", "postgis", "redis", "celery", "storage"]
+                    subsystems_healthy = all(services.get(s) == "healthy" for s in mandatory_subsystems)
+                    
+                    if ready_status in ["ready", "ok"] and subsystems_healthy:
+                        ready_success = True
+                        print(f"      HTTP 200 | Overall Status: '{ready_status}' (poll attempt {attempt}/{max_ready_attempts})")
+                        for s_name, s_stat in services.items():
+                            age = checks.get("worker_heartbeat_age_seconds")
+                            extra = f" (age: {age}s)" if s_name == "celery" and age is not None else ""
+                            print(f"            - {s_name}: {s_stat}{extra}")
+                        break
+                    else:
+                        print(f"      [Poll {attempt}/{max_ready_attempts}] Readiness not yet fully healthy: status='{ready_status}', services={services}")
                 else:
-                    print(f"      [PASS] Subsystem '{sub}' is healthy")
+                    try:
+                        last_ready_data = ready_resp.json()
+                    except Exception:
+                        last_ready_data = {"raw_text": ready_resp.text}
+                    print(f"      [Poll {attempt}/{max_ready_attempts}] HTTP {ready_resp.status_code} | Body: {ready_resp.text}")
+            except Exception as req_err:
+                print(f"      [Poll {attempt}/{max_ready_attempts}] Readiness probe error: {type(req_err).__name__}")
 
+            if attempt < max_ready_attempts:
+                time.sleep(ready_poll_interval)
+
+        if ready_success:
+            print("      [PASS] Overall readiness status is 'ready' and all mandatory subsystems are healthy.")
             # Firebase requirement check
+            services = last_ready_data.get("services", {})
             fb_stat = services.get("firebase")
             if require_firebase:
                 if fb_stat != "healthy":
@@ -128,7 +151,15 @@ def run_smoke_tests(
             else:
                 print(f"      [INFO] Firebase status: '{fb_stat}' (REQUIRE_FIREBASE=false)")
         else:
-            print(f"      [FAIL] Readiness endpoint failed with HTTP {ready_resp.status_code} | Body: {ready_resp.text}")
+            print(f"      [FAIL] Subsystem readiness failed after {max_ready_attempts * ready_poll_interval:.0f}s timeout.")
+            if last_ready_data:
+                services = last_ready_data.get("services", {})
+                checks = last_ready_data.get("checks", {})
+                print("      Sanitized Diagnostics:")
+                print(f"            - Overall Status: {last_ready_data.get('status', 'unknown')}")
+                print(f"            - Worker Check:   {checks.get('worker', 'unknown')}")
+                for s_name, s_stat in services.items():
+                    print(f"            - Subsystem '{s_name}': {s_stat}")
             all_passed = False
 
         # 3. CORS Preflight & Security Headers Validation
