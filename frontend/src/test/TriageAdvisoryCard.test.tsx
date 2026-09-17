@@ -267,5 +267,43 @@ describe('TriageAdvisoryCard Component', () => {
       ).toBeInTheDocument();
     });
   });
+
+  it('renders safe unavailable state without crashing or inventing GENERAL / 0 when rule_assessment is missing', async () => {
+    // Malformed response omitting rule_assessment
+    const malformedTriage: any = {
+      case_id: 'test-case-malformed',
+      case_number: 'PR-2026-MALFORMED',
+      final_priority: 'CRITICAL',
+      final_score: 85,
+      final_reason: 'Severe reported condition',
+      // rule_assessment is missing / undefined
+      ai_assessment: {
+        status: 'NOT_REQUESTED',
+        source: 'IMAGE_AI',
+        provider: 'disabled',
+        explanation: 'Visual urgency review is not enabled.',
+      },
+      disclaimer: 'Decision-support only.',
+    };
+
+    (api.get as any).mockResolvedValueOnce({ data: malformedTriage });
+
+    render(<TriageAdvisoryCard caseId="test-case-malformed" />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('triage-advisory-card')).toBeInTheDocument();
+    });
+
+    // Safe unavailable state must be displayed
+    expect(
+      screen.getByText('Triage assessment data is temporarily unavailable.')
+    ).toBeInTheDocument();
+
+    // Must NOT invent or render GENERAL or 0
+    expect(screen.queryByText(/GENERAL/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Calculated Score: 0/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Rule-Based Urgency/i)).not.toBeInTheDocument();
+  });
 });
+
 

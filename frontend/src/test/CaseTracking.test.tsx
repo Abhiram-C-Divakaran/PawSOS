@@ -4,6 +4,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import { BrowserRouter } from 'react-router-dom';
 import { CaseTracking } from '../pages/CaseTracking';
 import api from '../services/api';
+import type { TriageDetailResponse } from '../types';
 
 // Mock MapView
 vi.mock('../components/MapView', () => ({
@@ -34,7 +35,7 @@ describe('CaseTracking Component', () => {
     expect(screen.getByText(/Fetching real-time case data/i)).toBeInTheDocument();
   });
 
-  it('renders case details and timeline on successful fetch', async () => {
+  it('renders case details, timeline, and triage advisory card on successful fetch', async () => {
     const mockCase = {
       id: 'case-123',
       species: 'Dog',
@@ -88,9 +89,35 @@ describe('CaseTracking Component', () => {
       },
     ];
 
+    const mockTriage: TriageDetailResponse = {
+      case_id: 'case-123',
+      case_number: 'PR-2026-001',
+      final_priority: 'CRITICAL',
+      final_score: 85,
+      final_reason: 'Severe reported condition',
+      rule_assessment: {
+        priority: 'CRITICAL',
+        score: 85,
+        reasons: ['Severe reported condition'],
+      },
+      ai_assessment: {
+        status: 'NOT_REQUESTED',
+        source: 'IMAGE_AI',
+        provider: 'disabled',
+        visible_signs: [],
+        explanation:
+          'Visual urgency review is not enabled. Rule-based dispatch priority remains active.',
+      },
+      disclaimer:
+        'AI visual triage provides decision-support for rescue dispatch urgency only. It does not constitute a veterinary medical diagnosis, injury assessment, or treatment prescription.',
+    };
+
     (api.get as any).mockImplementation((url: string) => {
       if (url.includes('/timeline')) {
         return Promise.resolve({ data: mockTimeline });
+      }
+      if (url.endsWith('/triage')) {
+        return Promise.resolve({ data: mockTriage });
       }
       return Promise.resolve({ data: mockCase });
     });
@@ -103,13 +130,21 @@ describe('CaseTracking Component', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Case PR-2026-001')).toBeInTheDocument();
+      expect(screen.getByTestId('triage-advisory-card')).toBeInTheDocument();
     });
 
+    // Verify case details
     expect(screen.getByText('CRITICAL PRIORITY')).toBeInTheDocument();
     expect(screen.getByText('Dog')).toBeInTheDocument();
     expect(screen.getByText('Linking Road, Bandra')).toBeInTheDocument();
     expect(screen.getByText('Anita Sharma')).toBeInTheDocument();
     expect(screen.getByText('Mock Map View')).toBeInTheDocument();
+
+    // Verify TriageAdvisoryCard renders with disabled AI messaging
+    expect(
+      screen.getByText(/Visual urgency review is not enabled. Rule-based dispatch priority remains active./i)
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Analyzing attached image/i)).not.toBeInTheDocument();
   });
 
   it('renders restricted access UI on 403 / error', async () => {

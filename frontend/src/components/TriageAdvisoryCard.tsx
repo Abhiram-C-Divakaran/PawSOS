@@ -125,10 +125,22 @@ export const TriageAdvisoryCard: React.FC<TriageAdvisoryCardProps> = ({
     );
   }
 
+  if (!triage.rule_assessment) {
+    return (
+      <div
+        data-testid="triage-advisory-card"
+        className={`bg-white rounded-xl border border-gray-200 p-5 shadow-sm text-sm text-gray-600 ${className}`}
+      >
+        <div className="flex items-center space-x-2 text-gray-700 font-semibold mb-2">
+          <AlertTriangle className="w-4 h-4 text-amber-500" />
+          <span>Triage Assessment</span>
+        </div>
+        <p>Triage assessment data is temporarily unavailable.</p>
+      </div>
+    );
+  }
+
   const { rule_assessment, ai_assessment, final_priority, final_score, final_reason } = triage;
-  const rulePriority = rule_assessment?.priority || final_priority || 'GENERAL';
-  const ruleScore = rule_assessment?.score ?? final_score ?? 0;
-  const ruleReasons = rule_assessment?.reasons ?? [];
   const isPending = ai_assessment?.status === 'PENDING' && ai_assessment?.provider !== 'disabled';
   const isCompleted = ai_assessment?.status === 'COMPLETED';
   const isFailed = ai_assessment?.status === 'FAILED';
@@ -186,22 +198,22 @@ export const TriageAdvisoryCard: React.FC<TriageAdvisoryCardProps> = ({
             </span>
             <span
               className={`text-[10px] font-bold px-2 py-0.5 rounded border ${getPriorityBadgeClass(
-                rulePriority
+                rule_assessment.priority
               )}`}
             >
-              {rulePriority}
+              {rule_assessment.priority}
             </span>
           </div>
 
           <div className="text-xs text-gray-600 space-y-1.5">
             <p>
-              <span className="font-semibold text-gray-700">Calculated Score:</span> {ruleScore} / 100
+              <span className="font-semibold text-gray-700">Calculated Score:</span> {rule_assessment.score} / 100
             </p>
             <div>
               <span className="font-semibold text-gray-700 block mb-1">Reported Factors:</span>
-              {ruleReasons.length > 0 ? (
+              {rule_assessment.reasons.length > 0 ? (
                 <ul className="list-disc pl-4 space-y-0.5 text-gray-600">
-                  {ruleReasons.map((r, idx) => (
+                  {rule_assessment.reasons.map((r, idx) => (
                     <li key={idx}>{r}</li>
                   ))}
                 </ul>
