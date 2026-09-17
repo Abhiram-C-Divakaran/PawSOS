@@ -64,11 +64,72 @@ jobs:
             exit 1
           fi
 
+      - name: Incremental Existing-Database Migration Regression Gate (Phase 3A -> Head)
+        env:
+          DATABASE_URL: postgresql://pawsos:pawsos_password@localhost:5432/pawsos_incremental
+          PGPASSWORD: pawsos_password
+        working-directory: ./backend
+        run: |
+          # STEP A: Create a clean PostgreSQL + PostGIS database and upgrade to Phase 3A (a1b2c3d4e5f6)
+          psql -h localhost -U pawsos -d pawsos_test -c "DROP DATABASE IF EXISTS pawsos_incremental;"
+          psql -h localhost -U pawsos -d pawsos_test -c "CREATE DATABASE pawsos_incremental;"
+          psql -h localhost -U pawsos -d pawsos_incremental -c "CREATE EXTENSION IF NOT EXISTS postgis;"
+          
+          alembic upgrade a1b2c3d4e5f6
+          CURRENT_REV=$(alembic current | tr -d '\r' | awk '{print $1}')
+          echo "Current revision at Phase 3A: $CURRENT_REV"
+          if [ "$CURRENT_REV" != "a1b2c3d4e5f6" ]; then
+            echo "ERROR: Database is not at Phase 3A revision a1b2c3d4e5f6!"
+            exit 1
+          fi
+          
+          # Confirm rescue_priority_enum exists and is used by rescue_cases.triage_priority
+          ENUM_EXISTS=$(psql -h localhost -U pawsos -d pawsos_incremental -t -A -c "SELECT count(*) FROM pg_type WHERE typname = 'rescue_priority_enum';")
+          if [ "$ENUM_EXISTS" != "1" ]; then
+            echo "ERROR: rescue_priority_enum does not exist in pg_type at Phase 3A!"
+            exit 1
+          fi
+          
+          COL_UDT=$(psql -h localhost -U pawsos -d pawsos_incremental -t -A -c "SELECT udt_name FROM information_schema.columns WHERE table_name = 'rescue_cases' AND column_name = 'triage_priority';")
+          if [ "$COL_UDT" != "rescue_priority_enum" ]; then
+            echo "ERROR: rescue_cases.triage_priority does not use rescue_priority_enum!"
+            exit 1
+          fi
+
+          # STEP B: Run a NEW independent command/process: alembic upgrade head
+          # This simulates Render deploying a new application version against an already migrated Supabase staging database
+          alembic upgrade head
+          NEW_CURRENT_REV=$(alembic current | tr -d '\r' | awk '{print $1}')
+          HEAD_REV=$(alembic heads | tr -d '\r' | awk '{print $1}')
+          echo "Incremental upgrade result - Current: $NEW_CURRENT_REV, Head: $HEAD_REV"
+          if [ "$NEW_CURRENT_REV" != "$HEAD_REV" ]; then
+            echo "ERROR: Alembic current does not match head after incremental migration!"
+            exit 1
+          fi
+
+          # STEP C: Verify rescue_priority_enum values and shared usage across tables
+          ENUM_LABELS=$(psql -h localhost -U pawsos -d pawsos_incremental -t -A -c "SELECT enumlabel FROM pg_enum JOIN pg_type ON pg_enum.enumtypid = pg_type.oid WHERE pg_type.typname = 'rescue_priority_enum' ORDER BY enumsortorder;")
+          EXPECTED_LABELS=$(printf "GENERAL\nMODERATE\nURGENT\nCRITICAL")
+          if [ "$ENUM_LABELS" != "$EXPECTED_LABELS" ]; then
+            echo "ERROR: Enum labels do not match expected! Got:"
+            echo "$ENUM_LABELS"
+            exit 1
+          fi
+
+          ASSESS_UDT=$(psql -h localhost -U pawsos -d pawsos_incremental -t -A -c "SELECT udt_name FROM information_schema.columns WHERE table_name = 'triage_assessments' AND column_name = 'suggested_priority';")
+          if [ "$ASSESS_UDT" != "rescue_priority_enum" ]; then
+            echo "ERROR: triage_assessments.suggested_priority does not use rescue_priority_enum!"
+            exit 1
+          fi
+
+          echo "SUCCESS: Incremental migration Phase 3A -> Head passed with shared enum reuse confirmed."
+
       - name: Run Pytest Test Suite with Coverage (Enforce >= 85%)
         env:
           PYTHONPATH: backend
           JWT_SECRET_KEY: test_secret_key_for_continuous_integration_32chars!
           ENVIRONMENT: development
+          POSTGRES_TEST_URL: postgresql://pawsos:pawsos_password@localhost:5432/pawsos_incremental
         run: |
           pytest backend/tests --cov=app --cov-report=term-missing --cov-fail-under=85 -v -p no:warnings
 

@@ -8,6 +8,7 @@ Create Date: 2026-09-16 18:30:00.000000
 from typing import Sequence, Union
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
 
 
 # revision identifiers, used by Alembic.
@@ -25,6 +26,24 @@ def upgrade() -> None:
     existing_tables = inspector.get_table_names()
 
     if 'triage_assessments' not in existing_tables:
+        if conn.dialect.name == "postgresql":
+            priority_type = postgresql.ENUM(
+                "GENERAL",
+                "MODERATE",
+                "URGENT",
+                "CRITICAL",
+                name="rescue_priority_enum",
+                create_type=False,
+            )
+        else:
+            priority_type = sa.Enum(
+                "GENERAL",
+                "MODERATE",
+                "URGENT",
+                "CRITICAL",
+                name="rescue_priority_enum",
+            )
+
         op.create_table(
             'triage_assessments',
             sa.Column('id', sa.Uuid(), primary_key=True, nullable=False),
@@ -32,7 +51,7 @@ def upgrade() -> None:
             sa.Column('animal_image_id', sa.Uuid(), sa.ForeignKey('animal_images.id', ondelete='SET NULL'), nullable=True),
             sa.Column('source', sa.String(length=32), nullable=False, server_default='IMAGE_AI'),
             sa.Column('status', sa.String(length=32), nullable=False, server_default='PENDING'),
-            sa.Column('suggested_priority', sa.Enum('GENERAL', 'MODERATE', 'URGENT', 'CRITICAL', name='rescue_priority_enum', create_type=False), nullable=True),
+            sa.Column('suggested_priority', priority_type, nullable=True),
             sa.Column('score', sa.Integer(), nullable=True),
             sa.Column('confidence', sa.Float(), nullable=True),
             sa.Column('visible_signs', sa.Text(), nullable=True),
