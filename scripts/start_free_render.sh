@@ -53,7 +53,9 @@ cleanup() {
         fi
     done
 
-    wait 2>/dev/null || true
+    wait "$WORKER_PID" 2>/dev/null || true
+    wait "$BEAT_PID" 2>/dev/null || true
+    wait "$UVICORN_PID" 2>/dev/null || true
     echo "[start_free_render] All child processes stopped cleanly."
 }
 
