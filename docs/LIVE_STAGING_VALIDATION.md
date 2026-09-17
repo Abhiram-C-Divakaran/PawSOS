@@ -127,9 +127,29 @@ The frontend normalization layer (`frontend/src/utils/apiConfig.ts`) automatical
 | **Trigger Staging Cloud Deployment** | Completed | `SUCCESS` | Render webhook triggered successfully |
 | **Await Deployment & Run Staging Smoke Tests** | Completed | `SUCCESS` | Exact SHA `baf39e3` verified, all smoke tests passed |
 
+---
+
+## 6. Phase 3B Final Closure & Hardening Validation Record
+
+* **Verification Date**: September 18, 2026
+* **Target Environment**: Staging (Free Cloud Demo)
+* **Authoritative Git Commit**: `4e94602c3671893a446493a11cba7cb93d4551e8`
+* **Commit Message**: `fix(frontend): guard against missing rule_assessment in TriageAdvisoryCard`
+* **GitHub Actions Workflow**: `Staging Deployment & Smoke Tests`
+* **Workflow Run ID**: `35270974353`
+* **Workflow Overall Conclusion**: `SUCCESS` (All jobs green)
+* **Preceding CI Workflow**: `PawReach CI / CD Pipeline` (Run ID `35270529178`, `SUCCESS`)
+
+### Job Execution Summary
+
+| Job | Status | Conclusion | Note |
+|-----|--------|------------|------|
+| **Check Deployment Prerequisites** | Completed | `SUCCESS` | Staging secrets verified in GitHub Environment |
+| **Trigger Staging Cloud Deployment** | Completed | `SUCCESS` | Render deployment webhook dispatched for ref `4e94602` |
+| **Await Deployment & Run Staging Smoke Tests** | Completed | `SUCCESS` | Live Render API verified deployed SHA `4e94602`, automated smoke suite passed |
+
 > [!NOTE]
-> **Subsequent Hardening Cleanup Status**:
-> Following baseline `baf39e3bc19d21cc423186ed78bca13c3dc569c3`, additional Phase 3B hardening and error-sanitization changes were committed.
-> **Current Status**: **`PHASE 3B FINAL CLEANUP CODE READY — LIVE STAGING REVALIDATION REQUIRED`**.
-> A commit is not considered live-validated until GitHub Actions executes the staging deployment and smoke test workflow against that exact SHA.
+> **Operational Status**: **`PHASE 3B FINAL CLEANUP — LIVE STAGING VALIDATED ✅`**.
+> All Phase 3B correctness, durable state, queue resilience, HTTP 503 retry error sanitization, provider socket timeout enforcement, Celery bounded retry semantics, and data minimization fixes are live in staging and validated against hosted PostgreSQL/PostGIS, Upstash Redis, and Supabase Storage.
+
 
