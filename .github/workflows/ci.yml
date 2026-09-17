@@ -129,7 +129,6 @@ jobs:
           PYTHONPATH: backend
           JWT_SECRET_KEY: test_secret_key_for_continuous_integration_32chars!
           ENVIRONMENT: development
-          POSTGRES_TEST_URL: postgresql://pawsos:pawsos_password@localhost:5432/pawsos_incremental
         run: |
           pytest backend/tests --cov=app --cov-report=term-missing --cov-fail-under=85 -v -p no:warnings
 
