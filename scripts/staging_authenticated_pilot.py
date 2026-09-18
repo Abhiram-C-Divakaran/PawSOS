@@ -88,7 +88,7 @@ class StagingPilotRunner:
                 )
                 self.log("CLEANUP", "Rescuer A restored to AVAILABLE", status="PASS")
             except Exception as e:
-                self.log("CLEANUP", f"Could not restore Rescuer A: {e}", status="WARN")
+                self.log("CLEANUP", f"Could not restore Rescuer A ({type(e).__name__})", status="WARN")
 
         if "rescuer_b" in self.tokens:
             try:
@@ -99,13 +99,13 @@ class StagingPilotRunner:
                 )
                 self.log("CLEANUP", "Rescuer B restored to AVAILABLE", status="PASS")
             except Exception as e:
-                self.log("CLEANUP", f"Could not restore Rescuer B: {e}", status="WARN")
+                self.log("CLEANUP", f"Could not restore Rescuer B ({type(e).__name__})", status="WARN")
 
         try:
             self.client.close()
             self.log("CLEANUP", "HTTP client closed cleanly", status="PASS")
         except Exception as e:
-            self.log("CLEANUP", f"Could not close HTTP client: {e}", status="WARN")
+            self.log("CLEANUP", f"Could not close HTTP client ({type(e).__name__})", status="WARN")
 
     def run(self) -> bool:
         print("====================================================================")
@@ -177,15 +177,21 @@ class StagingPilotRunner:
             self.log("STEP 1", f"/health OK: environment={env_val} | git_sha={observed_sha}", status="PASS")
 
             if self.expected_sha:
-                # Compare full or prefix match
-                if not (observed_sha.startswith(self.expected_sha) or self.expected_sha.startswith(observed_sha)):
+                # If both are 40-character full Git SHAs, require exact equality
+                if len(self.expected_sha) == 40 and len(observed_sha) == 40:
+                    if observed_sha.lower() != self.expected_sha.lower():
+                        self.abort(
+                            "STEP 1",
+                            f"Git SHA mismatch! Deployed={observed_sha}, Expected={self.expected_sha}"
+                        )
+                elif not (observed_sha.startswith(self.expected_sha) or self.expected_sha.startswith(observed_sha)):
                     self.abort(
                         "STEP 1",
                         f"Git SHA mismatch! Deployed={observed_sha}, Expected={self.expected_sha}"
                     )
                 self.log("STEP 1", f"Deployed Git SHA matches expected SHA: {self.expected_sha}", status="PASS")
         except httpx.RequestError as e:
-            self.abort("STEP 1", f"Could not connect to /health: {e}")
+            self.abort("STEP 1", f"Could not connect to /health ({type(e).__name__})")
 
         # 1b. Check /api/v1/health/ready
         ready_url = f"{self.base_url}/api/v1/health/ready"
@@ -217,7 +223,7 @@ class StagingPilotRunner:
                 status="PASS"
             )
         except httpx.RequestError as e:
-            self.abort("STEP 1", f"Connection error during readiness check: {e}")
+            self.abort("STEP 1", f"Connection error during readiness check ({type(e).__name__})")
 
     # -------------------------------------------------------------------------
     # Step 2: Multi-Role Authentication
@@ -563,8 +569,20 @@ class StagingPilotRunner:
             self.abort("STEP 6", f"Admin Beta accessed foreign dossier! HTTP {beta_dossier.status_code}")
         self.log("STEP 6", f"Admin Beta dossier access correctly blocked (HTTP {beta_dossier.status_code})", status="PASS")
 
-        # 6g. Admin Alpha can now access private evidence after claiming
+        # 6g. Re-verify foreign Admin Beta evidence access remains denied (HTTP 403) after Org Alpha claims the case
         evidence_url = f"{self.base_url}/api/v1/rescues/{self.created_case_id}/images/{self.created_image_id}/access"
+        beta_post_claim_img = self.client.get(
+            evidence_url,
+            headers={"Authorization": f"Bearer {self.tokens['admin_b']}"},
+        )
+        if beta_post_claim_img.status_code != 403:
+            self.abort(
+                "STEP 6",
+                f"Admin Beta accessed foreign evidence post-claim! Expected HTTP 403, got HTTP {beta_post_claim_img.status_code}"
+            )
+        self.log("STEP 6", "Admin Beta evidence access correctly denied post-claim (HTTP 403)", status="PASS")
+
+        # 6h. Admin Alpha can now access private evidence after claiming
         alpha_img_resp = self.client.get(evidence_url, headers={"Authorization": f"Bearer {self.tokens['admin_a']}"})
         if alpha_img_resp.status_code != 200:
             self.abort("STEP 6", f"Admin Alpha denied evidence access after claim: HTTP {alpha_img_resp.status_code}")
@@ -773,7 +791,7 @@ def main():
         print(f"\n[FATAL] Pilot execution halted: {e}")
         sys.exit(1)
     except Exception as e:
-        print(f"\n[FATAL] Unexpected pilot error: {e}")
+        print(f"\n[FATAL] Unexpected pilot error ({type(e).__name__}): Execution terminated prematurely")
         sys.exit(1)
 
 

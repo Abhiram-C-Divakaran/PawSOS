@@ -50,7 +50,15 @@ def readiness_setup(db):
         organization_id=org.id,
         is_active=True,
     )
-    db.add_all([ngo_admin, rescuer, vet])
+    super_admin = User(
+        full_name="Super Admin",
+        email="superadmin@pilot.org",
+        phone="+919847555559",
+        password_hash=get_password_hash("password123"),
+        role=UserRole.SUPER_ADMIN,
+        is_active=True,
+    )
+    db.add_all([ngo_admin, rescuer, vet, super_admin])
     db.commit()
     db.refresh(rescuer)
 
@@ -81,6 +89,7 @@ def readiness_setup(db):
         "rescuer_token": create_access_token(rescuer.id),
         "rescuer_id": rescuer.id,
         "vet_token": create_access_token(vet.id),
+        "super_token": create_access_token(super_admin.id),
     }
 
 def test_upload_image_endpoint(client, readiness_setup):
@@ -99,13 +108,22 @@ def test_upload_image_endpoint(client, readiness_setup):
     assert data["filename"] == "test_rescue.jpg"
 
 def test_animal_crud_endpoints(client, readiness_setup):
-    headers = {"Authorization": f"Bearer {readiness_setup['vet_token']}"}
+    super_headers = {"Authorization": f"Bearer {readiness_setup['super_token']}"}
+    vet_headers = {"Authorization": f"Bearer {readiness_setup['vet_token']}"}
 
-    # Create
+    # 1. Non-superadmin cannot create standalone animals (403)
+    denied_create = client.post(
+        "/api/v1/animals",
+        json={"species": "Dog", "sex": "Male", "description": "Brown stray puppy"},
+        headers=vet_headers
+    )
+    assert denied_create.status_code == 403
+
+    # 2. Superadmin creates standalone animal (200)
     create_res = client.post(
         "/api/v1/animals",
         json={"species": "Dog", "sex": "Male", "description": "Brown stray puppy"},
-        headers=headers
+        headers=super_headers
     )
     assert create_res.status_code == 200
     animal = create_res.json()
@@ -113,16 +131,19 @@ def test_animal_crud_endpoints(client, readiness_setup):
     assert animal["description"] == "Brown stray puppy"
     animal_id = animal["id"]
 
-    # Get
-    get_res = client.get(f"/api/v1/animals/{animal_id}", headers=headers)
+    # 3. Non-superadmin cannot read or patch standalone animal (403)
+    assert client.get(f"/api/v1/animals/{animal_id}", headers=vet_headers).status_code == 403
+    assert client.patch(f"/api/v1/animals/{animal_id}", json={"description": "Hacked"}, headers=vet_headers).status_code == 403
+
+    # 4. Superadmin can get and patch standalone animal (200)
+    get_res = client.get(f"/api/v1/animals/{animal_id}", headers=super_headers)
     assert get_res.status_code == 200
     assert get_res.json()["species"] == "Dog"
 
-    # Patch
     patch_res = client.patch(
         f"/api/v1/animals/{animal_id}",
         json={"description": "Brown stray puppy - vaccinated"},
-        headers=headers
+        headers=super_headers
     )
     assert patch_res.status_code == 200
     assert patch_res.json()["description"] == "Brown stray puppy - vaccinated"

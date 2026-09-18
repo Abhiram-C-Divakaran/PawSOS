@@ -38,7 +38,6 @@ from app.core.case_access import (
     verify_case_access,
     can_view_case_private_details,
     can_access_case_evidence,
-    verify_case_status_update_access,
 )
 
 logger = logging.getLogger(__name__)
@@ -285,8 +284,6 @@ def update_status(
     case = db.query(RescueCase).filter(RescueCase.id == case_id).first()
     if not case:
         raise NotFoundException("Rescue case not found")
-        
-    verify_case_status_update_access(case, current_user, db)
 
     updated_case = RescueService.update_status(
         db,

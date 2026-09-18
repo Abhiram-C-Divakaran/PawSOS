@@ -94,7 +94,7 @@ done
             script_path = f.name
 
         try:
-            worker = "sleep 0.4 && exit 2"
+            worker = "sleep 0.8 && exit 2"
             beat = "sleep 5"
             uvicorn = "sleep 5"
 
@@ -119,7 +119,7 @@ done
 
         try:
             worker = "sleep 5"
-            beat = "sleep 0.4 && exit 3"
+            beat = "sleep 0.8 && exit 3"
             uvicorn = "sleep 5"
 
             res = subprocess.run(

@@ -296,7 +296,7 @@ The frontend normalization layer (`frontend/src/utils/apiConfig.ts`) automatical
 
 * **Verification Date**: September 19, 2026
 * **Target Environment**: Staging (Free Cloud Demo)
-* **Authoritative Deployed Git Commit**: `eec54752b0dfa2bb914569fa125139031c6a7a00`
+* **Authoritative Deployed Git Commit**: `eec547575a617bf477eb43c964e6acb2854c5993`
 * **Commit Message**: `fix(security): import Any in case_access for animal authorization boundary`
 * **Preceding Core CI Run**: `PawReach CI / CD Pipeline` Run `35388208844` (`SUCCESS` — all 4 required gates green)
 * **Live Staging Deployment Run**: `Staging Deployment & Smoke Tests` Run `35388656412` (`SUCCESS` — exact SHA `eec5475` deployed and verified)

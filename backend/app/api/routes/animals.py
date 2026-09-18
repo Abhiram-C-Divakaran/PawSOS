@@ -16,7 +16,7 @@ router = APIRouter()
 def create_animal(
     animal_in: AnimalCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(RoleChecker([UserRole.VETERINARIAN, UserRole.RESCUER, UserRole.NGO_ADMIN, UserRole.SUPER_ADMIN]))
+    current_user: User = Depends(RoleChecker([UserRole.SUPER_ADMIN]))
 ):
     animal = Animal(**animal_in.dict(exclude_unset=True))
     db.add(animal)

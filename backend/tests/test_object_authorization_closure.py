@@ -209,15 +209,33 @@ def auth_env(db):
     }
 
 
-def test_rescue_status_update_authorization(client: TestClient, auth_env):
+def test_rescue_status_update_authorization(client: TestClient, db, auth_env):
     """Verify strict object-level authorization on PATCH /api/v1/rescues/{case_id}/status."""
     env = auth_env
     case = env["case_alpha"]
     case_url = f"/api/v1/rescues/{case.id}/status"
 
-    # 1. Citizen: reporter allowed, other citizen denied (403)
+    # 1. Citizen: reporter allowed to cancel reported case, other citizen denied (403)
     resp = client.patch(case_url, json={"status": "CANCELLED"}, headers=env["token"](env["citizen_other"]))
     assert resp.status_code == 403
+
+    # Reporter can cancel their own case in REPORTED status
+    case_rep = RescueCase(
+        case_number=f"CASE-REP-{uuid.uuid4().hex[:4]}",
+        reporter_id=env["citizen_reporter"].id,
+        animal_id=env["animal_alpha"].id,
+        species="Dog",
+        description="Fresh reported case",
+        latitude=9.9850,
+        longitude=76.2980,
+        status=RescueStatus.REPORTED,
+    )
+    db.add(case_rep)
+    db.commit()
+    db.refresh(case_rep)
+    rep_cancel = client.patch(f"/api/v1/rescues/{case_rep.id}/status", json={"status": "CANCELLED"}, headers=env["token"](env["citizen_reporter"]))
+    assert rep_cancel.status_code == 200
+    assert rep_cancel.json()["status"] == "CANCELLED"
 
     # 2. Rescuer: unrelated rescuer denied (403), assigned rescuer allowed (200)
     resp = client.patch(case_url, json={"status": "RESPONDER_EN_ROUTE"}, headers=env["token"](env["rescuer_unrelated"]))
@@ -324,7 +342,7 @@ def test_treatment_authorization_and_scoping(client: TestClient, db, auth_env):
     assert client.get(treatments_url, headers=env["token"](env["vet_beta"])).status_code == 403
 
 
-def test_animal_record_bola_closure(client: TestClient, auth_env):
+def test_animal_record_bola_closure(client: TestClient, db, auth_env):
     """Verify BOLA closure on GET and PATCH /api/v1/animals/{animal_id}."""
     env = auth_env
     animal_id = env["animal_alpha"].id
@@ -360,6 +378,39 @@ def test_animal_record_bola_closure(client: TestClient, auth_env):
     patch_resp = client.patch(url, json={"description": "Bruno Updated"}, headers=env["token"](env["admin_alpha"]))
     assert patch_resp.status_code == 200
     assert patch_resp.json()["description"] == "Bruno Updated"
+
+    # 6. Standalone / unlinked animal record (no rescue cases linked)
+    animal_unlinked = Animal(species="Parrot", description="Standalone Polly")
+    db.add(animal_unlinked)
+    db.commit()
+    db.refresh(animal_unlinked)
+    unlinked_url = f"/api/v1/animals/{animal_unlinked.id}"
+
+    # - unlinked animal + NGO admin => 403
+    assert client.get(unlinked_url, headers=env["token"](env["admin_alpha"])).status_code == 403
+    assert client.patch(unlinked_url, json={"description": "Hacked"}, headers=env["token"](env["admin_alpha"])).status_code == 403
+    # - unlinked animal + veterinarian => 403
+    assert client.get(unlinked_url, headers=env["token"](env["vet_alpha"])).status_code == 403
+    assert client.patch(unlinked_url, json={"description": "Hacked"}, headers=env["token"](env["vet_alpha"])).status_code == 403
+    # - unlinked animal + rescuer => 403
+    assert client.get(unlinked_url, headers=env["token"](env["rescuer_assigned"])).status_code == 403
+    assert client.patch(unlinked_url, json={"description": "Hacked"}, headers=env["token"](env["rescuer_assigned"])).status_code == 403
+    # - unlinked animal + citizen => 403
+    assert client.get(unlinked_url, headers=env["token"](env["citizen_reporter"])).status_code == 403
+    assert client.patch(unlinked_url, json={"description": "Hacked"}, headers=env["token"](env["citizen_reporter"])).status_code == 403
+    # - unlinked animal + superadmin => 200
+    assert client.get(unlinked_url, headers=env["token"](env["super_admin"])).status_code == 200
+    patch_super = client.patch(unlinked_url, json={"description": "Polly Managed"}, headers=env["token"](env["super_admin"]))
+    assert patch_super.status_code == 200
+    assert patch_super.json()["description"] == "Polly Managed"
+
+    # 7. POST /api/v1/animals (standalone creation restricted to SUPER_ADMIN)
+    assert client.post("/api/v1/animals", json={"species": "Rabbit"}, headers=env["token"](env["admin_alpha"])).status_code == 403
+    assert client.post("/api/v1/animals", json={"species": "Rabbit"}, headers=env["token"](env["vet_alpha"])).status_code == 403
+    assert client.post("/api/v1/animals", json={"species": "Rabbit"}, headers=env["token"](env["rescuer_assigned"])).status_code == 403
+    post_super = client.post("/api/v1/animals", json={"species": "Rabbit"}, headers=env["token"](env["super_admin"]))
+    assert post_super.status_code == 200
+    assert post_super.json()["species"] == "Rabbit"
 
 
 def test_ngo_admin_null_org_fail_closed(client: TestClient, auth_env):

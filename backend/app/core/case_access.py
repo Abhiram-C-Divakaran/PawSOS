@@ -311,10 +311,8 @@ def verify_animal_access(animal: Any, user: User, db: Optional[Session] = None, 
         cases = db.query(RescueCase).filter(RescueCase.animal_id == animal.id).all()
     cases = cases or []
     if not cases:
-        # Standalone animal record not linked to any rescue mission yet
-        if user.role in [UserRole.SUPER_ADMIN, UserRole.NGO_ADMIN, UserRole.VETERINARIAN]:
-            return
-        raise ForbiddenException("Access denied: Rescuers cannot access unlinked animal records.")
+        # Standalone animal record not linked to any rescue mission yet (SUPER_ADMIN only)
+        raise ForbiddenException("Access denied: Standalone animal records are restricted to administrators.")
 
     if user.role == UserRole.NGO_ADMIN:
         if not user.organization_id:

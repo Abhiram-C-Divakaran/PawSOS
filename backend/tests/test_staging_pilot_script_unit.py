@@ -200,3 +200,75 @@ def test_cleanup_closes_httpx_client():
         runner.cleanup()
         mock_close.assert_called_once()
 
+
+def test_exact_40char_sha_match():
+    """When both expected and observed SHAs are 40 characters, require exact match."""
+    sha1 = "eec547575a617bf477eb43c964e6acb2854c5993"
+    sha2 = "eec547575a617bf477eb43c964e6acb2854c5994"  # 1 char difference
+
+    runner = StagingPilotRunner(
+        base_url="https://pawreach-api.onrender.com",
+        seed_password="TestPassword123!",
+        expected_sha=sha1,
+        allow_http=True,
+    )
+
+    mock_resp_health = MagicMock(status_code=200)
+    mock_resp_health.json.return_value = {
+        "status": "ok",
+        "environment": "staging",
+        "git_sha": sha2,
+    }
+
+    with patch.object(runner.client, "get", return_value=mock_resp_health):
+        with pytest.raises(PilotFailure) as exc_info:
+            runner.step_1_readiness()
+        assert "Git SHA mismatch" in str(exc_info.value)
+
+    # Exact match succeeds
+    mock_resp_health.json.return_value["git_sha"] = sha1
+    mock_resp_ready = MagicMock(status_code=200)
+    mock_resp_ready.json.return_value = {
+        "status": "ready",
+        "services": {"database": "healthy", "postgis": "healthy", "redis": "healthy", "celery": "healthy", "storage": "healthy"},
+        "checks": {"worker": "active"},
+    }
+    with patch.object(runner.client, "get", side_effect=[mock_resp_health, mock_resp_ready]):
+        runner.step_1_readiness()
+
+
+def test_step6_post_claim_foreign_evidence_denial():
+    """Step 6 must assert Admin Beta receives 403 on private evidence after Org Alpha claims."""
+    runner = StagingPilotRunner(
+        base_url="https://pawreach-api.onrender.com",
+        seed_password="TestPassword123!",
+        allow_http=True,
+    )
+    runner.tokens = {"admin_a": "token_a", "admin_b": "token_b"}
+    runner.created_case_id = "test-case-id"
+    runner.created_image_id = "test-image-id"
+
+    # Mock responses for step 6:
+    # 6a. post claim by Admin Alpha -> 200
+    # 6b. post claim by Admin Alpha (idempotent) -> 200
+    # 6c. post claim by Admin Beta -> 409
+    # 6d. get cases by Admin Alpha -> 200
+    # 6e. get dossier by Admin Alpha -> 200
+    # 6f. get dossier by Admin Beta -> 403
+    # 6g. get evidence by Admin Beta -> 200 (violates denial!)
+    mock_post_claim_a = MagicMock(status_code=200)
+    mock_post_claim_idem = MagicMock(status_code=200)
+    mock_post_claim_b = MagicMock(status_code=409)
+    mock_get_cases_a = MagicMock(status_code=200)
+    mock_get_cases_a.json.return_value = [{"id": "test-case-id"}]
+    mock_dossier_a = MagicMock(status_code=200)
+    mock_dossier_b = MagicMock(status_code=403)
+    mock_evidence_b_leaked = MagicMock(status_code=200)
+
+    with patch.object(runner.client, "post", side_effect=[mock_post_claim_a, mock_post_claim_idem, mock_post_claim_b]):
+        with patch.object(runner.client, "get", side_effect=[mock_get_cases_a, mock_dossier_a, mock_dossier_b, mock_evidence_b_leaked]):
+            with pytest.raises(PilotFailure) as exc_info:
+                runner.step_6_multitenant_claim_and_isolation()
+            assert "Admin Beta accessed foreign evidence post-claim" in str(exc_info.value)
+
+
