@@ -5,7 +5,7 @@ from app.models.animal import Animal
 from app.models.adoption_listing import AdoptionListing
 from app.core.constants import RescueStatus, AdoptionListingStatus
 
-def test_full_foster_and_adoption_status_transitions(client, db, test_org, ngo_admin_token, vet_token, foster_token):
+def test_full_foster_and_adoption_status_transitions(client, db, test_org, test_facility, ngo_admin_token, vet_token, foster_token):
     # Setup animal & case in RECOVERING
     animal = Animal(species="Dog", description="Post-surgery recovery")
     db.add(animal)
@@ -15,6 +15,7 @@ def test_full_foster_and_adoption_status_transitions(client, db, test_org, ngo_a
         case_number="PR-TRANS01",
         reporter_id=uuid.uuid4(),
         organization_id=test_org.id,
+        veterinary_facility_id=test_facility.id,
         animal_id=animal.id,
         species="Dog",
         latitude=19.05,
@@ -53,27 +54,28 @@ def test_full_foster_and_adoption_status_transitions(client, db, test_org, ngo_a
     # 4. Advance READY_FOR_ADOPTION -> ADOPTED
     res_adopt = client.patch(
         f"/api/v1/rescues/{case.id}/status",
-        json={"status": RescueStatus.ADOPTED.value, "notes": "Adoption contract signed"},
+        json={"status": RescueStatus.ADOPTED.value, "notes": "Adoption formalized"},
         headers={"Authorization": f"Bearer {ngo_admin_token}"},
     )
     assert res_adopt.status_code == 200
     assert res_adopt.json()["status"] == RescueStatus.ADOPTED.value
 
-    # 5. Advance ADOPTED -> CLOSED
+    # 5. Finalize ADOPTED -> CLOSED
     res_close = client.patch(
         f"/api/v1/rescues/{case.id}/status",
-        json={"status": RescueStatus.CLOSED.value, "notes": "Post-adoption check completed"},
+        json={"status": RescueStatus.CLOSED.value, "notes": "Case closed successfully"},
         headers={"Authorization": f"Bearer {ngo_admin_token}"},
     )
     assert res_close.status_code == 200
     assert res_close.json()["status"] == RescueStatus.CLOSED.value
 
 
-def test_release_workflow_and_adoption_listing_closure(client, db, test_org, ngo_admin_token, vet_token):
+def test_release_workflow_and_adoption_listing_closure(client, db, test_org, test_facility, ngo_admin_token, vet_token):
     case = RescueCase(
         case_number="PR-REL01",
         reporter_id=uuid.uuid4(),
         organization_id=test_org.id,
+        veterinary_facility_id=test_facility.id,
         species="Monkey",
         latitude=19.05,
         longitude=72.83,

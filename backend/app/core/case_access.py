@@ -192,3 +192,147 @@ def can_access_case_evidence(case: RescueCase, user: User, db: Optional[Session]
         return True
     except ForbiddenException:
         return False
+
+
+def has_rescuer_accepted_assignment(case: RescueCase, user: User, db: Optional[Session] = None) -> bool:
+    """Check if rescuer has an accepted assignment for this case."""
+    if hasattr(case, "assignments") and case.assignments is not None:
+        for a in case.assignments:
+            if a.rescuer_id == user.id and a.assignment_status == AssignmentStatus.ACCEPTED:
+                return True
+    if db is not None:
+        active = (
+            db.query(RescueAssignment)
+            .filter(
+                RescueAssignment.rescue_case_id == case.id,
+                RescueAssignment.rescuer_id == user.id,
+                RescueAssignment.assignment_status == AssignmentStatus.ACCEPTED,
+            )
+            .first()
+        )
+        return active is not None
+    return False
+
+
+def verify_case_status_update_access(
+    case: RescueCase,
+    user: User,
+    new_status: RescueStatus,
+    db: Optional[Session] = None,
+    veterinary_facility_id: Optional[uuid.UUID] = None,
+) -> None:
+    """Enforce strict object-level authorization for rescue case status mutations.
+    
+    Policy:
+    - SUPER_ADMIN: Global status update authority.
+    - CITIZEN: Reporter only (case.reporter_id == user.id).
+    - RESCUER: Must hold an accepted assignment for this case.
+    - VETERINARIAN: Non-null user facility and case facility matching exactly.
+    - NGO_ADMIN: Non-null user org and case org matching exactly (unassigned case requires prior explicit claim).
+    - ALL OTHERS: HTTP 403 Forbidden.
+    """
+    if user.role == UserRole.SUPER_ADMIN:
+        return
+
+    if user.role == UserRole.CITIZEN:
+        if case.reporter_id != user.id:
+            raise ForbiddenException("Citizens can only manage their own reported rescues.")
+        return
+
+    if user.role == UserRole.RESCUER:
+        if not has_rescuer_accepted_assignment(case, user, db):
+            raise ForbiddenException("Only the assigned responder may update rescue progress.")
+        return
+
+    if user.role == UserRole.VETERINARIAN:
+        if not user.veterinary_facility_id:
+            raise ForbiddenException("Veterinarian is not associated with an authorized facility.")
+        if not case.veterinary_facility_id or case.veterinary_facility_id != user.veterinary_facility_id:
+            raise ForbiddenException("Veterinarians can only update cases assigned to their authorized facility.")
+        return
+
+    if user.role == UserRole.NGO_ADMIN:
+        if not user.organization_id:
+            raise ForbiddenException("NGO Admin must be associated with an organization.")
+        if not case.organization_id or case.organization_id != user.organization_id:
+            raise ForbiddenException("Cross-tenant access forbidden: Case belongs to another organization or must be claimed first.")
+        return
+
+    raise ForbiddenException("Access denied: You do not have permission to update this rescue status.")
+
+
+def verify_treatment_read_access(case: RescueCase, user: User, db: Optional[Session] = None) -> None:
+    """Enforce strict object-level authorization for reading case clinical treatment records.
+    
+    Policy:
+    - SUPER_ADMIN: Global treatment read access.
+    - NGO_ADMIN: Exact matching non-null organization.
+    - RESCUER: Must hold an accepted assignment for this case.
+    - VETERINARIAN: Exact matching non-null facility.
+    - ALL OTHERS: HTTP 403 Forbidden.
+    """
+    if user.role == UserRole.SUPER_ADMIN:
+        return
+
+    if user.role == UserRole.NGO_ADMIN:
+        if not user.organization_id or not case.organization_id or case.organization_id != user.organization_id:
+            raise ForbiddenException("Access denied: Case belongs to another organization or is unclaimed.")
+        return
+
+    if user.role == UserRole.RESCUER:
+        if not has_rescuer_accepted_assignment(case, user, db):
+            raise ForbiddenException("Access denied: Rescuer is not assigned to this case.")
+        return
+
+    if user.role == UserRole.VETERINARIAN:
+        if not user.veterinary_facility_id or not case.veterinary_facility_id or case.veterinary_facility_id != user.veterinary_facility_id:
+            raise ForbiddenException("Access denied: Case is assigned to another veterinary facility.")
+        return
+
+    raise ForbiddenException("Access denied.")
+
+
+def verify_animal_access(animal: Any, user: User, db: Optional[Session] = None, for_update: bool = False) -> None:
+    """Enforce object-level authorization for accessing or mutating animal records.
+    
+    Policy:
+    - SUPER_ADMIN: Global access.
+    - NGO_ADMIN: Animal must be linked to at least one rescue case owned by the NGO's organization.
+    - VETERINARIAN: Animal must be linked to at least one rescue case assigned to the vet's facility.
+    - RESCUER: Animal must be linked to at least one rescue case where the rescuer holds an accepted assignment.
+    - CITIZEN / ALL OTHERS: HTTP 403 Forbidden.
+    """
+    if user.role == UserRole.SUPER_ADMIN:
+        return
+
+    cases = getattr(animal, "rescue_cases", None)
+    if cases is None and db is not None:
+        from app.models.rescue_case import RescueCase
+        cases = db.query(RescueCase).filter(RescueCase.animal_id == animal.id).all()
+    cases = cases or []
+    if not cases:
+        # Standalone animal record not linked to any rescue mission yet
+        if user.role in [UserRole.SUPER_ADMIN, UserRole.NGO_ADMIN, UserRole.VETERINARIAN]:
+            return
+        raise ForbiddenException("Access denied: Rescuers cannot access unlinked animal records.")
+
+    if user.role == UserRole.NGO_ADMIN:
+        if not user.organization_id:
+            raise ForbiddenException("Access denied: NGO Admin is not associated with an organization.")
+        if not any(c.organization_id == user.organization_id for c in cases):
+            raise ForbiddenException("Access denied: Animal is not associated with your organization.")
+        return
+
+    if user.role == UserRole.VETERINARIAN:
+        if not user.veterinary_facility_id:
+            raise ForbiddenException("Access denied: Veterinarian is not associated with an authorized facility.")
+        if not any(c.veterinary_facility_id == user.veterinary_facility_id for c in cases):
+            raise ForbiddenException("Access denied: Animal is not assigned to your veterinary facility.")
+        return
+
+    if user.role == UserRole.RESCUER:
+        if not any(has_rescuer_accepted_assignment(c, user, db) for c in cases):
+            raise ForbiddenException("Access denied: Rescuer is not assigned to this animal's rescue case.")
+        return
+
+    raise ForbiddenException("Access denied.")

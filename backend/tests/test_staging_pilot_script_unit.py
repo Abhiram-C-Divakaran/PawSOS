@@ -158,3 +158,45 @@ def test_synthetic_png_fixture_valid():
     assert SYNTHETIC_PNG_FIXTURE.startswith(b"\x89PNG\r\n\x1a\n")
     assert b"IEND" in SYNTHETIC_PNG_FIXTURE
     assert len(SYNTHETIC_PNG_FIXTURE) < 150  # Must be tiny and deterministic
+
+
+def test_cli_has_no_password_argument():
+    """Ensure scripts/staging_authenticated_pilot.py parser has no --password argument."""
+    script_path = repo_root / "scripts" / "staging_authenticated_pilot.py"
+    content = script_path.read_text(encoding="utf-8")
+    assert '"--password"' not in content
+    assert "'--password'" not in content
+
+
+def test_readiness_fails_on_non_staging_environment():
+    """Step 1 readiness must fail if environment is not staging."""
+    runner = StagingPilotRunner(
+        base_url="https://pawreach-api.onrender.com",
+        seed_password="TestPassword123!",
+        allow_http=False,
+    )
+
+    mock_resp_health = MagicMock(status_code=200)
+    mock_resp_health.json.return_value = {
+        "status": "ok",
+        "environment": "production",
+        "git_sha": "abc9a674a274cf0cce31bd4777e1b6d8701a553d",
+    }
+
+    with patch.object(runner.client, "get", return_value=mock_resp_health):
+        with pytest.raises(PilotFailure) as exc_info:
+            runner.step_1_readiness()
+        assert "environment expected 'staging'" in str(exc_info.value)
+
+
+def test_cleanup_closes_httpx_client():
+    """Cleanup must close httpx client."""
+    runner = StagingPilotRunner(
+        base_url="https://pawreach-api.onrender.com",
+        seed_password="TestPassword123!",
+        allow_http=True,
+    )
+    with patch.object(runner.client, "close") as mock_close:
+        runner.cleanup()
+        mock_close.assert_called_once()
+

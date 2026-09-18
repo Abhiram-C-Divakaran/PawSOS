@@ -199,10 +199,18 @@ class RescueService:
                     f"Users with role '{user.role.value}' are not permitted to set status to '{new_status.value}'."
                 )
 
+            # Centralized object-level status update access control
+            from app.core.case_access import verify_case_status_update_access
+            verify_case_status_update_access(
+                case=rescue_case,
+                user=user,
+                new_status=new_status,
+                db=db,
+                veterinary_facility_id=veterinary_facility_id,
+            )
+
             # Additional domain checks
             if user.role == UserRole.CITIZEN:
-                if rescue_case.reporter_id != user.id:
-                    raise ForbiddenException("Citizens can only manage their own reported rescues.")
                 if new_status == RescueStatus.CANCELLED and previous_status not in [
                     RescueStatus.REPORTED,
                     RescueStatus.TRIAGED,
@@ -215,34 +223,6 @@ class RescueService:
             raise ConflictException(
                 f"Invalid status transition from '{previous_status.value}' to '{new_status.value}'."
             )
-
-        # 3. Post-transition Role Scoping
-        if not system_update and user:
-            if user.role == UserRole.RESCUER and new_status != RescueStatus.CANCELLED:
-                if previous_status in [
-                    RescueStatus.RESPONDER_ASSIGNED,
-                    RescueStatus.RESPONDER_EN_ROUTE,
-                    RescueStatus.ANIMAL_LOCATED,
-                    RescueStatus.RESCUED,
-                    RescueStatus.TRANSPORTING,
-                ]:
-                    active_assignment = (
-                        db.query(RescueAssignment)
-                        .filter(
-                            RescueAssignment.rescue_case_id == rescue_case.id,
-                            RescueAssignment.rescuer_id == user.id,
-                            RescueAssignment.assignment_status == AssignmentStatus.ACCEPTED
-                        )
-                        .first()
-                    )
-                    if not active_assignment:
-                        raise ForbiddenException("Only the assigned responder may update rescue progress.")
-
-            if user.role == UserRole.VETERINARIAN:
-                if not user.veterinary_facility_id:
-                    raise ForbiddenException("Veterinarian is not associated with an authorized facility.")
-                if rescue_case.veterinary_facility_id and rescue_case.veterinary_facility_id != user.veterinary_facility_id:
-                    raise ForbiddenException("Veterinarians can only update cases assigned to their authorized facility.")
 
         # Update case
         rescue_case.status = new_status

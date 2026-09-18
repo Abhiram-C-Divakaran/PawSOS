@@ -31,10 +31,15 @@ from app.core.permissions import RoleChecker
 from app.core.constants import UserRole, RescueStatus, AssignmentStatus
 from app.core.exceptions import NotFoundException, ConflictException, ForbiddenException, ServiceUnavailableException
 from app.core.rate_limiter import limiter
+from app.config import settings
 
 from app.services.storage_service import storage_service
-from app.config import settings
-from app.core.case_access import verify_case_access, can_view_case_private_details, can_access_case_evidence
+from app.core.case_access import (
+    verify_case_access,
+    can_view_case_private_details,
+    can_access_case_evidence,
+    verify_case_status_update_access,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -281,6 +286,8 @@ def update_status(
     if not case:
         raise NotFoundException("Rescue case not found")
         
+    verify_case_status_update_access(case, current_user, db)
+
     updated_case = RescueService.update_status(
         db,
         case,

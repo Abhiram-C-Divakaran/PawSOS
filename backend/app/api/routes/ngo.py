@@ -84,6 +84,29 @@ def check_org_scope(current_user: User, case: RescueCase, allow_unassigned_case:
         detail="Access denied: Insufficient privileges"
     )
 
+def require_ngo_org_scope(current_user: User) -> Optional[uuid.UUID]:
+    """Ensure the user is authorized for NGO operations.
+    
+    Fail-closed policy:
+    - NGO Admin MUST have a non-null organization_id. If null, raises HTTP 403 Forbidden.
+    - Super Admin / Municipal Admin return current_user.organization_id (can be None for global scope).
+    """
+    if current_user.role in [UserRole.SUPER_ADMIN, UserRole.MUNICIPAL_ADMIN]:
+        return current_user.organization_id
+
+    if current_user.role == UserRole.NGO_ADMIN:
+        if not current_user.organization_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied: NGO Admin is not associated with an organization"
+            )
+        return current_user.organization_id
+
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Access denied: Insufficient privileges"
+    )
+
 def get_case_status_history_map(db: Session, case_ids: List[uuid.UUID]) -> Dict[uuid.UUID, Dict[RescueStatus, datetime]]:
     """Batch retrieves earliest status transition timestamp for a list of cases."""
     if not case_ids:
@@ -108,11 +131,12 @@ def get_ngo_overview(
     current_user: User = Depends(RoleChecker([UserRole.NGO_ADMIN, UserRole.SUPER_ADMIN]))
 ):
     """Retrieve operational KPIs calculated strictly from live rescue database data."""
+    org_id = require_ngo_org_scope(current_user)
     case_query = db.query(RescueCase)
-    if current_user.role == UserRole.NGO_ADMIN and current_user.organization_id:
-        case_query = case_query.filter(
-            (RescueCase.organization_id == current_user.organization_id) | (RescueCase.organization_id.is_(None))
-        )
+    if current_user.role == UserRole.NGO_ADMIN:
+        case_query = case_query.filter(RescueCase.organization_id == org_id)
+    elif org_id:
+        case_query = case_query.filter(RescueCase.organization_id == org_id)
     all_cases = case_query.all()
     total_cases = len(all_cases)
 
@@ -145,9 +169,13 @@ def get_ngo_overview(
 
     # Responders statistics (scoped if NGO admin)
     rescuer_query = db.query(User, RescuerProfile).join(RescuerProfile, RescuerProfile.user_id == User.id).filter(User.is_active == True)
-    if current_user.role == UserRole.NGO_ADMIN and current_user.organization_id:
+    if current_user.role == UserRole.NGO_ADMIN:
         rescuer_query = rescuer_query.filter(
-            (User.organization_id == current_user.organization_id) | (RescuerProfile.organization_id == current_user.organization_id)
+            (User.organization_id == org_id) | (RescuerProfile.organization_id == org_id)
+        )
+    elif org_id:
+        rescuer_query = rescuer_query.filter(
+            (User.organization_id == org_id) | (RescuerProfile.organization_id == org_id)
         )
     rescuers = rescuer_query.all()
     total_rescuers = len(rescuers)
@@ -257,14 +285,15 @@ def get_response_time_analytics(
     current_user: User = Depends(RoleChecker([UserRole.NGO_ADMIN, UserRole.SUPER_ADMIN]))
 ):
     """Real response time trend dataset calculated from case assignments over period."""
+    org_id = require_ngo_org_scope(current_user)
     days = 7 if period == "7d" else (90 if period == "90d" else 30)
     cutoff = datetime.utcnow() - timedelta(days=days)
 
     case_query = db.query(RescueCase).filter(RescueCase.created_at >= cutoff)
-    if current_user.role == UserRole.NGO_ADMIN and current_user.organization_id:
-        case_query = case_query.filter(
-            (RescueCase.organization_id == current_user.organization_id) | (RescueCase.organization_id.is_(None))
-        )
+    if current_user.role == UserRole.NGO_ADMIN:
+        case_query = case_query.filter(RescueCase.organization_id == org_id)
+    elif org_id:
+        case_query = case_query.filter(RescueCase.organization_id == org_id)
     cases = case_query.all()
     case_ids = [c.id for c in cases]
     status_map = get_case_status_history_map(db, case_ids)
@@ -314,11 +343,12 @@ def get_rescue_outcomes(
     current_user: User = Depends(RoleChecker([UserRole.NGO_ADMIN, UserRole.SUPER_ADMIN]))
 ):
     """Aggregate rescue terminal & current outcomes with correct categorization and success rates."""
+    org_id = require_ngo_org_scope(current_user)
     case_query = db.query(RescueCase)
-    if current_user.role == UserRole.NGO_ADMIN and current_user.organization_id:
-        case_query = case_query.filter(
-            (RescueCase.organization_id == current_user.organization_id) | (RescueCase.organization_id.is_(None))
-        )
+    if current_user.role == UserRole.NGO_ADMIN:
+        case_query = case_query.filter(RescueCase.organization_id == org_id)
+    elif org_id:
+        case_query = case_query.filter(RescueCase.organization_id == org_id)
     cases = case_query.all()
     total_cases = len(cases)
 
@@ -421,14 +451,15 @@ def get_incident_hotspots(
     current_user: User = Depends(RoleChecker([UserRole.NGO_ADMIN, UserRole.SUPER_ADMIN]))
 ):
     """Return tenant-isolated aggregated rescue incident clusters with real response measurements and date range filtering."""
+    org_id = require_ngo_org_scope(current_user)
     days = 7 if period == "7d" else (90 if period == "90d" else 30)
     cutoff = datetime.utcnow() - timedelta(days=days)
 
     case_query = db.query(RescueCase).filter(RescueCase.created_at >= cutoff)
-    if current_user.role == UserRole.NGO_ADMIN and current_user.organization_id:
-        case_query = case_query.filter(
-            (RescueCase.organization_id == current_user.organization_id) | (RescueCase.organization_id.is_(None))
-        )
+    if current_user.role == UserRole.NGO_ADMIN:
+        case_query = case_query.filter(RescueCase.organization_id == org_id)
+    elif org_id:
+        case_query = case_query.filter(RescueCase.organization_id == org_id)
 
     dialect_name = db.bind.dialect.name if db.bind else "sqlite"
     if dialect_name == "postgresql":
@@ -525,11 +556,12 @@ def get_ngo_operational_insights(
     current_user: User = Depends(RoleChecker([UserRole.NGO_ADMIN, UserRole.SUPER_ADMIN]))
 ):
     """Operational heuristics: busiest days, top areas, acceptance rates, and radius escalations."""
+    org_id = require_ngo_org_scope(current_user)
     case_query = db.query(RescueCase)
-    if current_user.role == UserRole.NGO_ADMIN and current_user.organization_id:
-        case_query = case_query.filter(
-            (RescueCase.organization_id == current_user.organization_id) | (RescueCase.organization_id.is_(None))
-        )
+    if current_user.role == UserRole.NGO_ADMIN:
+        case_query = case_query.filter(RescueCase.organization_id == org_id)
+    elif org_id:
+        case_query = case_query.filter(RescueCase.organization_id == org_id)
     cases = case_query.all()
     case_ids = [c.id for c in cases]
 
@@ -630,16 +662,14 @@ def get_ngo_cases(
     current_user: User = Depends(RoleChecker([UserRole.NGO_ADMIN, UserRole.SUPER_ADMIN]))
 ):
     """Retrieve filtered and searchable rescue cases for NGO case management with privacy protection."""
+    org_id = require_ngo_org_scope(current_user)
     query = db.query(RescueCase)
     if current_user.role == UserRole.NGO_ADMIN:
         # Discovery policy: NGO admins can discover cases belonging to their own organization
         # as well as unassigned cases available for response/intake. Cross-tenant cases are strictly excluded.
-        if current_user.organization_id:
-            query = query.filter(
-                (RescueCase.organization_id == current_user.organization_id) | (RescueCase.organization_id.is_(None))
-            )
-        else:
-            query = query.filter(RescueCase.organization_id.is_(None))
+        query = query.filter(
+            (RescueCase.organization_id == org_id) | (RescueCase.organization_id.is_(None))
+        )
 
     if priority:
         query = query.filter(RescueCase.triage_priority == priority)
@@ -666,6 +696,7 @@ def get_ngo_case_dossier(
     current_user: User = Depends(RoleChecker([UserRole.NGO_ADMIN, UserRole.SUPER_ADMIN]))
 ):
     """Complete dossier for a single case including timeline, offers, and audit logs."""
+    require_ngo_org_scope(current_user)
     case = db.query(RescueCase).filter(RescueCase.id == case_id).first()
     if not case:
         raise HTTPException(status_code=404, detail="Rescue case not found")
@@ -736,21 +767,14 @@ def claim_ngo_case(
     Explicit, auditable, atomic NGO case claim operation.
     Pessimistically row-locks RescueCase to ensure single-tenant ownership claim.
     """
-    if current_user.role == UserRole.NGO_ADMIN:
-        if not current_user.organization_id:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Access denied: NGO Admin is not associated with an organization"
-            )
-        target_org_id = current_user.organization_id
-    else:
+    org_id = require_ngo_org_scope(current_user)
+    if not org_id:
         # SUPER_ADMIN
-        if not current_user.organization_id:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Super Admin cannot claim case without an associated organization"
-            )
-        target_org_id = current_user.organization_id
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Super Admin cannot claim case without an associated organization"
+        )
+    target_org_id = org_id
 
     # Row-lock RescueCase
     case = (
@@ -804,6 +828,7 @@ def execute_ngo_case_action(
     current_user: User = Depends(RoleChecker([UserRole.NGO_ADMIN, UserRole.SUPER_ADMIN]))
 ):
     """Privileged administrative actions on a rescue case with audit logging and single-winner row locking."""
+    require_ngo_org_scope(current_user)
     case = (
         db.query(RescueCase)
         .filter(RescueCase.id == case_id)
@@ -814,11 +839,7 @@ def execute_ngo_case_action(
     if not case:
         raise HTTPException(status_code=404, detail="Rescue case not found")
 
-    check_org_scope(current_user, case, allow_unassigned_case=True)
-
-    # Claim unassigned case to current NGO organization if applicable
-    if not case.organization_id and current_user.organization_id:
-        case.organization_id = current_user.organization_id
+    check_org_scope(current_user, case, allow_unassigned_case=False)
 
     old_status = case.status.value
     action_type = payload.action.lower()
@@ -860,7 +881,7 @@ def execute_ngo_case_action(
         )
         audit = AuditLog(
             actor_id=current_user.id,
-            action="ADMIN_CANCEL",
+            action="CANCEL",
             entity="rescue_case",
             entity_id=case.id,
             old_value={"status": old_status},
@@ -898,24 +919,26 @@ def execute_ngo_case_action(
         rescuer = db.query(User).filter(User.id == payload.rescuer_id, User.role == UserRole.RESCUER).first()
         if not rescuer:
             raise HTTPException(status_code=404, detail="Rescuer not found")
+        if not rescuer.is_active:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot assign inactive responder")
 
-        # Tenant check: NGO Admin can only assign rescuers belonging to their organization
-        if current_user.role == UserRole.NGO_ADMIN and current_user.organization_id:
+        # Tenant check: NGO Admin can only assign active rescuers belonging to their organization
+        if current_user.role == UserRole.NGO_ADMIN:
             rescuer_profile = db.query(RescuerProfile).filter(RescuerProfile.user_id == rescuer.id).first()
             rescuer_org = rescuer.organization_id or (rescuer_profile.organization_id if rescuer_profile else None)
-            if rescuer_org and rescuer_org != current_user.organization_id:
+            if not rescuer_org or rescuer_org != current_user.organization_id:
                 audit = AuditLog(
                     actor_id=current_user.id,
                     action="CROSS_TENANT_RESPONDER_ASSIGNMENT_DENIED",
                     entity="rescue_case",
                     entity_id=case.id,
                     old_value={"status": old_status},
-                    new_value={"target_rescuer_id": str(rescuer.id), "target_org_id": str(rescuer_org)},
+                    new_value={"target_rescuer_id": str(rescuer.id), "target_org_id": str(rescuer_org) if rescuer_org else None},
                     timestamp=datetime.utcnow()
                 )
                 db.add(audit)
                 db.commit()
-                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot assign responder from another organization")
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot assign responder from another organization or unaffiliated responder")
 
         # Lock and inspect existing assignments
         existing_accepted = (
@@ -1068,14 +1091,19 @@ def get_ngo_responders(
     current_user: User = Depends(RoleChecker([UserRole.NGO_ADMIN, UserRole.SUPER_ADMIN]))
 ):
     """Roster of rescue responders with availability, fleet metrics, and performance indicators."""
+    org_id = require_ngo_org_scope(current_user)
     query = (
         db.query(User, RescuerProfile)
         .join(RescuerProfile, RescuerProfile.user_id == User.id)
         .filter(User.role == UserRole.RESCUER)
     )
-    if current_user.role == UserRole.NGO_ADMIN and current_user.organization_id:
+    if current_user.role == UserRole.NGO_ADMIN:
         query = query.filter(
-            (User.organization_id == current_user.organization_id) | (RescuerProfile.organization_id == current_user.organization_id)
+            (User.organization_id == org_id) | (RescuerProfile.organization_id == org_id)
+        )
+    elif org_id:
+        query = query.filter(
+            (User.organization_id == org_id) | (RescuerProfile.organization_id == org_id)
         )
 
     records = query.all()
@@ -1150,6 +1178,7 @@ def update_responder_status(
     current_user: User = Depends(RoleChecker([UserRole.NGO_ADMIN, UserRole.SUPER_ADMIN]))
 ):
     """Toggle responder active status or update operational affiliation with audit trail."""
+    require_ngo_org_scope(current_user)
     user = db.query(User).filter(User.id == user_id, User.role == UserRole.RESCUER).first()
     if not user:
         raise HTTPException(status_code=404, detail="Responder not found")
@@ -1244,10 +1273,15 @@ def get_ngo_veterinary_network(
     current_user: User = Depends(RoleChecker([UserRole.NGO_ADMIN, UserRole.SUPER_ADMIN]))
 ):
     """List partner veterinary clinics with current patient intake metrics."""
+    org_id = require_ngo_org_scope(current_user)
     fac_query = db.query(VeterinaryFacility)
-    if current_user.role == UserRole.NGO_ADMIN and current_user.organization_id:
+    if current_user.role == UserRole.NGO_ADMIN:
         fac_query = fac_query.filter(
-            (VeterinaryFacility.organization_id == current_user.organization_id) | (VeterinaryFacility.organization_id.is_(None))
+            (VeterinaryFacility.organization_id == org_id) | (VeterinaryFacility.organization_id.is_(None))
+        )
+    elif org_id:
+        fac_query = fac_query.filter(
+            (VeterinaryFacility.organization_id == org_id) | (VeterinaryFacility.organization_id.is_(None))
         )
     facilities = fac_query.all()
     results = []
@@ -1285,6 +1319,7 @@ def get_ngo_organization_profile(
     current_user: User = Depends(RoleChecker([UserRole.NGO_ADMIN, UserRole.SUPER_ADMIN]))
 ):
     """Retrieve organization profile, operational region, and team sizes."""
+    require_ngo_org_scope(current_user)
     org = None
     if current_user.organization_id:
         org = db.query(Organization).filter(Organization.id == current_user.organization_id).first()
@@ -1319,6 +1354,7 @@ def update_ngo_organization_profile(
     current_user: User = Depends(RoleChecker([UserRole.NGO_ADMIN, UserRole.SUPER_ADMIN]))
 ):
     """Update safe organization profile fields with audit trail. Tenant ownership cannot be hijacked."""
+    require_ngo_org_scope(current_user)
     if not current_user.organization_id and current_user.role != UserRole.SUPER_ADMIN:
         raise HTTPException(status_code=403, detail="User is not associated with an organization")
 
@@ -1389,6 +1425,7 @@ def get_ngo_dispatch_settings(
     current_user: User = Depends(RoleChecker([UserRole.NGO_ADMIN, UserRole.SUPER_ADMIN]))
 ):
     """Retrieve operational dispatch parameters: radius escalation levels and timeouts."""
+    require_ngo_org_scope(current_user)
     raw_levels = settings.DISPATCH_RADIUS_LEVELS.split(",")
     levels = []
     for x in raw_levels:

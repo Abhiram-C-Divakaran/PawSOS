@@ -69,7 +69,7 @@ def test_rescue_status_transitions_and_history(client, citizen_token, rescuer_to
     assert "RESPONDER_ASSIGNED" in statuses
     assert "RESPONDER_EN_ROUTE" in statuses
 
-def test_invalid_status_transition_rejected(client, citizen_token, rescuer_token):
+def test_invalid_status_transition_rejected(client, citizen_token, admin_token):
     # Create case (status = TRIAGED)
     create_res = client.post(
         "/api/v1/rescues",
@@ -82,7 +82,7 @@ def test_invalid_status_transition_rejected(client, citizen_token, rescuer_token
     patch_res = client.patch(
         f"/api/v1/rescues/{case_id}/status",
         json={"status": "RESCUED"},
-        headers={"Authorization": f"Bearer {rescuer_token}"}
+        headers={"Authorization": f"Bearer {admin_token}"}
     )
     assert patch_res.status_code == 409
     assert "Invalid status transition" in str(patch_res.json())

@@ -11,6 +11,7 @@ from app.schemas.veterinary import TreatmentCreate, TreatmentUpdate, TreatmentRe
 from app.core.permissions import RoleChecker
 from app.core.constants import UserRole, RescueStatus
 from app.core.exceptions import NotFoundException, ForbiddenException
+from app.core.case_access import verify_treatment_read_access
 from app.services.rescue_service import RescueService
 
 router = APIRouter()
@@ -26,11 +27,11 @@ def add_treatment(
     if not case:
         raise NotFoundException("Rescue case not found")
 
-    # Requirement 43: Enforce veterinary facility scoping
+    # Enforce veterinary facility scoping (fail-closed if case has no facility or different facility)
     if not current_user.veterinary_facility_id:
         raise ForbiddenException("Access denied: Veterinarian is not associated with an authorized facility.")
-    if case.veterinary_facility_id and case.veterinary_facility_id != current_user.veterinary_facility_id:
-        raise ForbiddenException("Access denied: Case is assigned to another veterinary facility.")
+    if not case.veterinary_facility_id or case.veterinary_facility_id != current_user.veterinary_facility_id:
+        raise ForbiddenException("Access denied: Case is not assigned to your authorized veterinary facility.")
     if treatment_in.facility_id != current_user.veterinary_facility_id:
         raise ForbiddenException("Access denied: You can only record treatments for your authorized facility.")
         
@@ -47,10 +48,6 @@ def add_treatment(
         recovery_status=treatment_in.recovery_status or "In Treatment",
     )
     db.add(treatment)
-    
-    # Assign facility to case if not already set
-    if not case.veterinary_facility_id:
-        case.veterinary_facility_id = treatment_in.facility_id
 
     # Update case status to UNDER_TREATMENT
     if case.status != RescueStatus.UNDER_TREATMENT:
@@ -72,12 +69,11 @@ def get_treatments(
     db: Session = Depends(get_db),
     current_user: User = Depends(RoleChecker([UserRole.VETERINARIAN, UserRole.RESCUER, UserRole.NGO_ADMIN, UserRole.SUPER_ADMIN]))
 ):
-    if current_user.role == UserRole.VETERINARIAN:
-        if not current_user.veterinary_facility_id:
-            raise ForbiddenException("Access denied: Veterinarian is not associated with an authorized facility.")
-        case = db.query(RescueCase).filter(RescueCase.id == case_id).first()
-        if case and case.veterinary_facility_id and case.veterinary_facility_id != current_user.veterinary_facility_id:
-            raise ForbiddenException("Access denied: Case is assigned to another veterinary facility.")
+    case = db.query(RescueCase).filter(RescueCase.id == case_id).first()
+    if not case:
+        raise NotFoundException("Rescue case not found")
+
+    verify_treatment_read_access(case, current_user, db)
 
     treatments = db.query(Treatment).filter(Treatment.rescue_case_id == case_id).all()
     return treatments

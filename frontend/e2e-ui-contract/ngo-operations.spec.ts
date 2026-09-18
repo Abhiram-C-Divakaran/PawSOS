@@ -59,12 +59,46 @@ test.describe('NGO Command Center Operations E2E', () => {
       });
     });
 
-    // Mock notifications
-    await page.route('**/api/v1/notifications**', async (route) => {
+    // Mock auth refresh
+    await page.route('**/api/v1/auth/refresh**', async (route) => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify([]),
+        body: JSON.stringify({
+          access_token: 'mock-ngo-admin-token',
+          refresh_token: 'mock-ngo-admin-refresh',
+        }),
+      });
+    });
+
+    // Mock triage assessment
+    await page.route('**/api/v1/rescues/**/triage**', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          case_id: caseId,
+          case_number: 'CASE-NGO-2026-001',
+          final_priority: 'CRITICAL',
+          final_score: 90,
+          final_reason: 'Deep laceration, vehicle collision',
+          rule_assessment: {
+            priority: 'CRITICAL',
+            score: 90,
+            reasons: ['Deep laceration'],
+            completed_at: new Date().toISOString(),
+          },
+          ai_assessment: {
+            status: 'COMPLETED',
+            priority: 'CRITICAL',
+            confidence: 0.95,
+            primary_concern: 'Trauma',
+            recommended_action: 'Emergency surgery',
+            model_version: 'v1',
+            completed_at: new Date().toISOString(),
+          },
+          disclaimer: 'Advisory only',
+        }),
       });
     });
   });
@@ -258,7 +292,7 @@ test.describe('NGO Command Center Operations E2E', () => {
     await page.getByRole('link', { name: /View Dossier/i }).first().click();
 
     // Verify Case Dossier
-    await expect(page.getByText('Deep laceration, vehicle collision')).toBeVisible();
+    await expect(page.getByText('Deep laceration, vehicle collision').first()).toBeVisible();
     await expect(page.getByText('Automatic dispatch wave 1 initiated')).toBeVisible();
     await expect(page.getByText('Rahul Deshmukh')).toBeVisible();
 

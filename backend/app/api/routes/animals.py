@@ -8,6 +8,7 @@ from app.schemas.animal import AnimalCreate, AnimalUpdate, AnimalResponse
 from app.core.permissions import RoleChecker
 from app.core.constants import UserRole
 from app.core.exceptions import NotFoundException
+from app.core.case_access import verify_animal_access
 
 router = APIRouter()
 
@@ -15,7 +16,7 @@ router = APIRouter()
 def create_animal(
     animal_in: AnimalCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(RoleChecker([UserRole.VETERINARIAN, UserRole.RESCUER, UserRole.NGO_ADMIN]))
+    current_user: User = Depends(RoleChecker([UserRole.VETERINARIAN, UserRole.RESCUER, UserRole.NGO_ADMIN, UserRole.SUPER_ADMIN]))
 ):
     animal = Animal(**animal_in.dict(exclude_unset=True))
     db.add(animal)
@@ -27,11 +28,12 @@ def create_animal(
 def get_animal(
     animal_id: UUID,
     db: Session = Depends(get_db),
-    current_user: User = Depends(RoleChecker([UserRole.VETERINARIAN, UserRole.RESCUER, UserRole.NGO_ADMIN, UserRole.CITIZEN]))
+    current_user: User = Depends(RoleChecker([UserRole.VETERINARIAN, UserRole.RESCUER, UserRole.NGO_ADMIN, UserRole.SUPER_ADMIN]))
 ):
     animal = db.query(Animal).filter(Animal.id == animal_id).first()
     if not animal:
         raise NotFoundException("Animal not found")
+    verify_animal_access(animal, current_user, db)
     return animal
 
 @router.patch("/{animal_id}", response_model=AnimalResponse)
@@ -39,11 +41,12 @@ def update_animal(
     animal_id: UUID,
     animal_in: AnimalUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(RoleChecker([UserRole.VETERINARIAN, UserRole.RESCUER, UserRole.NGO_ADMIN]))
+    current_user: User = Depends(RoleChecker([UserRole.VETERINARIAN, UserRole.RESCUER, UserRole.NGO_ADMIN, UserRole.SUPER_ADMIN]))
 ):
     animal = db.query(Animal).filter(Animal.id == animal_id).first()
     if not animal:
         raise NotFoundException("Animal not found")
+    verify_animal_access(animal, current_user, db)
         
     for key, value in animal_in.dict(exclude_unset=True).items():
         setattr(animal, key, value)

@@ -342,6 +342,13 @@ def test_manual_assignment_single_winner_locking(client, db, admin_alpha, rescue
     db.add_all([offer1, offer2])
     db.commit()
 
+    # Claim case first (unassigned cases require explicit claim before actions)
+    claim_resp = client.post(
+        f"/api/v1/ngo/cases/{sample_case_with_evidence.id}/claim",
+        headers=headers_admin,
+    )
+    assert claim_resp.status_code == 200
+
     # Admin manually assigns Rescuer 1
     resp = client.post(
         f"/api/v1/ngo/cases/{sample_case_with_evidence.id}/actions",

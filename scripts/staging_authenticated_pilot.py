@@ -77,7 +77,7 @@ class StagingPilotRunner:
         raise PilotFailure(f"[{section}] {message}")
 
     def cleanup(self):
-        """Guaranteed cleanup hook to restore responder availability states."""
+        """Guaranteed cleanup hook to restore responder availability states and close HTTP client."""
         self.log("CLEANUP", "Restoring responder availability states...")
         if "rescuer_a" in self.tokens:
             try:
@@ -100,6 +100,12 @@ class StagingPilotRunner:
                 self.log("CLEANUP", "Rescuer B restored to AVAILABLE", status="PASS")
             except Exception as e:
                 self.log("CLEANUP", f"Could not restore Rescuer B: {e}", status="WARN")
+
+        try:
+            self.client.close()
+            self.log("CLEANUP", "HTTP client closed cleanly", status="PASS")
+        except Exception as e:
+            self.log("CLEANUP", f"Could not close HTTP client: {e}", status="WARN")
 
     def run(self) -> bool:
         print("====================================================================")
@@ -166,6 +172,8 @@ class StagingPilotRunner:
 
             observed_sha = hdata.get("git_sha", "")
             env_val = hdata.get("environment", "")
+            if env_val != "staging" and not self.allow_http:
+                self.abort("STEP 1", f"/health environment expected 'staging', got '{env_val}'")
             self.log("STEP 1", f"/health OK: environment={env_val} | git_sha={observed_sha}", status="PASS")
 
             if self.expected_sha:
@@ -364,16 +372,17 @@ class StagingPilotRunner:
             f"{self.base_url}/api/v1/rescuers/me/offers",
             headers={"Authorization": f"Bearer {self.tokens['rescuer_b']}"},
         )
-        if b_offers_resp.status_code == 200:
-            b_offers = b_offers_resp.json()
-            matching_b_offers = [
-                off for off in b_offers
-                if str(off.get("rescue_case_id") or off.get("case_id")) == str(self.created_case_id)
-                and off.get("assignment_status") == "PENDING"
-            ]
-            if matching_b_offers:
-                self.abort("STEP 4", f"Rescuer B received unexpected pending offer {matching_b_offers[0]['id']}")
-            self.log("STEP 4", "Confirmed Rescuer B has ZERO pending offers for this case", status="PASS")
+        if b_offers_resp.status_code != 200:
+            self.abort("STEP 4", f"Rescuer B offers query returned HTTP {b_offers_resp.status_code}: {b_offers_resp.text}")
+        b_offers = b_offers_resp.json()
+        matching_b_offers = [
+            off for off in b_offers
+            if str(off.get("rescue_case_id") or off.get("case_id")) == str(self.created_case_id)
+            and off.get("assignment_status") == "PENDING"
+        ]
+        if matching_b_offers:
+            self.abort("STEP 4", f"Rescuer B received unexpected pending offer {matching_b_offers[0]['id']}")
+        self.log("STEP 4", "Confirmed Rescuer B has ZERO pending offers for this case", status="PASS")
 
         # 4b. Assert Rescuer B claim is rejected with HTTP 403 Forbidden
         self.log("STEP 4", "Asserting unoffered Rescuer B direct claim is rejected with HTTP 403...")
@@ -386,10 +395,10 @@ class StagingPilotRunner:
         else:
             self.abort("STEP 4", f"Expected HTTP 403 for unoffered claim, got HTTP {b_claim_resp.status_code}")
 
-        # 4c. Find Rescuer A's active offer and accept
+        # 4c. Find Rescuer A's active offer and accept strictly via canonical offer endpoint
         self.log("STEP 4", "Locating Rescuer A incoming dispatch offer...")
         offer_id = None
-        for attempt in range(8):
+        for attempt in range(10):
             offers_resp = self.client.get(
                 f"{self.base_url}/api/v1/rescuers/me/offers",
                 headers={"Authorization": f"Bearer {self.tokens['rescuer_a']}"},
@@ -405,24 +414,17 @@ class StagingPilotRunner:
                 break
             time.sleep(1.0)
 
-        if offer_id:
-            self.log("STEP 4", f"Found pending offer {offer_id} for Rescuer A. Accepting via offer endpoint...", status="PASS")
-            accept_resp = self.client.post(
-                f"{self.base_url}/api/v1/rescuers/offers/{offer_id}/accept",
-                headers={"Authorization": f"Bearer {self.tokens['rescuer_a']}"},
-            )
-            if accept_resp.status_code != 200:
-                self.abort("STEP 4", f"Offer acceptance failed: HTTP {accept_resp.status_code} - {accept_resp.text}")
-        else:
-            # Fallback to secure backwards-compatible shim for Rescuer A
-            self.log("STEP 4", "Testing secure legacy shim acceptance for Rescuer A...", status="INFO")
-            shim_resp = self.client.post(
-                f"{self.base_url}/api/v1/rescues/{self.created_case_id}/accept",
-                headers={"Authorization": f"Bearer {self.tokens['rescuer_a']}"},
-            )
-            if shim_resp.status_code != 200:
-                self.abort("STEP 4", f"Legacy shim accept failed: HTTP {shim_resp.status_code} - {shim_resp.text}")
-            self.log("STEP 4", "Rescuer A accepted via secure shim delegation", status="PASS")
+        if not offer_id:
+            self.abort("STEP 4", "No pending dispatch offer found for Rescuer A on canonical endpoint")
+
+        self.log("STEP 4", f"Found pending offer {offer_id} for Rescuer A. Accepting via canonical offer endpoint...", status="PASS")
+        accept_resp = self.client.post(
+            f"{self.base_url}/api/v1/rescuers/offers/{offer_id}/accept",
+            headers={"Authorization": f"Bearer {self.tokens['rescuer_a']}"},
+        )
+        if accept_resp.status_code != 200:
+            self.abort("STEP 4", f"Canonical offer acceptance failed: HTTP {accept_resp.status_code} - {accept_resp.text}")
+        self.log("STEP 4", f"Rescuer A accepted offer {offer_id} via canonical endpoint (HTTP 200)", status="PASS")
 
         # 4d. Verify Case Transitioned to RESPONDER_ASSIGNED
         case_check = self.client.get(
@@ -447,6 +449,7 @@ class StagingPilotRunner:
             self.abort("STEP 4", f"Expected 403 or 409 for duplicate claim, got HTTP {second_claim.status_code}")
 
     # -------------------------------------------------------------------------
+    # -------------------------------------------------------------------------
     # Step 5: Private Evidence Access Authorization Security Check
     # -------------------------------------------------------------------------
     def step_5_evidence_access_security(self):
@@ -464,8 +467,7 @@ class StagingPilotRunner:
                     self.created_image_id = imgs[0].get("id")
 
         if not self.created_image_id:
-            self.log("STEP 5", "No image attached to case; skipping evidence access check", status="WARN")
-            return
+            self.abort("STEP 5", "Mandatory synthetic private evidence image was not attached to created case")
 
         evidence_url = f"{self.base_url}/api/v1/rescues/{self.created_case_id}/images/{self.created_image_id}/access"
 
@@ -480,7 +482,8 @@ class StagingPilotRunner:
         res_a_resp = self.client.get(evidence_url, headers={"Authorization": f"Bearer {self.tokens['rescuer_a']}"})
         if res_a_resp.status_code != 200:
             self.abort("STEP 5", f"Assigned Rescuer A denied image access: HTTP {res_a_resp.status_code}")
-        self.log("STEP 5", "Assigned Rescuer A evidence access verified (HTTP 200)", status="PASS")
+        expires_a = res_a_resp.json().get("expires_in")
+        self.log("STEP 5", f"Assigned Rescuer A evidence access verified (HTTP 200, expires_in={expires_a}s)", status="PASS")
 
         # 5c. Unassigned Rescuer B is denied evidence access (HTTP 403)
         res_b_resp = self.client.get(evidence_url, headers={"Authorization": f"Bearer {self.tokens['rescuer_b']}"})
@@ -560,13 +563,13 @@ class StagingPilotRunner:
             self.abort("STEP 6", f"Admin Beta accessed foreign dossier! HTTP {beta_dossier.status_code}")
         self.log("STEP 6", f"Admin Beta dossier access correctly blocked (HTTP {beta_dossier.status_code})", status="PASS")
 
-        # 6g. Admin Alpha can now access private evidence
-        if self.created_image_id:
-            evidence_url = f"{self.base_url}/api/v1/rescues/{self.created_case_id}/images/{self.created_image_id}/access"
-            alpha_img_resp = self.client.get(evidence_url, headers={"Authorization": f"Bearer {self.tokens['admin_a']}"})
-            if alpha_img_resp.status_code != 200:
-                self.abort("STEP 6", f"Admin Alpha denied evidence access after claim: HTTP {alpha_img_resp.status_code}")
-            self.log("STEP 6", "Admin Alpha authorized private evidence access verified (HTTP 200)", status="PASS")
+        # 6g. Admin Alpha can now access private evidence after claiming
+        evidence_url = f"{self.base_url}/api/v1/rescues/{self.created_case_id}/images/{self.created_image_id}/access"
+        alpha_img_resp = self.client.get(evidence_url, headers={"Authorization": f"Bearer {self.tokens['admin_a']}"})
+        if alpha_img_resp.status_code != 200:
+            self.abort("STEP 6", f"Admin Alpha denied evidence access after claim: HTTP {alpha_img_resp.status_code}")
+        expires_alpha = alpha_img_resp.json().get("expires_in")
+        self.log("STEP 6", f"Admin Alpha authorized private evidence access verified (HTTP 200, expires_in={expires_alpha}s)", status="PASS")
 
     # -------------------------------------------------------------------------
     # Step 7: Lifecycle Progression & Deterministic Veterinary Clinical Care
@@ -574,21 +577,23 @@ class StagingPilotRunner:
     def step_7_lifecycle_progression_and_veterinary(self):
         self.log("STEP 7", "Advancing Rescue Lifecycle and Testing Veterinary Care...")
 
-        # 7a. Look up designated veterinary facility for Org Alpha
+        # 7a. Look up designated veterinary facility for Org Alpha via GET /api/v1/ngo/veterinary
         fac_resp = self.client.get(
-            f"{self.base_url}/api/v1/veterinary/facilities",
+            f"{self.base_url}/api/v1/ngo/veterinary",
             headers={"Authorization": f"Bearer {self.tokens['admin_a']}"},
         )
-        if fac_resp.status_code == 200 and fac_resp.json():
-            facilities = fac_resp.json()
-            # Prioritize 'Cochin PetCare Emergency Hospital'
-            for f in facilities:
-                if "cochin petcare" in f.get("name", "").lower():
-                    self.test_facility_id = f["id"]
-                    break
-            if not self.test_facility_id and facilities:
-                self.test_facility_id = facilities[0]["id"]
-            self.log("STEP 7", f"Designated Veterinary Facility: {self.test_facility_id}", status="INFO")
+        if fac_resp.status_code != 200 or not fac_resp.json():
+            self.abort("STEP 7", f"Failed fetching partner veterinary facilities: HTTP {fac_resp.status_code}")
+
+        facilities = fac_resp.json()
+        target_fac = next((f for f in facilities if "cochin petcare emergency hospital" in f.get("name", "").lower()), None)
+        if not target_fac:
+            target_fac = next((f for f in facilities if "cochin petcare" in f.get("name", "").lower()), None)
+        if not target_fac:
+            self.abort("STEP 7", "Designated veterinary facility 'Cochin PetCare Emergency Hospital' not found in partner facilities")
+
+        self.test_facility_id = target_fac["id"]
+        self.log("STEP 7", f"Designated Veterinary Facility located: {target_fac.get('name')} ({self.test_facility_id})", status="PASS")
 
         # 7b. Rescuer A transitions status: RESPONDER_EN_ROUTE -> ANIMAL_LOCATED -> RESCUED -> TRANSPORTING -> AT_VETERINARY_FACILITY
         transitions = [
@@ -597,7 +602,7 @@ class StagingPilotRunner:
             ("RESCUED", {}),
             (
                 "TRANSPORTING",
-                {"veterinary_facility_id": self.test_facility_id} if self.test_facility_id else {},
+                {"veterinary_facility_id": self.test_facility_id},
             ),
             ("AT_VETERINARY_FACILITY", {}),
         ]
@@ -612,7 +617,41 @@ class StagingPilotRunner:
                 self.abort("STEP 7", f"Failed transition to {next_status}: HTTP {patch_resp.status_code} - {patch_resp.text}")
             self.log("STEP 7", f"Rescue status advanced to: {next_status}", status="PASS")
 
-        # 7c. Record Clinical Treatment by Vet Alpha
+        # 7c. Assert Vet Beta isolation on foreign case, treatment list, and treatment creation
+        self.log("STEP 7", "Asserting Vet Beta isolation on foreign case and treatments...")
+        # Vet Beta case detail access must fail (HTTP 403 Forbidden)
+        vb_case_resp = self.client.get(
+            f"{self.base_url}/api/v1/rescues/{self.created_case_id}",
+            headers={"Authorization": f"Bearer {self.tokens['vet_b']}"},
+        )
+        if vb_case_resp.status_code not in [403, 404]:
+            self.abort("STEP 7", f"Vet Beta accessed foreign case! HTTP {vb_case_resp.status_code}")
+        self.log("STEP 7", f"Vet Beta case detail access correctly denied (HTTP {vb_case_resp.status_code})", status="PASS")
+
+        # Vet Beta treatment list access must fail (HTTP 403 Forbidden)
+        vb_treat_list = self.client.get(
+            f"{self.base_url}/api/v1/rescues/{self.created_case_id}/treatments",
+            headers={"Authorization": f"Bearer {self.tokens['vet_b']}"},
+        )
+        if vb_treat_list.status_code not in [403, 404]:
+            self.abort("STEP 7", f"Vet Beta accessed foreign treatment list! HTTP {vb_treat_list.status_code}")
+        self.log("STEP 7", f"Vet Beta treatment list access correctly denied (HTTP {vb_treat_list.status_code})", status="PASS")
+
+        # Vet Beta treatment creation must fail (HTTP 403 Forbidden)
+        vb_treat_create = self.client.post(
+            f"{self.base_url}/api/v1/rescues/{self.created_case_id}/treatments",
+            json={
+                "diagnosis": "Illegitimate foreign vet entry",
+                "treatment_notes": "Attempted unauthorized entry",
+                "facility_id": self.test_facility_id,
+            },
+            headers={"Authorization": f"Bearer {self.tokens['vet_b']}"},
+        )
+        if vb_treat_create.status_code not in [403, 404]:
+            self.abort("STEP 7", f"Vet Beta created treatment on foreign case! HTTP {vb_treat_create.status_code}")
+        self.log("STEP 7", f"Vet Beta treatment creation correctly denied (HTTP {vb_treat_create.status_code})", status="PASS")
+
+        # 7d. Record Clinical Treatment by Vet Alpha
         treatment_payload = {
             "diagnosis": f"[{self.pilot_tag}] Right forelimb fracture stabilized; lacerations debrided.",
             "treatment_notes": "Splinted with fiberglass support. Analgesia and initial antibiotic prophylaxis administered.",
@@ -629,15 +668,26 @@ class StagingPilotRunner:
             self.abort("STEP 7", f"Veterinary treatment creation failed: HTTP {treat_resp.status_code} - {treat_resp.text}")
         self.log("STEP 7", "Clinical treatment documented by Vet Alpha (HTTP 200)", status="PASS")
 
-        # 7d. Verify Case Status transitioned to UNDER_TREATMENT
+        # 7e. Verify Case Status transitioned to UNDER_TREATMENT
         case_check = self.client.get(
             f"{self.base_url}/api/v1/rescues/{self.created_case_id}",
             headers={"Authorization": f"Bearer {self.tokens['vet_a']}"},
         )
-        if case_check.status_code == 200:
-            curr_status = case_check.json().get("status")
-            if curr_status == "UNDER_TREATMENT":
-                self.log("STEP 7", "Case status verified as UNDER_TREATMENT", status="PASS")
+        if case_check.status_code != 200:
+            self.abort("STEP 7", f"Failed fetching case after treatment: {case_check.text}")
+        curr_status = case_check.json().get("status")
+        if curr_status != "UNDER_TREATMENT":
+            self.abort("STEP 7", f"Expected case status 'UNDER_TREATMENT', got '{curr_status}'")
+        self.log("STEP 7", "Case status verified as UNDER_TREATMENT", status="PASS")
+
+        # 7f. Verify authorized actors can read treatments
+        va_treats = self.client.get(
+            f"{self.base_url}/api/v1/rescues/{self.created_case_id}/treatments",
+            headers={"Authorization": f"Bearer {self.tokens['vet_a']}"},
+        )
+        if va_treats.status_code != 200 or len(va_treats.json()) == 0:
+            self.abort("STEP 7", f"Vet Alpha failed reading treatments: HTTP {va_treats.status_code}")
+        self.log("STEP 7", "Authorized treatment list verified for Vet Alpha (HTTP 200)", status="PASS")
 
     # -------------------------------------------------------------------------
     # Step 8: Controlled Case Closure
@@ -685,11 +735,6 @@ def main():
         help="Base URL of target API (default: https://pawreach-api.onrender.com)",
     )
     parser.add_argument(
-        "--password",
-        default=os.getenv("STAGING_SEED_PASSWORD", ""),
-        help="Password for seeded staging accounts (reads STAGING_SEED_PASSWORD by default)",
-    )
-    parser.add_argument(
         "--expected-sha",
         default=os.getenv("EXPECTED_SHA", ""),
         help="Expected Git commit SHA deployed to staging",
@@ -708,9 +753,9 @@ def main():
 
     args = parser.parse_args()
 
-    password = args.password or os.getenv("STAGING_SEED_PASSWORD", "")
+    password = os.getenv("STAGING_SEED_PASSWORD", "").strip()
     if not password:
-        print("Error: Password is required via STAGING_SEED_PASSWORD environment variable or --password CLI argument.")
+        print("Error: Password is required strictly via STAGING_SEED_PASSWORD environment variable.")
         sys.exit(1)
 
     runner = StagingPilotRunner(

@@ -7,6 +7,7 @@ from app.models.rescue_assignment import RescueAssignment, AssignmentStatus
 from app.models.rescuer_profile import RescuerProfile
 from app.models.veterinary_facility import VeterinaryFacility
 from app.models.notification import Notification
+from app.models.organization import Organization, OrganizationType
 
 def test_complete_phase2_end_to_end_rescue_lifecycle(client: TestClient, db):
     """
@@ -17,6 +18,17 @@ def test_complete_phase2_end_to_end_rescue_lifecycle(client: TestClient, db):
     NGO Tracking -> En Route -> Rescued -> Vet Transport -> 
     Treatment Workflow -> Recovering -> Case Closed -> Analytics Verified.
     """
+    # Organization
+    org = Organization(
+        name="Mumbai Animal Rescue Org",
+        organization_type=OrganizationType.NGO,
+        phone="+912226009999",
+        email="info@mumbairescue.org",
+    )
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
     # 1. Setup Actors: Citizen, Responder A, Responder B, Veterinarian, NGO Admin
     # Citizen
     citizen = User(
@@ -34,6 +46,7 @@ def test_complete_phase2_end_to_end_rescue_lifecycle(client: TestClient, db):
         phone="+919999900002",
         password_hash="hashed_pw",
         role=UserRole.RESCUER,
+        organization_id=org.id,
         is_active=True,
     )
     # Responder B (2.0 km)
@@ -43,6 +56,7 @@ def test_complete_phase2_end_to_end_rescue_lifecycle(client: TestClient, db):
         phone="+919999900003",
         password_hash="hashed_pw",
         role=UserRole.RESCUER,
+        organization_id=org.id,
         is_active=True,
     )
     # Veterinarian & Facility
@@ -61,6 +75,7 @@ def test_complete_phase2_end_to_end_rescue_lifecycle(client: TestClient, db):
         phone="+919999900005",
         password_hash="hashed_pw",
         role=UserRole.NGO_ADMIN,
+        organization_id=org.id,
         is_active=True,
     )
     db.add_all([citizen, rescuer_a, rescuer_b, vet, ngo_admin])
@@ -198,13 +213,20 @@ def test_complete_phase2_end_to_end_rescue_lifecycle(client: TestClient, db):
     assert citizen_notif is not None
     assert "responder assigned" in citizen_notif.title.lower() or "accepted" in citizen_notif.message.lower()
 
-    # 6. STEP 11: NGO Operations Dashboard Tracks Case
+    # 6. STEP 11: NGO Operations Dashboard Tracks Case and Claims It
     ngo_cases = client.get(
         "/api/v1/ngo/cases",
         headers={"Authorization": f"Bearer {token_ngo}"},
     )
     assert ngo_cases.status_code == 200
     assert any(c["id"] == case_id for c in ngo_cases.json())
+
+    # NGO claims case for own organization
+    claim_res = client.post(
+        f"/api/v1/ngo/cases/{case_id}/claim",
+        headers={"Authorization": f"Bearer {token_ngo}"},
+    )
+    assert claim_res.status_code == 200
 
     # 7. STEP 12-14: Responder B advances mission: EN_ROUTE -> ANIMAL_LOCATED -> RESCUED -> TRANSPORTING
     transitions = [

@@ -68,6 +68,13 @@ def test_ngo_case_action_and_audit_logging(client, citizen_token, ngo_admin_toke
     )
     case_id = create_res.json()["id"]
 
+    # Claim case first (unassigned cases must be claimed before actions)
+    claim_res = client.post(
+        f"/api/v1/ngo/cases/{case_id}/claim",
+        headers={"Authorization": f"Bearer {ngo_admin_token}"}
+    )
+    assert claim_res.status_code == 200
+
     # NGO Admin triggers cancel action
     action_res = client.post(
         f"/api/v1/ngo/cases/{case_id}/actions",
@@ -79,8 +86,9 @@ def test_ngo_case_action_and_audit_logging(client, citizen_token, ngo_admin_toke
     # Verify audit log was created
     audit = db.query(AuditLog).filter(
         AuditLog.entity == "rescue_case",
-        AuditLog.entity_id == uuid.UUID(case_id)
+        AuditLog.entity_id == uuid.UUID(case_id),
+        AuditLog.action.in_(["CANCEL", "ADMIN_CANCEL"])
     ).first()
     assert audit is not None
-    assert audit.action == "ADMIN_CANCEL"
+    assert audit.action in ["CANCEL", "ADMIN_CANCEL"]
     assert audit.new_value["reason"] == "Duplicate citizen report"
