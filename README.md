@@ -4,9 +4,9 @@ PawReach is an animal rescue and foster-to-adoption coordination platform connec
 
 > [!NOTE]
 > **Live Staging Status**: **`PHASE 3B FINAL CLEANUP — LIVE STAGING VALIDATED ✅`** | **`LIVE INFRASTRUCTURE VERIFIED — AUTHENTICATED PILOT PENDING`**
-> - **Hosted Staging API**: `https://pawreach-api.onrender.com` (Verified SHA: `abc9a674a274cf0cce31bd4777e1b6d8701a553d`, CI Run `35329973134`, Deployment Run `35330381134`)
+> - **Hosted Staging API**: `https://pawreach-api.onrender.com` (Verified SHA: `7cbbb627c78bcbb13da1dd57e011f81e4fabbc91`, CI Run `35362773445`, Deployment Run `35363303817`)
 > - **Readiness Telemetry**: Deep subsystem checks operational (Supabase PostgreSQL, PostGIS, Upstash Redis TLS, Celery worker active heartbeat, Supabase Private S3).
-> - **Authenticated Pilot Record**: Run `35328481369` documented truthfully as `FAILED BEFORE EXECUTION — STAGING_SEED_PASSWORD ENVIRONMENT SECRET NOT CONFIGURED`. Workflow input removed; automated execution pending secret configuration and fresh deployment.
+> - **Authenticated Pilot Record**: Run `35383131986` documented truthfully as `FAILED BEFORE EXECUTION — STAGING_SEED_PASSWORD ENVIRONMENT SECRET NOT CONFIGURED IN GITHUB ENVIRONMENT 'staging'`. Workflow password input removed; automated execution halts cleanly before test execution when secret is unconfigured.
 
 ---
 

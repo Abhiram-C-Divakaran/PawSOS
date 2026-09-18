@@ -211,26 +211,26 @@ The frontend normalization layer (`frontend/src/utils/apiConfig.ts`) automatical
 
 * **Verification Date**: September 18, 2026
 * **Target Environment**: Staging (Free Cloud Demo)
-* **Authoritative Deployed Git Commit**: `abc9a674a274cf0cce31bd4777e1b6d8701a553d`
-* **Commit Message**: `docs(staging): record dispatch claim integrity closure and live staging validation`
-* **Preceding Core CI Run**: `PawReach CI / CD Pipeline` Run `35329973134` (`SUCCESS` - all 4 required gates green)
-* **Live Staging Deployment Run**: `Staging Deployment & Smoke Tests` Run `35330381134` (`SUCCESS` - exact SHA `abc9a67` deployed and verified)
+* **Authoritative Deployed Git Commit**: `7cbbb627c78bcbb13da1dd57e011f81e4fabbc91`
+* **Commit Message**: `fix(security): close discovery privacy and staging pilot gaps`
+* **Preceding Core CI Run**: `PawReach CI / CD Pipeline` Run `35362773445` (`SUCCESS` - all 4 required gates green)
+* **Live Staging Deployment Run**: `Staging Deployment & Smoke Tests` Run `35363303817` (`SUCCESS` - exact SHA `7cbbb62` deployed and verified)
 * **Authenticated Pilot Status**: **`AUTHENTICATED PILOT PENDING`**
-  * **Initial Pilot Execution Run**: `35328481369` (`FAILURE`)
-  * **Failure Analysis**: `FAILED BEFORE EXECUTION — STAGING_SEED_PASSWORD ENVIRONMENT SECRET NOT CONFIGURED`. The GitHub Environment secret `STAGING_SEED_PASSWORD` was unconfigured, halting the workflow prior to running `scripts/staging_authenticated_pilot.py`.
+  * **Automated Pilot Execution Run**: `35383131986` (`FAILURE`)
+  * **Failure Analysis**: `FAILED BEFORE EXECUTION — STAGING_SEED_PASSWORD ENVIRONMENT SECRET NOT CONFIGURED IN GITHUB ENVIRONMENT 'staging'`. The preflight step verified the missing secret and exited cleanly without running commands or leaking secrets.
   * **Pilot Hardening**: Workflow updated to eliminate password inputs, enforce secret presence safely, pass `--expected-sha`, parse nested readiness telemetry, verify responder determinism with guaranteed cleanup, upload synthetic private evidence, and test explicit multi-tenant case claiming (`POST /api/v1/ngo/cases/{case_id}/claim`).
 
 ### Job Execution Summary
 
 | Job | Status | Conclusion | Note |
 |-----|--------|------------|------|
-| **Backend Test Suite & Coverage** | Completed | `SUCCESS` | 285 tests passed, 86.60% coverage (exceeds 85% requirement) |
-| **Frontend Quality & Build** | Completed | `SUCCESS` | Clean oxlint, 86 vitest unit tests passed, production build passed |
+| **Backend Test Suite & Coverage** | Completed | `SUCCESS` | 297 tests passed, 86.27% coverage (exceeds 85% requirement) |
+| **Frontend Quality & Build** | Completed | `SUCCESS` | Clean oxlint, 88 vitest unit tests passed, production build passed |
 | **Mocked UI Contract Suite (Playwright)** | Completed | `SUCCESS` | 9/9 UI contract scenarios passed |
-| **Full-Stack E2E Integration Suite (Unmocked)** | Completed | `SUCCESS` | 7/7 real PostGIS, Redis, Celery worker/beat, and FastAPI full-stack tests passed |
+| **Full-Stack E2E Integration Suite (Unmocked)** | Completed | `SUCCESS` | Real PostGIS, Redis, Celery worker/beat, and FastAPI full-stack tests passed |
 | **Check Deployment Prerequisites** | Completed | `SUCCESS` | Staging secrets and environment validated |
-| **Trigger Staging Cloud Deployment** | Completed | `SUCCESS` | Render deploy hook triggered with ref `abc9a67` |
-| **Await Deployment & Run Staging Smoke Tests** | Completed | `SUCCESS` | Exact SHA `abc9a67` confirmed on hosted Render API, automated smoke suite passed |
+| **Trigger Staging Cloud Deployment** | Completed | `SUCCESS` | Render deploy hook triggered with ref `7cbbb62` |
+| **Await Deployment & Run Staging Smoke Tests** | Completed | `SUCCESS` | Exact SHA `7cbbb62` confirmed on hosted Render API, automated smoke suite passed |
 
 ### Live Readiness Verification
 
@@ -242,7 +242,7 @@ The frontend normalization layer (`frontend/src/utils/apiConfig.ts`) automatical
   "status": "ok",
   "environment": "staging",
   "version": "2.0.0",
-  "git_sha": "abc9a674a274cf0cce31bd4777e1b6d8701a553d"
+  "git_sha": "7cbbb627c78bcbb13da1dd57e011f81e4fabbc91"
 }
 ```
 
