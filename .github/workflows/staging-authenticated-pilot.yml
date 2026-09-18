@@ -1,0 +1,50 @@
+name: Staging Authenticated Pilot Execution
+
+on:
+  workflow_dispatch:
+    inputs:
+      api_url:
+        description: "Target Staging API URL"
+        required: false
+        default: "https://pawreach-api.onrender.com"
+        type: string
+      timeout_seconds:
+        description: "Request timeout in seconds"
+        required: false
+        default: 30
+        type: number
+
+concurrency:
+  group: staging-authenticated-pilot
+  cancel-in-progress: false
+
+jobs:
+  run-authenticated-pilot:
+    name: Execute Authenticated Staging Pilot
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v7
+
+      - name: Set up Python 3.12.14
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.12.14'
+
+      - name: Install Pilot Dependencies
+        run: pip install httpx
+
+      - name: Run Authenticated Pilot Suite
+        env:
+          STAGING_API_URL: ${{ inputs.api_url || secrets.STAGING_API_URL || 'https://pawreach-api.onrender.com' }}
+          STAGING_SEED_PASSWORD: ${{ secrets.STAGING_SEED_PASSWORD }}
+        run: |
+          if [ -z "$STAGING_SEED_PASSWORD" ]; then
+            echo "Error: STAGING_SEED_PASSWORD is not configured in GitHub Environment 'staging'."
+            exit 1
+          fi
+          python scripts/staging_authenticated_pilot.py \
+            --api-url "$STAGING_API_URL" \
+            --password "$STAGING_SEED_PASSWORD" \
+            --timeout ${{ inputs.timeout_seconds }}

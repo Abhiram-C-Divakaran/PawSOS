@@ -207,45 +207,49 @@ def accept_rescue(
     db: Session = Depends(get_db),
     current_user: User = Depends(RoleChecker([UserRole.RESCUER]))
 ):
-    # Concurrency row-locking
-    case = db.query(RescueCase).filter(RescueCase.id == case_id).with_for_update().first()
+    """
+    Backwards-compatible secure shim for rescue case acceptance.
+    Strictly requires an active, unexpired PENDING dispatch offer issued to the authenticated responder.
+    Delegates to canonical DispatchService.accept_offer for single-winner row locking and offer resolution.
+    """
+    case = db.query(RescueCase).filter(RescueCase.id == case_id).first()
     if not case:
         raise NotFoundException("Rescue case not found")
-    
+
+    # If the case is already assigned to another responder or closed, fail with Conflict
     if case.status not in [RescueStatus.TRIAGED, RescueStatus.SEARCHING_RESPONDER]:
         raise ConflictException("This rescue has already been assigned to another responder or is closed.")
-    
-    # Check existing active assignment
-    existing_assignment = (
+
+    now = datetime.utcnow()
+    # Locate any offer for this rescuer on this case
+    any_offer = (
         db.query(RescueAssignment)
         .filter(
             RescueAssignment.rescue_case_id == case.id,
-            RescueAssignment.assignment_status == AssignmentStatus.ACCEPTED
+            RescueAssignment.rescuer_id == current_user.id,
         )
         .first()
     )
-    if existing_assignment:
-        raise ConflictException("This rescue has already been assigned to another responder.")
-    
-    # Create assignment record
-    assignment = RescueAssignment(
-        rescue_case_id=case.id,
-        rescuer_id=current_user.id,
-        accepted_at=datetime.utcnow(),
-        assignment_status=AssignmentStatus.ACCEPTED
-    )
-    db.add(assignment)
-    
-    # Update case status
-    RescueService.update_status(
-        db,
-        case,
-        RescueStatus.RESPONDER_ASSIGNED,
-        current_user.id,
-        notes=f"Accepted by responder {current_user.full_name}"
-    )
-    
-    return {"success": True, "message": "Rescue accepted successfully"}
+
+    if not any_offer:
+        # Caller has no offer at all for this case -> fail-closed
+        raise ForbiddenException("No active dispatch offer found for this rescuer on this case")
+
+    if any_offer.assignment_status != AssignmentStatus.PENDING:
+        raise ConflictException(f"Offer is no longer pending (current status: {any_offer.assignment_status.value})")
+
+    if any_offer.expires_at and any_offer.expires_at <= now:
+        raise ConflictException("Dispatch offer has expired")
+
+    # Delegate to canonical transactional acceptance logic
+    accepted_offer = DispatchService.accept_offer(db, any_offer.id, current_user.id)
+
+    return {
+        "success": True,
+        "message": "Rescue accepted successfully",
+        "assignment_id": str(accepted_offer.id),
+        "rescue_case_id": str(case.id),
+    }
 
 @router.patch("/{case_id}/status", response_model=RescueResponse)
 def update_status(

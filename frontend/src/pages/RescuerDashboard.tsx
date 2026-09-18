@@ -242,34 +242,6 @@ export const RescuerDashboard = () => {
     }
   };
 
-  const handleDirectAccept = async (caseId: string) => {
-    setSubmittingAction(caseId);
-    try {
-      await api.post(`/rescues/${caseId}/accept`);
-      const caseRes = await api.get(`/rescues/${caseId}`);
-      setActiveCase(caseRes.data);
-      setToast({
-        id: 'accepted',
-        type: 'success',
-        message: `Rescue mission ${caseRes.data.case_number} assigned to you.`,
-      });
-      if (rescuerCoords) {
-        syncLocationAndFetchNearby(rescuerCoords.lat, rescuerCoords.lng);
-      }
-    } catch (err: any) {
-      setToast({
-        id: 'accept-fail',
-        type: 'error',
-        message: formatApiError(err, 'This rescue was claimed by another responder or is closed.'),
-      });
-      if (rescuerCoords) {
-        syncLocationAndFetchNearby(rescuerCoords.lat, rescuerCoords.lng);
-      }
-    } finally {
-      setSubmittingAction(null);
-    }
-  };
-
   const handleStatusUpdate = async (newStatus: RescueStatus) => {
     if (!activeCase) return;
 
@@ -697,14 +669,10 @@ export const RescuerDashboard = () => {
                     </div>
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={() => handleDirectAccept(rescue.id)}
-                    disabled={!!submittingAction}
-                    className="w-full md:w-auto bg-brand-darkNavy hover:bg-brand-deepNavy text-white px-5 py-2.5 rounded-lg text-sm font-semibold shadow-sm transition-colors flex items-center justify-center flex-shrink-0 disabled:opacity-50"
-                  >
-                    {submittingAction === rescue.id ? 'Claiming Mission...' : 'Accept Rescue Mission'}
-                  </button>
+                  <div className="flex items-center text-xs font-semibold text-stone-500 bg-stone-50 px-3.5 py-2 rounded-lg border border-stone-200">
+                    <Clock className="w-3.5 h-3.5 mr-1.5 text-stone-400" />
+                    Awaiting Dispatch Offer
+                  </div>
                 </div>
               ))}
             </div>

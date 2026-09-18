@@ -4,13 +4,14 @@ def test_veterinary_inbox_and_treatment_flow(client, citizen_token, rescuer_toke
     # 1. Citizen creates rescue
     create_res = client.post(
         "/api/v1/rescues",
-        json={"species": "Dog", "latitude": 19.06, "longitude": 72.83},
+        json={"species": "Dog", "latitude": 19.0760, "longitude": 72.8777},
         headers={"Authorization": f"Bearer {citizen_token}"}
     )
     case_id = create_res.json()["id"]
 
     # 2. Rescuer accepts and transports to facility
-    client.post(f"/api/v1/rescues/{case_id}/accept", headers={"Authorization": f"Bearer {rescuer_token}"})
+    acc_res = client.post(f"/api/v1/rescues/{case_id}/accept", headers={"Authorization": f"Bearer {rescuer_token}"})
+    assert acc_res.status_code == 200
     client.patch(
         f"/api/v1/rescues/{case_id}/status",
         json={"status": "RESPONDER_EN_ROUTE"},
