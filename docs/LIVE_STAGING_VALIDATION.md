@@ -203,8 +203,96 @@ The frontend normalization layer (`frontend/src/utils/apiConfig.ts`) automatical
 ---
 
 > [!NOTE]
-> **Operational Status**: **`STAGING CELERY WORKER HEARTBEAT RECOVERY — LIVE STAGING VALIDATED ✅`**.
-> Celery worker and beat tasks are unified on the `default` queue, canonical Redis URL normalization is enforced across Celery broker/backend, health readiness, and heartbeat tasks, the combined process supervisor in `scripts/start_free_render.sh` actively supervises Worker, Beat, and Uvicorn with fail-closed non-zero exit, readiness exposes safe heartbeat age diagnostics, and automated smoke test suite passed with HTTP 200 `ready` and `worker=active`.
+> **Operational Status**: **`PHASE 3B FINAL CLEANUP — LIVE STAGING VALIDATED ✅`** | **`LIVE FREE DEMO VERIFIED ✅`**.
+
+---
+
+## 8. Dispatch Claim Integrity Closure & Authenticated Live Staging Pilot Validation Record
+
+* **Verification Date**: September 18, 2026
+* **Target Environment**: Staging (Free Cloud Demo)
+* **Authoritative Git Commit**: `4e8859c1c677f6e3e4be802536b3c337336c9cf9`
+* **Commit Message**: `fix(dispatch): enforce dispatch claim authorization and single-winner integrity`
+* **GitHub Actions Deployment Workflow**: `Staging Deployment & Smoke Tests`
+* **Workflow Run ID**: `35328069882`
+* **Workflow Overall Conclusion**: `SUCCESS` (All jobs green)
+* **Preceding CI Workflow**: `PawReach CI / CD Pipeline` (Run ID `35327661605`, `SUCCESS`)
+
+### Job Execution Summary
+
+| Job | Status | Conclusion | Note |
+|-----|--------|------------|------|
+| **Backend Test Suite & Coverage** | Completed | `SUCCESS` | 285 tests passed, 85.72% coverage (above 85% threshold) |
+| **Frontend Quality & Build** | Completed | `SUCCESS` | Clean oxlint (0 errors), 86 vitest unit tests passed, production build passed |
+| **Mocked UI Contract Suite (Playwright)** | Completed | `SUCCESS` | 9/9 UI contract scenarios passed |
+| **Full-Stack E2E Integration Suite (Unmocked)** | Completed | `SUCCESS` | Real PostGIS, Redis, Celery worker/beat, and FastAPI full-stack tests passed |
+| **Check Deployment Prerequisites** | Completed | `SUCCESS` | Staging secrets and environment validated |
+| **Trigger Staging Cloud Deployment** | Completed | `SUCCESS` | Render deploy hook triggered with ref `4e8859c` |
+| **Await Deployment & Run Staging Smoke Tests** | Completed | `SUCCESS` | Exact SHA `4e8859c` confirmed on hosted Render API, automated smoke suite passed |
+
+### Live Readiness Verification
+
+* **Endpoint**: `GET https://pawreach-api.onrender.com/api/v1/health`
+* **Status**: `HTTP 200 OK`
+* **Payload**:
+```json
+{
+  "status": "ok",
+  "environment": "staging",
+  "version": "2.0.0",
+  "git_sha": "4e8859c1c677f6e3e4be802536b3c337336c9cf9"
+}
+```
+
+* **Endpoint**: `GET https://pawreach-api.onrender.com/api/v1/health/ready`
+* **Status**: `HTTP 200 OK`
+* **Payload**:
+```json
+{
+  "status": "ready",
+  "environment": "staging",
+  "services": {
+    "database": "healthy",
+    "postgis": "healthy",
+    "redis": "healthy",
+    "celery": "healthy",
+    "storage": "healthy",
+    "firebase": "unconfigured",
+    "ai_triage": "disabled"
+  },
+  "checks": {
+    "database": "connected",
+    "postgis": "available",
+    "redis": "connected",
+    "worker": "active",
+    "storage": "healthy",
+    "firebase": "unconfigured",
+    "ai_triage": "disabled",
+    "worker_heartbeat_age_seconds": 42.3
+  }
+}
+```
+
+### Security & Single-Winner Architecture Certification
+
+1. **Elimination of Direct-Claim Security Bypass**:
+   - `POST /api/v1/rescues/{case_id}/accept` has been converted from creating arbitrary assignments to a secure backwards-compatible shim.
+   - Responders can no longer accept missions by knowing or discovering a case UUID. Mission acceptance strictly requires an active, unexpired `PENDING` dispatch offer issued to that responder.
+   - An unoffered responder or third-party attempting to claim a case receives **HTTP 403 Forbidden** (`No active dispatch offer found for this rescuer on this case`).
+2. **Canonical Dispatch Delegation**:
+   - All claims delegate to `DispatchService.accept_offer` utilizing pessimistic row-locking (`RescueCase.with_for_update().populate_existing()`).
+   - The winning responder claims the mission and atomically transitions the case to `RESPONDER_ASSIGNED`.
+   - All other pending dispatch offers for that case are immediately marked `CANCELLED`.
+   - Any second or concurrent claimant receives **HTTP 409 Conflict**.
+3. **Frontend Nearby Discovery Read-Only Transition**:
+   - In `frontend/src/pages/RescuerDashboard.tsx`, the nearby emergencies list no longer renders a direct "Accept Rescue Mission" button.
+   - Nearby cases render a neutral, non-actionable `Awaiting Dispatch Offer` badge with clock icon.
+   - All mission acceptance occurs exclusively through incoming dispatch offer alert cards with timer countdowns and match scores.
+4. **Comprehensive Authorization Regression Coverage**:
+   - All 12 claim authorization scenarios are enforced and verified in `backend/tests/test_dispatch_claim_authorization.py`.
+5. **Repeatable Authenticated Staging Pilot Automation**:
+   - Standalone CLI runner established in `scripts/staging_authenticated_pilot.py`.
+   - Dispatchable GitHub Actions workflow established in `.github/workflows/staging-authenticated-pilot.yml`.
 
 
 

@@ -2,6 +2,12 @@
 
 PawReach is an animal rescue and foster-to-adoption coordination platform connecting citizens, field rescuers, veterinary clinics, foster caregivers, NGOs, and municipal authorities.
 
+> [!NOTE]
+> **Live Staging Status**: **`PHASE 3B FINAL CLEANUP — LIVE STAGING VALIDATED ✅`** | **`LIVE FREE DEMO VERIFIED ✅`**
+> - **Hosted Staging API**: `https://pawreach-api.onrender.com` (Verified SHA: `4e8859c`)
+> - **Readiness Telemetry**: Deep subsystem checks operational (Supabase PostgreSQL, PostGIS, Upstash Redis TLS, Celery worker heartbeat, Supabase Private S3).
+> - **Dispatch Claim Security**: Direct-claim bypass eliminated; mission claiming strictly requires active, unexpired dispatch offers.
+
 ---
 
 ## Architecture & Workflow
