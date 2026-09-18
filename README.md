@@ -3,10 +3,10 @@
 PawReach is an animal rescue and foster-to-adoption coordination platform connecting citizens, field rescuers, veterinary clinics, foster caregivers, NGOs, and municipal authorities.
 
 > [!NOTE]
-> **Live Staging Status**: **`PHASE 3B FINAL CLEANUP — LIVE STAGING VALIDATED ✅`** | **`LIVE FREE DEMO VERIFIED ✅`**
-> - **Hosted Staging API**: `https://pawreach-api.onrender.com` (Verified SHA: `4e8859c`)
-> - **Readiness Telemetry**: Deep subsystem checks operational (Supabase PostgreSQL, PostGIS, Upstash Redis TLS, Celery worker heartbeat, Supabase Private S3).
-> - **Dispatch Claim Security**: Direct-claim bypass eliminated; mission claiming strictly requires active, unexpired dispatch offers.
+> **Live Staging Status**: **`PHASE 3B FINAL CLEANUP — LIVE STAGING VALIDATED ✅`** | **`LIVE INFRASTRUCTURE VERIFIED — AUTHENTICATED PILOT PENDING`**
+> - **Hosted Staging API**: `https://pawreach-api.onrender.com` (Verified SHA: `abc9a674a274cf0cce31bd4777e1b6d8701a553d`, CI Run `35329973134`, Deployment Run `35330381134`)
+> - **Readiness Telemetry**: Deep subsystem checks operational (Supabase PostgreSQL, PostGIS, Upstash Redis TLS, Celery worker active heartbeat, Supabase Private S3).
+> - **Authenticated Pilot Record**: Run `35328481369` documented truthfully as `FAILED BEFORE EXECUTION — STAGING_SEED_PASSWORD ENVIRONMENT SECRET NOT CONFIGURED`. Workflow input removed; automated execution pending secret configuration and fresh deployment.
 
 ---
 

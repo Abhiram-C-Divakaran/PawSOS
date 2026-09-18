@@ -189,4 +189,48 @@ describe('RescuerDashboard - Dispatch Offers Flow', () => {
       });
     });
   });
+
+  it('renders nearby emergencies with distance-only privacy and without direct claim action', async () => {
+    const mockNearby = [
+      {
+        id: 'nearby-1',
+        case_number: 'PR-2026-DISC',
+        species: 'Cat',
+        triage_priority: 'HIGH',
+        status: 'SEARCHING_RESPONDER',
+        distance_km: 3.2,
+        created_at: new Date().toISOString(),
+      },
+    ];
+
+    (api.get as any).mockImplementation((url: string) => {
+      if (url.includes('/rescuers/me/offers')) {
+        return Promise.resolve({ data: [] });
+      }
+      if (url.includes('/facilities')) {
+        return Promise.resolve({ data: [] });
+      }
+      if (url.includes('/rescues/nearby')) {
+        return Promise.resolve({ data: mockNearby });
+      }
+      return Promise.resolve({ data: {} });
+    });
+
+    render(
+      <BrowserRouter>
+        <RescuerDashboard />
+      </BrowserRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/Nearby Emergencies/i)).toBeInTheDocument();
+    });
+
+    // Verify distance-only privacy notice
+    expect(screen.getByText('3.2 km away — exact location available with dispatch offer')).toBeInTheDocument();
+    // Verify no direct accept action button in nearby list
+    expect(screen.queryByRole('button', { name: /Accept Rescue/i })).not.toBeInTheDocument();
+    expect(screen.getByText('Awaiting Dispatch Offer')).toBeInTheDocument();
+  });
 });
+

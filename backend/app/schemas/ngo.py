@@ -149,3 +149,17 @@ class AuditLogItem(BaseModel):
     timestamp: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+class NGOCaseSummaryResponse(BaseModel):
+    id: uuid.UUID
+    case_number: str
+    species: Optional[str] = None
+    triage_priority: Optional[RescuePriority] = None
+    triage_score: Optional[int] = None
+    status: RescueStatus
+    created_at: datetime
+    updated_at: datetime
+    organization_id: Optional[uuid.UUID] = None
+    address_text: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)

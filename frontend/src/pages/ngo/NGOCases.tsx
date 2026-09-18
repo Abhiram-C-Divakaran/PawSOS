@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { Link } from 'react-router-dom';
-import { Search, Filter, ArrowUpRight, Clock } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { Search, Filter, ArrowUpRight, Clock, ShieldAlert } from 'lucide-react';
 import api from '../../services/api';
 import type { RescueCase, RescuePriority, RescueStatus } from '../../types';
 
@@ -11,12 +11,15 @@ function formatMinutesAgo(createdAt: string): string {
 }
 
 export const NGOCases: React.FC = () => {
+  const navigate = useNavigate();
   const [cases, setCases] = useState<RescueCase[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [search, setSearch] = useState<string>('');
   const [priorityFilter, setPriorityFilter] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<string>('');
   const [page, setPage] = useState<number>(0);
+  const [claimingId, setClaimingId] = useState<string | null>(null);
+  const [claimError, setClaimError] = useState<string | null>(null);
   const limit = 25;
 
   const fetchCases = useCallback(async () => {
@@ -51,6 +54,20 @@ export const NGOCases: React.FC = () => {
     e.preventDefault();
     setPage(0);
     fetchCases();
+  };
+
+  const handleClaim = async (caseId: string) => {
+    setClaimingId(caseId);
+    setClaimError(null);
+    try {
+      await api.post(`/ngo/cases/${caseId}/claim`);
+      navigate(`/ngo/cases/${caseId}`);
+    } catch (err: any) {
+      console.error('Failed to claim case', err);
+      setClaimError(err.response?.data?.detail || 'Failed to claim case. It may have been claimed by another organization.');
+    } finally {
+      setClaimingId(null);
+    }
   };
 
   const getPriorityBadge = (p: RescuePriority) => {
@@ -102,6 +119,22 @@ export const NGOCases: React.FC = () => {
           Monitor, filter, and coordinate all active and historical animal rescue missions.
         </p>
       </div>
+
+      {/* Error Alert Banner */}
+      {claimError && (
+        <div className="p-3.5 bg-red-50 border border-red-200 text-red-700 text-xs rounded-2xl flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <ShieldAlert className="w-4 h-4 text-red-600 flex-shrink-0" />
+            <span>{claimError}</span>
+          </div>
+          <button
+            onClick={() => setClaimError(null)}
+            className="font-bold underline text-red-800 ml-3 hover:text-red-900"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
 
       {/* Controls Bar */}
       <div className="bg-white p-4 rounded-2xl shadow-sm border border-[#E4EAF2] flex flex-col md:flex-row gap-3 justify-between items-center">
@@ -197,7 +230,9 @@ export const NGOCases: React.FC = () => {
                       </td>
                       <td className="py-3.5 px-4">{getPriorityBadge(c.triage_priority)}</td>
                       <td className="py-3.5 px-4">{getStatusBadge(c.status)}</td>
-                      <td className="py-3.5 px-4 max-w-xs truncate text-[#65748B]">{c.address_text || 'GPS Coordinate'}</td>
+                      <td className="py-3.5 px-4 max-w-xs truncate text-[#65748B]">
+                        {c.address_text || 'Location protected until claim'}
+                      </td>
                       <td className="py-3.5 px-4 whitespace-nowrap text-[#65748B]">
                         <span className="flex items-center gap-1">
                           <Clock className="w-3 h-3 text-slate-400" />
@@ -205,12 +240,22 @@ export const NGOCases: React.FC = () => {
                         </span>
                       </td>
                       <td className="py-3.5 px-4 text-right">
-                        <Link
-                          to={`/ngo/cases/${c.id}`}
-                          className="inline-flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg transition-colors"
-                        >
-                          View Dossier <ArrowUpRight className="w-3.5 h-3.5" />
-                        </Link>
+                        {c.organization_id ? (
+                          <Link
+                            to={`/ngo/cases/${c.id}`}
+                            className="inline-flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg transition-colors"
+                          >
+                            View Dossier <ArrowUpRight className="w-3.5 h-3.5" />
+                          </Link>
+                        ) : (
+                          <button
+                            onClick={() => handleClaim(c.id)}
+                            disabled={claimingId === c.id}
+                            className="inline-flex items-center gap-1 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 px-3 py-1.5 rounded-lg transition-colors shadow-sm"
+                          >
+                            {claimingId === c.id ? 'Claiming...' : 'Claim Case'} <ArrowUpRight className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                       </td>
                     </tr>
                   ))

@@ -8,10 +8,6 @@ on:
         required: false
         default: "https://pawreach-api.onrender.com"
         type: string
-      password:
-        description: "Password for seeded staging pilot accounts"
-        required: false
-        type: string
       timeout_seconds:
         description: "Request timeout in seconds"
         required: false
@@ -42,13 +38,13 @@ jobs:
       - name: Run Authenticated Pilot Suite
         env:
           STAGING_API_URL: ${{ inputs.api_url || secrets.STAGING_API_URL || 'https://pawreach-api.onrender.com' }}
-          STAGING_SEED_PASSWORD: ${{ inputs.password || secrets.STAGING_SEED_PASSWORD }}
+          STAGING_SEED_PASSWORD: ${{ secrets.STAGING_SEED_PASSWORD }}
         run: |
           if [ -z "$STAGING_SEED_PASSWORD" ]; then
-            echo "Error: STAGING_SEED_PASSWORD is not configured in GitHub Environment 'staging'."
+            echo "Error: STAGING_SEED_PASSWORD environment secret is not configured in GitHub Environment 'staging'."
             exit 1
           fi
           python scripts/staging_authenticated_pilot.py \
             --api-url "$STAGING_API_URL" \
-            --password "$STAGING_SEED_PASSWORD" \
+            --expected-sha "${{ github.sha }}" \
             --timeout ${{ inputs.timeout_seconds }}

@@ -135,6 +135,7 @@ test.describe('NGO Command Center Operations E2E', () => {
             triage_priority: 'CRITICAL',
             triage_reason: 'Deep laceration, vehicle collision',
             address_text: 'Juhu Tara Road, Mumbai',
+            organization_id: 'org-test-1',
             latitude: 19.0988,
             longitude: 72.8264,
             created_at: new Date(Date.now() - 3600000).toISOString(),

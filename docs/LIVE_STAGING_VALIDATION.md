@@ -203,7 +203,7 @@ The frontend normalization layer (`frontend/src/utils/apiConfig.ts`) automatical
 ---
 
 > [!NOTE]
-> **Operational Status**: **`PHASE 3B FINAL CLEANUP — LIVE STAGING VALIDATED ✅`** | **`LIVE FREE DEMO VERIFIED ✅`**.
+> **Operational Status**: **`PHASE 3B FINAL CLEANUP — LIVE STAGING VALIDATED ✅`** | **`LIVE INFRASTRUCTURE VERIFIED — AUTHENTICATED PILOT PENDING`**.
 
 ---
 
@@ -211,24 +211,26 @@ The frontend normalization layer (`frontend/src/utils/apiConfig.ts`) automatical
 
 * **Verification Date**: September 18, 2026
 * **Target Environment**: Staging (Free Cloud Demo)
-* **Authoritative Git Commit**: `4e8859c1c677f6e3e4be802536b3c337336c9cf9`
-* **Commit Message**: `fix(dispatch): enforce dispatch claim authorization and single-winner integrity`
-* **GitHub Actions Deployment Workflow**: `Staging Deployment & Smoke Tests`
-* **Workflow Run ID**: `35328069882`
-* **Workflow Overall Conclusion**: `SUCCESS` (All jobs green)
-* **Preceding CI Workflow**: `PawReach CI / CD Pipeline` (Run ID `35327661605`, `SUCCESS`)
+* **Authoritative Deployed Git Commit**: `abc9a674a274cf0cce31bd4777e1b6d8701a553d`
+* **Commit Message**: `docs(staging): record dispatch claim integrity closure and live staging validation`
+* **Preceding Core CI Run**: `PawReach CI / CD Pipeline` Run `35329973134` (`SUCCESS` - all 4 required gates green)
+* **Live Staging Deployment Run**: `Staging Deployment & Smoke Tests` Run `35330381134` (`SUCCESS` - exact SHA `abc9a67` deployed and verified)
+* **Authenticated Pilot Status**: **`AUTHENTICATED PILOT PENDING`**
+  * **Initial Pilot Execution Run**: `35328481369` (`FAILURE`)
+  * **Failure Analysis**: `FAILED BEFORE EXECUTION — STAGING_SEED_PASSWORD ENVIRONMENT SECRET NOT CONFIGURED`. The GitHub Environment secret `STAGING_SEED_PASSWORD` was unconfigured, halting the workflow prior to running `scripts/staging_authenticated_pilot.py`.
+  * **Pilot Hardening**: Workflow updated to eliminate password inputs, enforce secret presence safely, pass `--expected-sha`, parse nested readiness telemetry, verify responder determinism with guaranteed cleanup, upload synthetic private evidence, and test explicit multi-tenant case claiming (`POST /api/v1/ngo/cases/{case_id}/claim`).
 
 ### Job Execution Summary
 
 | Job | Status | Conclusion | Note |
 |-----|--------|------------|------|
-| **Backend Test Suite & Coverage** | Completed | `SUCCESS` | 285 tests passed, 85.72% coverage (above 85% threshold) |
-| **Frontend Quality & Build** | Completed | `SUCCESS` | Clean oxlint (0 errors), 86 vitest unit tests passed, production build passed |
+| **Backend Test Suite & Coverage** | Completed | `SUCCESS` | 285 tests passed, 86.60% coverage (exceeds 85% requirement) |
+| **Frontend Quality & Build** | Completed | `SUCCESS` | Clean oxlint, 86 vitest unit tests passed, production build passed |
 | **Mocked UI Contract Suite (Playwright)** | Completed | `SUCCESS` | 9/9 UI contract scenarios passed |
-| **Full-Stack E2E Integration Suite (Unmocked)** | Completed | `SUCCESS` | Real PostGIS, Redis, Celery worker/beat, and FastAPI full-stack tests passed |
+| **Full-Stack E2E Integration Suite (Unmocked)** | Completed | `SUCCESS` | 7/7 real PostGIS, Redis, Celery worker/beat, and FastAPI full-stack tests passed |
 | **Check Deployment Prerequisites** | Completed | `SUCCESS` | Staging secrets and environment validated |
-| **Trigger Staging Cloud Deployment** | Completed | `SUCCESS` | Render deploy hook triggered with ref `4e8859c` |
-| **Await Deployment & Run Staging Smoke Tests** | Completed | `SUCCESS` | Exact SHA `4e8859c` confirmed on hosted Render API, automated smoke suite passed |
+| **Trigger Staging Cloud Deployment** | Completed | `SUCCESS` | Render deploy hook triggered with ref `abc9a67` |
+| **Await Deployment & Run Staging Smoke Tests** | Completed | `SUCCESS` | Exact SHA `abc9a67` confirmed on hosted Render API, automated smoke suite passed |
 
 ### Live Readiness Verification
 
@@ -240,7 +242,7 @@ The frontend normalization layer (`frontend/src/utils/apiConfig.ts`) automatical
   "status": "ok",
   "environment": "staging",
   "version": "2.0.0",
-  "git_sha": "4e8859c1c677f6e3e4be802536b3c337336c9cf9"
+  "git_sha": "abc9a674a274cf0cce31bd4777e1b6d8701a553d"
 }
 ```
 
@@ -273,26 +275,20 @@ The frontend normalization layer (`frontend/src/utils/apiConfig.ts`) automatical
 }
 ```
 
-### Security & Single-Winner Architecture Certification
+### Security, Discovery Privacy & Single-Winner Architecture Certification
 
-1. **Elimination of Direct-Claim Security Bypass**:
-   - `POST /api/v1/rescues/{case_id}/accept` has been converted from creating arbitrary assignments to a secure backwards-compatible shim.
-   - Responders can no longer accept missions by knowing or discovering a case UUID. Mission acceptance strictly requires an active, unexpired `PENDING` dispatch offer issued to that responder.
-   - An unoffered responder or third-party attempting to claim a case receives **HTTP 403 Forbidden** (`No active dispatch offer found for this rescuer on this case`).
-2. **Canonical Dispatch Delegation**:
-   - All claims delegate to `DispatchService.accept_offer` utilizing pessimistic row-locking (`RescueCase.with_for_update().populate_existing()`).
-   - The winning responder claims the mission and atomically transitions the case to `RESPONDER_ASSIGNED`.
-   - All other pending dispatch offers for that case are immediately marked `CANCELLED`.
-   - Any second or concurrent claimant receives **HTTP 409 Conflict**.
-3. **Frontend Nearby Discovery Read-Only Transition**:
-   - In `frontend/src/pages/RescuerDashboard.tsx`, the nearby emergencies list no longer renders a direct "Accept Rescue Mission" button.
-   - Nearby cases render a neutral, non-actionable `Awaiting Dispatch Offer` badge with clock icon.
-   - All mission acceptance occurs exclusively through incoming dispatch offer alert cards with timer countdowns and match scores.
-4. **Comprehensive Authorization Regression Coverage**:
-   - All 12 claim authorization scenarios are enforced and verified in `backend/tests/test_dispatch_claim_authorization.py`.
+1. **Discovery Privacy Closure**:
+   - `GET /api/v1/rescues/nearby` now returns `RescueDiscoverySummary`, strictly omitting `reporter_id`, exact coordinates (`latitude`/`longitude`), street address (`address_text`), images, and assigned responder details. Rescuer cards display coarse distance without revealing exact scene location prior to dispatch offer issuance.
+   - `GET /api/v1/ngo/cases` returns `NGOCaseSummaryResponse`, ensuring unassigned queue cases do not expose private reporter details, evidence keys, or exact coordinates prior to an organization claiming the case.
+2. **Explicit Atomic NGO Case Claiming**:
+   - `POST /api/v1/ngo/cases/{case_id}/claim` provides an auditable, atomic ownership operation utilizing pessimistic row locking (`with_for_update().populate_existing()`). Cross-tenant claims fail closed with HTTP 409 Conflict; same-tenant claims are idempotent.
+3. **Manual Assignment Concurrency Protection**:
+   - NGO manual responder assignment (`assign_responder`) acquires `RescueCase` row locks first, inspects existing `ACCEPTED` assignments, cancels competing offers atomically, and prevents double-winner races with concurrent responder acceptances.
+4. **Elimination of Direct-Claim Security Bypass**:
+   - `POST /api/v1/rescues/{case_id}/accept` strictly requires an active, unexpired `PENDING` dispatch offer issued to that responder, failing closed with **HTTP 403 Forbidden** for unoffered responders.
 5. **Repeatable Authenticated Staging Pilot Automation**:
-   - Standalone CLI runner established in `scripts/staging_authenticated_pilot.py`.
-   - Dispatchable GitHub Actions workflow established in `.github/workflows/staging-authenticated-pilot.yml`.
+   - Standalone CLI runner established in `scripts/staging_authenticated_pilot.py` with authoritative preflight telemetry, expected commit SHA validation, responder availability setup with guaranteed cleanup, private synthetic evidence upload, and cross-tenant claim verification.
+   - Workflow `.github/workflows/staging-authenticated-pilot.yml` hardened to source `STAGING_SEED_PASSWORD` exclusively from environment secrets without CLI parameter exposure.
 
 
 

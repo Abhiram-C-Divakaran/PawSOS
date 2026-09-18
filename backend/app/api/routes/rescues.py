@@ -13,6 +13,7 @@ import logging
 from app.schemas.rescue import (
     RescueCreate,
     RescueResponse,
+    RescueDiscoverySummary,
     RescueStatusUpdate,
     RescueTimelineResponse,
     AnimalImageResponse,
@@ -160,7 +161,7 @@ def get_my_rescues(
     cases = db.query(RescueCase).filter(RescueCase.reporter_id == current_user.id).order_by(RescueCase.created_at.desc()).all()
     return [build_rescue_response(c, include_evidence=True, presign_images=False) for c in cases]
 
-@router.get("/nearby", response_model=List[RescueResponse])
+@router.get("/nearby", response_model=List[RescueDiscoverySummary])
 def get_nearby_rescues(
     lat: float = Query(..., ge=-90.0, le=90.0),
     lng: float = Query(..., ge=-180.0, le=180.0),
@@ -169,7 +170,19 @@ def get_nearby_rescues(
     current_user: User = Depends(RoleChecker([UserRole.RESCUER, UserRole.NGO_ADMIN, UserRole.SUPER_ADMIN]))
 ):
     results = DispatchService.find_nearby_rescues(db, lat, lng, radius_km)
-    return [build_rescue_response(case, dist, include_evidence=False, presign_images=False) for case, dist in results]
+    return [
+        RescueDiscoverySummary(
+            id=case.id,
+            case_number=case.case_number,
+            species=case.species,
+            triage_priority=case.triage_priority,
+            status=case.status,
+            distance_km=dist,
+            created_at=case.created_at,
+            coarse_location=None,
+        )
+        for case, dist in results
+    ]
 
 @router.get("/{case_id}", response_model=RescueResponse)
 def get_rescue(

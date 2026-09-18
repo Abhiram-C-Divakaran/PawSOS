@@ -49,7 +49,7 @@ def expire_dispatch_offers_task(db_session=None) -> dict:
         }
     except Exception as e:
         logger.error(f"Error executing expire_dispatch_offers_task: {e}", exc_info=True)
-        return {"status": "error", "error": str(e)}
+        return {"status": "error", "error_code": "DISPATCH_TASK_ERROR"}
     finally:
         if own_session:
             db.close()
@@ -74,7 +74,7 @@ def dispatch_case_task(case_id: str, db_session=None) -> dict:
         }
     except Exception as e:
         logger.error(f"Error in dispatch_case_task for case {case_id}: {e}", exc_info=True)
-        return {"status": "error", "case_id": case_id, "error": str(e)}
+        return {"status": "error", "case_id": case_id, "error_code": "DISPATCH_TASK_ERROR"}
     finally:
         if own_session:
             db.close()

@@ -73,6 +73,21 @@ class RescueResponse(BaseModel):
     class Config:
         from_attributes = True
 
+class RescueDiscoverySummary(BaseModel):
+    id: UUID
+    case_number: str
+    species: Optional[str] = None
+    triage_priority: Optional[RescuePriority] = None
+    status: RescueStatus
+    distance_km: Optional[float] = None
+    created_at: datetime
+    coarse_location: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+RescueDiscoveryResponse = RescueDiscoverySummary
+
 class RescueTimelineResponse(BaseModel):
     id: UUID
     previous_status: RescueStatus | None = None

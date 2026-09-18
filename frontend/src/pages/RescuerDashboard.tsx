@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import api from '../services/api';
 import { formatApiError } from '../utils/error';
-import type { RescueCase, RescueStatus, VeterinaryFacility, DispatchOffer } from '../types';
+import type { RescueCase, RescueStatus, VeterinaryFacility, DispatchOffer, RescueDiscoverySummary } from '../types';
 import {
   MapPin,
   Clock,
@@ -70,7 +70,7 @@ const OfferCountdown = ({
 
 export const RescuerDashboard = () => {
   const [incomingOffers, setIncomingOffers] = useState<DispatchOffer[]>([]);
-  const [nearbyCases, setNearbyCases] = useState<RescueCase[]>([]);
+  const [nearbyCases, setNearbyCases] = useState<RescueDiscoverySummary[]>([]);
   const [activeCase, setActiveCase] = useState<RescueCase | null>(null);
   const [facilities, setFacilities] = useState<VeterinaryFacility[]>([]);
   const [selectedFacilityId, setSelectedFacilityId] = useState<string>('');
@@ -653,19 +653,15 @@ export const RescuerDashboard = () => {
                       </span>
                     </div>
 
-                    <h3 className="font-bold text-lg text-brand-darkNavy">{rescue.species} Rescue</h3>
-                    <p className="text-gray-600 text-sm">{rescue.triage_reason}</p>
+                    <h3 className="font-bold text-lg text-brand-darkNavy">{rescue.species || 'Animal'} Rescue</h3>
 
                     <div className="flex items-center text-xs font-medium text-gray-500 gap-4 pt-1">
                       <span className="flex items-center">
                         <MapPin className="w-3.5 h-3.5 mr-1 text-brand-teal" />
-                        {rescue.address_text}
+                        {rescue.distance_km !== undefined
+                          ? `${rescue.distance_km} km away — exact location available with dispatch offer`
+                          : 'Exact location available with dispatch offer'}
                       </span>
-                      {rescue.distance_km !== undefined && (
-                        <span className="bg-brand-softMint text-brand-teal px-2 py-0.5 rounded font-bold">
-                          {rescue.distance_km} km away
-                        </span>
-                      )}
                     </div>
                   </div>
 

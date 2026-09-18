@@ -152,6 +152,68 @@ describe('NGO Operations Command Center Tests', () => {
         }));
       });
     });
+
+    it('renders unassigned case with protected location and Claim Case action, and claims via POST /ngo/cases/{id}/claim', async () => {
+      const mockCases = [
+        {
+          id: 'c-unassigned',
+          case_number: 'PR-2026-UNASSIGNED',
+          species: 'Dog',
+          triage_priority: 'CRITICAL',
+          status: 'SEARCHING_RESPONDER',
+          address_text: 'Location protected until claim',
+          organization_id: null,
+          created_at: new Date().toISOString(),
+        },
+        {
+          id: 'c-assigned',
+          case_number: 'PR-2026-ASSIGNED',
+          species: 'Cat',
+          triage_priority: 'MODERATE',
+          status: 'RESPONDER_ASSIGNED',
+          address_text: 'Marine Drive, Kochi',
+          organization_id: 'org-alpha',
+          created_at: new Date().toISOString(),
+        },
+      ];
+
+      (api.get as any).mockResolvedValueOnce({ data: mockCases });
+      (api.post as any).mockResolvedValueOnce({
+        data: {
+          ...mockCases[0],
+          organization_id: 'org-alpha',
+          address_text: 'Marine Drive, Kochi',
+        },
+      });
+
+      render(
+        <BrowserRouter>
+          <NGOCases />
+        </BrowserRouter>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('PR-2026-UNASSIGNED')).toBeInTheDocument();
+        expect(screen.getByText('PR-2026-ASSIGNED')).toBeInTheDocument();
+      });
+
+      // Location protected text
+      expect(screen.getByText('Location protected until claim')).toBeInTheDocument();
+      expect(screen.getByText('Marine Drive, Kochi')).toBeInTheDocument();
+
+      // Assigned case has View Dossier
+      expect(screen.getByRole('link', { name: /View Dossier/i })).toHaveAttribute('href', '/ngo/cases/c-assigned');
+
+      // Unassigned case has Claim Case button
+      const claimButton = screen.getByRole('button', { name: /Claim Case/i });
+      expect(claimButton).toBeInTheDocument();
+
+      fireEvent.click(claimButton);
+
+      await waitFor(() => {
+        expect(api.post).toHaveBeenCalledWith('/ngo/cases/c-unassigned/claim');
+      });
+    });
   });
 
   describe('NGOResponders', () => {

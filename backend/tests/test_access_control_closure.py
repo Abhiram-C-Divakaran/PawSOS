@@ -447,7 +447,7 @@ def test_nearby_discovery_omits_evidence_images_and_leaks_no_signed_urls(client:
 
     for c in cases:
         # Sensitive evidence is omitted in discovery views
-        assert c["images"] == [], f"Evidence images must be empty in discovery listing for case {c['id']}"
+        assert c.get("images") in (None, []), f"Evidence images must be omitted or empty in discovery listing for case {c['id']}"
         assert_no_presigned_url_leak(c, context="nearby discovery item")
 
 

@@ -37,6 +37,7 @@ from app.schemas.ngo import (
     OrganizationProfile,
     OrganizationProfileUpdate,
     DispatchSettings,
+    NGOCaseSummaryResponse,
 )
 from app.schemas.rescue import RescueResponse
 from app.api.routes.rescues import build_rescue_response
@@ -596,7 +597,28 @@ def get_ngo_operational_insights(
         escalation_rate_pct=esc_rate,
     )
 
-@router.get("/cases", response_model=List[RescueResponse])
+def build_ngo_case_summary(case: RescueCase, current_org_id: Optional[uuid.UUID]) -> NGOCaseSummaryResponse:
+    if case.organization_id is not None and case.organization_id == current_org_id:
+        addr = case.address_text
+    elif case.organization_id is None:
+        addr = "Location protected until claim"
+    else:
+        addr = "Location protected"
+
+    return NGOCaseSummaryResponse(
+        id=case.id,
+        case_number=case.case_number,
+        species=case.species,
+        triage_priority=case.triage_priority,
+        triage_score=case.triage_score,
+        status=case.status,
+        created_at=case.created_at,
+        updated_at=case.updated_at,
+        organization_id=case.organization_id,
+        address_text=addr,
+    )
+
+@router.get("/cases", response_model=List[NGOCaseSummaryResponse])
 def get_ngo_cases(
     priority: Optional[RescuePriority] = None,
     status: Optional[RescueStatus] = None,
@@ -607,7 +629,7 @@ def get_ngo_cases(
     db: Session = Depends(get_db),
     current_user: User = Depends(RoleChecker([UserRole.NGO_ADMIN, UserRole.SUPER_ADMIN]))
 ):
-    """Retrieve filtered and searchable rescue cases for NGO case management."""
+    """Retrieve filtered and searchable rescue cases for NGO case management with privacy protection."""
     query = db.query(RescueCase)
     if current_user.role == UserRole.NGO_ADMIN:
         # Discovery policy: NGO admins can discover cases belonging to their own organization
@@ -635,7 +657,7 @@ def get_ngo_cases(
         )
 
     cases = query.order_by(RescueCase.created_at.desc()).offset(skip).limit(limit).all()
-    return [build_rescue_response(c, include_evidence=True, presign_images=False) for c in cases]
+    return [build_ngo_case_summary(c, current_user.organization_id) for c in cases]
 
 @router.get("/cases/{case_id}")
 def get_ngo_case_dossier(
@@ -704,6 +726,75 @@ def get_ngo_case_dossier(
 
     return resp
 
+@router.post("/cases/{case_id}/claim", response_model=dict)
+def claim_ngo_case(
+    case_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(RoleChecker([UserRole.NGO_ADMIN, UserRole.SUPER_ADMIN]))
+):
+    """
+    Explicit, auditable, atomic NGO case claim operation.
+    Pessimistically row-locks RescueCase to ensure single-tenant ownership claim.
+    """
+    if current_user.role == UserRole.NGO_ADMIN:
+        if not current_user.organization_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied: NGO Admin is not associated with an organization"
+            )
+        target_org_id = current_user.organization_id
+    else:
+        # SUPER_ADMIN
+        if not current_user.organization_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Super Admin cannot claim case without an associated organization"
+            )
+        target_org_id = current_user.organization_id
+
+    # Row-lock RescueCase
+    case = (
+        db.query(RescueCase)
+        .filter(RescueCase.id == case_id)
+        .with_for_update()
+        .populate_existing()
+        .first()
+    )
+    if not case:
+        raise HTTPException(status_code=404, detail="Rescue case not found")
+
+    if case.organization_id is None:
+        case.organization_id = target_org_id
+        audit = AuditLog(
+            actor_id=current_user.id,
+            action="NGO_CASE_CLAIMED",
+            entity="rescue_case",
+            entity_id=case.id,
+            old_value={"organization_id": None},
+            new_value={"organization_id": str(target_org_id)},
+            timestamp=datetime.utcnow()
+        )
+        db.add(audit)
+        db.commit()
+        return {
+            "success": True,
+            "message": f"Case {case.case_number} claimed successfully",
+            "case_id": str(case.id),
+            "organization_id": str(target_org_id),
+        }
+    elif case.organization_id == target_org_id:
+        return {
+            "success": True,
+            "message": f"Case {case.case_number} is already claimed by your organization",
+            "case_id": str(case.id),
+            "organization_id": str(target_org_id),
+        }
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Case has already been claimed by another organization"
+        )
+
 @router.post("/cases/{case_id}/actions")
 @router.post("/cases/{case_id}/action")
 def execute_ngo_case_action(
@@ -712,8 +803,14 @@ def execute_ngo_case_action(
     db: Session = Depends(get_db),
     current_user: User = Depends(RoleChecker([UserRole.NGO_ADMIN, UserRole.SUPER_ADMIN]))
 ):
-    """Privileged administrative actions on a rescue case with audit logging."""
-    case = db.query(RescueCase).filter(RescueCase.id == case_id).first()
+    """Privileged administrative actions on a rescue case with audit logging and single-winner row locking."""
+    case = (
+        db.query(RescueCase)
+        .filter(RescueCase.id == case_id)
+        .with_for_update()
+        .populate_existing()
+        .first()
+    )
     if not case:
         raise HTTPException(status_code=404, detail="Rescue case not found")
 
@@ -820,30 +917,84 @@ def execute_ngo_case_action(
                 db.commit()
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot assign responder from another organization")
 
-        # Create accepted assignment
-        assignment = RescueAssignment(
-            rescue_case_id=case.id,
-            rescuer_id=rescuer.id,
-            assigned_at=datetime.utcnow(),
-            accepted_at=datetime.utcnow(),
-            assignment_status=AssignmentStatus.ACCEPTED,
+        # Lock and inspect existing assignments
+        existing_accepted = (
+            db.query(RescueAssignment)
+            .filter(
+                RescueAssignment.rescue_case_id == case.id,
+                RescueAssignment.assignment_status == AssignmentStatus.ACCEPTED,
+            )
+            .with_for_update()
+            .first()
         )
-        db.add(assignment)
 
-        # Cancel others
+        now = datetime.utcnow()
+        if existing_accepted:
+            if existing_accepted.rescuer_id == rescuer.id:
+                return {"success": True, "message": f"Rescuer {rescuer.full_name} is already assigned to this case"}
+            else:
+                # Reassignment: cancel previous winner to guarantee single-winner integrity
+                existing_accepted.assignment_status = AssignmentStatus.CANCELLED
+                prev_profile = db.query(RescuerProfile).filter(RescuerProfile.user_id == existing_accepted.rescuer_id).first()
+                if prev_profile and prev_profile.availability_status == RescuerAvailability.BUSY:
+                    prev_profile.availability_status = RescuerAvailability.AVAILABLE
+
+        # Check if target rescuer has an existing PENDING offer for this case
+        target_offer = (
+            db.query(RescueAssignment)
+            .filter(
+                RescueAssignment.rescue_case_id == case.id,
+                RescueAssignment.rescuer_id == rescuer.id,
+                RescueAssignment.assignment_status == AssignmentStatus.PENDING,
+            )
+            .with_for_update()
+            .first()
+        )
+        if target_offer:
+            target_offer.assignment_status = AssignmentStatus.ACCEPTED
+            target_offer.accepted_at = now
+            assigned_id = target_offer.id
+        else:
+            new_assignment = RescueAssignment(
+                rescue_case_id=case.id,
+                rescuer_id=rescuer.id,
+                assigned_at=now,
+                accepted_at=now,
+                assignment_status=AssignmentStatus.ACCEPTED,
+            )
+            db.add(new_assignment)
+            db.flush()
+            assigned_id = new_assignment.id
+
+        # Cancel all other pending offers for this case
         db.query(RescueAssignment).filter(
             RescueAssignment.rescue_case_id == case.id,
-            RescueAssignment.rescuer_id != rescuer.id,
+            RescueAssignment.id != assigned_id,
             RescueAssignment.assignment_status == AssignmentStatus.PENDING
         ).update({"assignment_status": AssignmentStatus.CANCELLED}, synchronize_session=False)
 
-        RescueService.update_status(
-            db=db,
-            rescue_case=case,
-            new_status=RescueStatus.RESPONDER_ASSIGNED,
-            user_id=current_user.id,
-            notes=f"Manually assigned by NGO Admin: {rescuer.full_name}"
-        )
+        if case.status != RescueStatus.RESPONDER_ASSIGNED:
+            RescueService.update_status(
+                db=db,
+                rescue_case=case,
+                new_status=RescueStatus.RESPONDER_ASSIGNED,
+                user_id=current_user.id,
+                notes=f"Manually assigned by NGO Admin: {rescuer.full_name}"
+            )
+        else:
+            history = RescueStatusHistory(
+                rescue_case_id=case.id,
+                previous_status=case.status,
+                new_status=case.status,
+                changed_by=current_user.id,
+                notes=f"Reassigned by NGO Admin to: {rescuer.full_name}"
+            )
+            db.add(history)
+
+        # Update rescuer profile to BUSY
+        r_profile = db.query(RescuerProfile).filter(RescuerProfile.user_id == rescuer.id).first()
+        if r_profile:
+            r_profile.availability_status = RescuerAvailability.BUSY
 
         audit = AuditLog(
             actor_id=current_user.id,
@@ -852,7 +1003,7 @@ def execute_ngo_case_action(
             entity_id=case.id,
             old_value={"status": old_status},
             new_value={"status": RescueStatus.RESPONDER_ASSIGNED.value, "rescuer_id": str(rescuer.id)},
-            timestamp=datetime.utcnow()
+            timestamp=now
         )
         db.add(audit)
         db.commit()

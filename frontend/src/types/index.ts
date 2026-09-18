@@ -82,6 +82,31 @@ export interface RescueCase {
   distance_km?: number;
   images?: AnimalImage[];
   assigned_responder?: AssignedResponder;
+  organization_id?: string;
+}
+
+export interface RescueDiscoverySummary {
+  id: string;
+  case_number: string;
+  species?: string;
+  triage_priority?: RescuePriority;
+  status: RescueStatus;
+  distance_km?: number;
+  created_at: string;
+  coarse_location?: string;
+}
+
+export interface NGOCaseSummary {
+  id: string;
+  case_number: string;
+  species?: string;
+  triage_priority?: RescuePriority;
+  triage_score?: number;
+  status: RescueStatus;
+  created_at: string;
+  updated_at: string;
+  organization_id?: string;
+  address_text?: string;
 }
 
 export interface RescueTimeline {
