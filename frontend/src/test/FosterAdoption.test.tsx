@@ -7,7 +7,6 @@ import { AdoptionBrowse } from '../pages/AdoptionBrowse';
 import { AdoptionDetail } from '../pages/AdoptionDetail';
 import { AdoptionApplicationPage } from '../pages/AdoptionApplicationPage';
 import { MyAdoptionApplications } from '../pages/MyAdoptionApplications';
-import { NGOFoster } from '../pages/ngo/NGOFoster';
 import { NGOAdoptions } from '../pages/ngo/NGOAdoptions';
 import api from '../services/api';
 
