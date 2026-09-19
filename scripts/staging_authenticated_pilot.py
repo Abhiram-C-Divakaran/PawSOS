@@ -64,6 +64,9 @@ class StagingPilotRunner:
         self.test_facility_id: Optional[str] = None
         self.rescuer_a_orig_state: Optional[Dict[str, Any]] = None
         self.rescuer_b_orig_state: Optional[Dict[str, Any]] = None
+        self.rescuer_a_availability_mutated: bool = False
+        self.rescuer_a_location_mutated: bool = False
+        self.rescuer_b_availability_mutated: bool = False
 
     def log(self, section: str, message: str, status: str = "INFO"):
         prefix = {
@@ -81,9 +84,11 @@ class StagingPilotRunner:
     def cleanup(self):
         """Guaranteed cleanup hook to restore responder availability & location states and close HTTP client."""
         self.log("CLEANUP", "Restoring responder availability states to original baseline...")
-        if "rescuer_a" in self.tokens and self.rescuer_a_orig_state:
+
+        # 1. Rescuer A Restoration
+        if self.rescuer_a_availability_mutated and self.rescuer_a_orig_state:
             target_status_a = self.rescuer_a_orig_state.get("availability_status")
-            if target_status_a:
+            if target_status_a and "rescuer_a" in self.tokens:
                 try:
                     resp_a = self.client.patch(
                         f"{self.base_url}/api/v1/rescuers/me/availability",
@@ -96,10 +101,15 @@ class StagingPilotRunner:
                         self.log("CLEANUP", f"Rescuer A availability restoration failed (HTTP {resp_a.status_code})", status="WARN")
                 except Exception as e:
                     self.log("CLEANUP", f"Could not restore Rescuer A ({type(e).__name__})", status="WARN")
+        elif not self.rescuer_a_orig_state:
+            self.log("CLEANUP", "Rescuer A baseline was not captured; no cleanup mutation required.", status="INFO")
+        elif not self.rescuer_a_availability_mutated:
+            self.log("CLEANUP", "Rescuer A availability was not mutated by pilot; no cleanup mutation required.", status="INFO")
 
+        if self.rescuer_a_location_mutated and self.rescuer_a_orig_state:
             orig_lat = self.rescuer_a_orig_state.get("latitude")
             orig_lon = self.rescuer_a_orig_state.get("longitude")
-            if orig_lat is not None and orig_lon is not None:
+            if orig_lat is not None and orig_lon is not None and "rescuer_a" in self.tokens:
                 try:
                     loc_resp_a = self.client.patch(
                         f"{self.base_url}/api/v1/rescuers/me/location",
@@ -112,23 +122,11 @@ class StagingPilotRunner:
                         self.log("CLEANUP", f"Rescuer A location restoration failed (HTTP {loc_resp_a.status_code})", status="WARN")
                 except Exception as e:
                     self.log("CLEANUP", f"Could not restore Rescuer A location ({type(e).__name__})", status="WARN")
-        elif "rescuer_a" in self.tokens:
-            try:
-                resp_a = self.client.patch(
-                    f"{self.base_url}/api/v1/rescuers/me/availability",
-                    json={"availability_status": "AVAILABLE"},
-                    headers={"Authorization": f"Bearer {self.tokens['rescuer_a']}"},
-                )
-                if resp_a.status_code == 200:
-                    self.log("CLEANUP", "Rescuer A reset to AVAILABLE", status="PASS")
-                else:
-                    self.log("CLEANUP", f"Rescuer A reset failed (HTTP {resp_a.status_code})", status="WARN")
-            except Exception as e:
-                self.log("CLEANUP", f"Could not restore Rescuer A ({type(e).__name__})", status="WARN")
 
-        if "rescuer_b" in self.tokens and self.rescuer_b_orig_state:
+        # 2. Rescuer B Restoration
+        if self.rescuer_b_availability_mutated and self.rescuer_b_orig_state:
             target_status_b = self.rescuer_b_orig_state.get("availability_status")
-            if target_status_b:
+            if target_status_b and "rescuer_b" in self.tokens:
                 try:
                     resp_b = self.client.patch(
                         f"{self.base_url}/api/v1/rescuers/me/availability",
@@ -141,19 +139,10 @@ class StagingPilotRunner:
                         self.log("CLEANUP", f"Rescuer B availability restoration failed (HTTP {resp_b.status_code})", status="WARN")
                 except Exception as e:
                     self.log("CLEANUP", f"Could not restore Rescuer B ({type(e).__name__})", status="WARN")
-        elif "rescuer_b" in self.tokens:
-            try:
-                resp_b = self.client.patch(
-                    f"{self.base_url}/api/v1/rescuers/me/availability",
-                    json={"availability_status": "AVAILABLE"},
-                    headers={"Authorization": f"Bearer {self.tokens['rescuer_b']}"},
-                )
-                if resp_b.status_code == 200:
-                    self.log("CLEANUP", "Rescuer B reset to AVAILABLE", status="PASS")
-                else:
-                    self.log("CLEANUP", f"Rescuer B reset failed (HTTP {resp_b.status_code})", status="WARN")
-            except Exception as e:
-                self.log("CLEANUP", f"Could not restore Rescuer B ({type(e).__name__})", status="WARN")
+        elif not self.rescuer_b_orig_state:
+            self.log("CLEANUP", "Rescuer B baseline was not captured; no cleanup mutation required.", status="INFO")
+        elif not self.rescuer_b_availability_mutated:
+            self.log("CLEANUP", "Rescuer B availability was not mutated by pilot; no cleanup mutation required.", status="INFO")
 
         try:
             self.client.close()
@@ -372,6 +361,7 @@ class StagingPilotRunner:
         )
         if resp_avail_a.status_code != 200:
             self.abort("STEP 3", f"Failed setting Rescuer A AVAILABLE: HTTP {resp_avail_a.status_code}")
+        self.rescuer_a_availability_mutated = True
 
         resp_loc_a = self.client.patch(
             f"{self.base_url}/api/v1/rescuers/me/location",
@@ -380,6 +370,7 @@ class StagingPilotRunner:
         )
         if resp_loc_a.status_code != 200:
             self.abort("STEP 3", f"Failed updating Rescuer A location: HTTP {resp_loc_a.status_code}")
+        self.rescuer_a_location_mutated = True
         self.log("STEP 3", "Rescuer A configured as AVAILABLE at fresh coordinates (9.9850, 76.2980)", status="PASS")
 
         # 3b. Rescuer B: set BUSY BEFORE case creation to guarantee no dispatch offer is issued
@@ -390,6 +381,7 @@ class StagingPilotRunner:
         )
         if resp_avail_b.status_code != 200:
             self.abort("STEP 3", f"Failed setting Rescuer B BUSY: HTTP {resp_avail_b.status_code}")
+        self.rescuer_b_availability_mutated = True
         self.log("STEP 3", "Rescuer B configured as BUSY to guarantee dispatch exclusion", status="PASS")
 
         # 3c. Upload synthetic private evidence fixture as citizen
