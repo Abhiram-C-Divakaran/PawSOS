@@ -461,5 +461,75 @@ def test_cleanup_closes_client_even_when_patch_raises():
             runner.cleanup()
             mock_close.assert_called_once()
 
+def test_step2_uses_oauth2_form_contract_for_all_seeded_actors():
+    """Step 2 must send OAuth2 form fields username/password, never JSON email/password."""
+    runner = StagingPilotRunner(
+        base_url="https://pawreach-api.onrender.com",
+        seed_password="TestPassword123!",
+        allow_http=True,
+    )
 
+    responses = []
+    for index in range(8):
+        response = MagicMock(status_code=200)
+        response.json.return_value = {"access_token": f"token-{index}"}
+        responses.append(response)
+
+    with patch.object(runner.client, "post", side_effect=responses) as mock_post:
+        runner.step_2_authenticate()
+
+    assert len(mock_post.call_args_list) == 8
+    expected_emails = [
+        "citizen@staging.pawsos.org",
+        "rescuer.a@staging.pawsos.org",
+        "rescuer.b@staging.pawsos.org",
+        "vet@staging.pawsos.org",
+        "vet.b@staging.pawsos.org",
+        "admin@staging.pawsos.org",
+        "admin.b@staging.pawsos.org",
+        "superadmin@staging.pawsos.org",
+    ]
+    for call, expected_email in zip(mock_post.call_args_list, expected_emails):
+        assert call.kwargs.get("json") is None
+        assert call.kwargs["data"] == {
+            "username": expected_email,
+            "password": "TestPassword123!",
+        }
+
+    assert all(runner.tokens.values())
+
+
+def test_step2_fails_on_auth_error_without_registering_dynamic_citizen():
+    """A seeded actor auth failure must be surfaced, not masked by dynamic registration."""
+    runner = StagingPilotRunner(
+        base_url="https://pawreach-api.onrender.com",
+        seed_password="TestPassword123!",
+        allow_http=True,
+    )
+    failed = MagicMock(status_code=401)
+    failed.text = '{"detail":"Incorrect email/phone or password"}'
+
+    with patch.object(runner.client, "post", return_value=failed) as mock_post:
+        with pytest.raises(PilotFailure, match="Failed login for citizen"):
+            runner.step_2_authenticate()
+
+    mock_post.assert_called_once()
+    assert runner.tokens == {}
+
+
+def test_step2_rejects_http_200_without_access_token():
+    """A malformed success response must not be treated as authenticated."""
+    runner = StagingPilotRunner(
+        base_url="https://pawreach-api.onrender.com",
+        seed_password="TestPassword123!",
+        allow_http=True,
+    )
+    response = MagicMock(status_code=200)
+    response.json.return_value = {"token_type": "bearer"}
+
+    with patch.object(runner.client, "post", return_value=response):
+        with pytest.raises(PilotFailure, match="without an access token"):
+            runner.step_2_authenticate()
+
+    assert runner.tokens == {}
 
