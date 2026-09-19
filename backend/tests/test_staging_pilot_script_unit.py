@@ -14,6 +14,7 @@ import io
 import os
 import sys
 from pathlib import Path
+import httpx
 import pytest
 from PIL import Image
 from unittest.mock import MagicMock, patch
@@ -80,6 +81,67 @@ def test_readiness_nested_services_and_worker():
 
     with patch.object(runner.client, "get", side_effect=[mock_resp_health, mock_resp_ready]):
         runner.step_1_readiness()
+
+
+def test_readiness_retries_transient_timeout_then_succeeds():
+    """A free-tier cold-start timeout should be retried before strict validation."""
+    runner = StagingPilotRunner(
+        base_url="https://pawreach-api.onrender.com",
+        seed_password="TestPassword123!",
+        expected_sha="abc9a674a274cf0cce31bd4777e1b6d8701a553d",
+        allow_http=True,
+    )
+
+    health = MagicMock(status_code=200)
+    health.json.return_value = {
+        "status": "ok",
+        "environment": "staging",
+        "git_sha": "abc9a674a274cf0cce31bd4777e1b6d8701a553d",
+    }
+    ready = MagicMock(status_code=200)
+    ready.json.return_value = {
+        "status": "ready",
+        "services": {
+            "database": "healthy",
+            "postgis": "healthy",
+            "redis": "healthy",
+            "celery": "healthy",
+            "storage": "healthy",
+        },
+        "checks": {"worker": "active"},
+    }
+
+    with patch.object(
+        runner.client,
+        "get",
+        side_effect=[httpx.ReadTimeout("cold start"), health, ready],
+    ) as mock_get:
+        with patch("staging_authenticated_pilot.time.sleep") as mock_sleep:
+            runner.step_1_readiness()
+
+    assert mock_get.call_count == 3
+    mock_sleep.assert_called_once_with(5.0)
+
+
+def test_readiness_persistent_timeout_exhausts_bounded_retries():
+    """Persistent transport failure must still terminate after the bounded wake-up window."""
+    runner = StagingPilotRunner(
+        base_url="https://pawreach-api.onrender.com",
+        seed_password="TestPassword123!",
+        allow_http=True,
+    )
+
+    with patch.object(
+        runner.client,
+        "get",
+        side_effect=httpx.ReadTimeout("still sleeping"),
+    ) as mock_get:
+        with patch("staging_authenticated_pilot.time.sleep") as mock_sleep:
+            with pytest.raises(PilotFailure, match=r"/health after 4 attempts .*ReadTimeout"):
+                runner.step_1_readiness()
+
+    assert mock_get.call_count == 4
+    assert mock_sleep.call_count == 3
 
 
 def test_readiness_fails_on_unhealthy_service():
