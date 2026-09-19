@@ -15,6 +15,8 @@ from app.core.constants import UserRole
 from scripts.seed_staging import (
     validate_staging_password,
     seed_staging_database,
+    validate_reconciliation_environment,
+    validate_staging_identity_collision,
     INSECURE_PATTERNS,
 )
 
@@ -51,6 +53,47 @@ class TestStagingSeedSecurity:
     def test_valid_strong_staging_password_accepted(self):
         valid = "Kx9#mQ2$vL8!zT5_secure"
         assert validate_staging_password(valid) == valid
+
+
+
+    def test_reconciliation_refuses_non_staging_environment(self):
+        with pytest.raises(RuntimeError, match="only when ENVIRONMENT=staging"):
+            validate_reconciliation_environment("development", True)
+
+    def test_reconciliation_allows_staging_environment(self):
+        validate_reconciliation_environment("staging", True)
+
+    def test_normal_seed_mode_remains_allowed_outside_staging(self):
+        validate_reconciliation_environment("development", False)
+
+    def test_identity_collision_rejects_reserved_phone_owned_by_other_user(self):
+        by_email = MagicMock()
+        by_email.id = uuid.uuid4()
+        by_email.email = "rescuer.a@staging.pawsos.org"
+
+        by_phone = MagicMock()
+        by_phone.id = uuid.uuid4()
+        by_phone.email = "someone-else@example.com"
+
+        with pytest.raises(RuntimeError, match="identity collision"):
+            validate_staging_identity_collision(
+                expected_email="rescuer.a@staging.pawsos.org",
+                expected_phone="+919876543211",
+                existing_by_email=by_email,
+                existing_by_phone=by_phone,
+            )
+
+    def test_identity_collision_accepts_same_canonical_user(self):
+        canonical = MagicMock()
+        canonical.id = uuid.uuid4()
+        canonical.email = "rescuer.a@staging.pawsos.org"
+
+        validate_staging_identity_collision(
+            expected_email="rescuer.a@staging.pawsos.org",
+            expected_phone="+919876543211",
+            existing_by_email=canonical,
+            existing_by_phone=canonical,
+        )
 
     def test_seed_staging_refuses_production_environment(self, monkeypatch):
         monkeypatch.setenv("ENVIRONMENT", "production")
