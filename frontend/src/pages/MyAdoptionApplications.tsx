@@ -36,7 +36,11 @@ export const MyAdoptionApplications: React.FC = () => {
   };
 
   useEffect(() => {
-    fetchApplications();
+    const timeoutId = window.setTimeout(() => {
+      void fetchApplications();
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
   }, []);
 
   const handleWithdraw = async (appId: string) => {

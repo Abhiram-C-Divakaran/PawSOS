@@ -25,8 +25,8 @@ if (firebaseConfig.apiKey && firebaseConfig.projectId) {
 
     const notificationOptions = {
       body,
-      icon: '/icons/icon-192.png',
-      badge: '/icons/icon-192.png',
+      icon: '/icons/icon-192.svg',
+      badge: '/icons/icon-192.svg',
       data: {
         route,
         ...payload.data,

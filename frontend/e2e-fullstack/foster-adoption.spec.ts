@@ -10,7 +10,6 @@ test.describe('Full-Stack Foster & Adoption Operations (Unmocked)', () => {
     // 1. Authenticate Actors
     // -------------------------------------------------------------------------
     const tokenNgo = await loginViaApi(request, 'ngoadminA.e2e@pawreach.test', DEFAULT_E2E_PASSWORD);
-    const tokenFoster = await loginViaApi(request, 'foster.e2e@pawreach.test', DEFAULT_E2E_PASSWORD);
     const tokenCitizen = await loginViaApi(request, 'citizen.e2e@pawreach.test', DEFAULT_E2E_PASSWORD);
 
     // -------------------------------------------------------------------------
