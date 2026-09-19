@@ -46,7 +46,7 @@ def update_animal(
     animal = db.query(Animal).filter(Animal.id == animal_id).first()
     if not animal:
         raise NotFoundException("Animal not found")
-    verify_animal_access(animal, current_user, db)
+    verify_animal_access(animal, current_user, db, for_update=True)
         
     for key, value in animal_in.dict(exclude_unset=True).items():
         setattr(animal, key, value)

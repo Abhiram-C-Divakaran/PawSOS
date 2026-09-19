@@ -343,43 +343,64 @@ def test_treatment_authorization_and_scoping(client: TestClient, db, auth_env):
 
 
 def test_animal_record_bola_closure(client: TestClient, db, auth_env):
-    """Verify BOLA closure on GET and PATCH /api/v1/animals/{animal_id}."""
+    """Verify BOLA closure and separated READ vs UPDATE authorization on /api/v1/animals/{animal_id}."""
     env = auth_env
     animal_id = env["animal_alpha"].id
     url = f"/api/v1/animals/{animal_id}"
 
-    # 1. Citizen role is removed: Citizen receives HTTP 403 Forbidden
+    # 1. READ Matrix on Linked Animal
+    # - Citizen role denied (403)
     assert client.get(url, headers=env["token"](env["citizen_reporter"])).status_code == 403
-    assert client.patch(url, json={"description": "New Description"}, headers=env["token"](env["citizen_reporter"])).status_code == 403
-
-    # 2. Unrelated rescuer receives HTTP 403
+    # - Unrelated rescuer denied (403)
     assert client.get(url, headers=env["token"](env["rescuer_unrelated"])).status_code == 403
-    assert client.patch(url, json={"description": "New Description"}, headers=env["token"](env["rescuer_unrelated"])).status_code == 403
-
-    # 3. Foreign NGO Beta receives HTTP 403
+    # - Foreign NGO Beta denied (403)
     assert client.get(url, headers=env["token"](env["admin_beta"])).status_code == 403
-    assert client.patch(url, json={"description": "New Description"}, headers=env["token"](env["admin_beta"])).status_code == 403
-
-    # 4. Foreign Vet Beta receives HTTP 403
+    # - Foreign Vet Beta denied (403)
     assert client.get(url, headers=env["token"](env["vet_beta"])).status_code == 403
-    assert client.patch(url, json={"description": "New Description"}, headers=env["token"](env["vet_beta"])).status_code == 403
-
-    # 5. Authorized actors linked via case_alpha receive HTTP 200
-    # Assigned Rescuer
+    # - Assigned rescuer allowed (200)
     assert client.get(url, headers=env["token"](env["rescuer_assigned"])).status_code == 200
-    # Facility Vet
+    # - Exact-facility Vet Alpha allowed (200)
     assert client.get(url, headers=env["token"](env["vet_alpha"])).status_code == 200
-    # Own-tenant NGO Admin
+    # - Own-tenant NGO Admin allowed (200)
     assert client.get(url, headers=env["token"](env["admin_alpha"])).status_code == 200
-    # Super Admin
+    # - Super Admin allowed (200)
     assert client.get(url, headers=env["token"](env["super_admin"])).status_code == 200
 
-    # Authorized PATCH update
-    patch_resp = client.patch(url, json={"description": "Bruno Updated"}, headers=env["token"](env["admin_alpha"]))
-    assert patch_resp.status_code == 200
-    assert patch_resp.json()["description"] == "Bruno Updated"
+    # 2. UPDATE Matrix on Linked Animal (Stronger Mutation Policy)
+    # - Assigned responder PATCH -> 403 (Responders have READ ONLY access to animal records)
+    assert client.patch(url, json={"description": "Hacked by Rescuer"}, headers=env["token"](env["rescuer_assigned"])).status_code == 403
+    # - Unrelated responder PATCH -> 403
+    assert client.patch(url, json={"description": "Hacked by Unrelated"}, headers=env["token"](env["rescuer_unrelated"])).status_code == 403
+    # - Citizen PATCH -> 403
+    assert client.patch(url, json={"description": "Hacked by Citizen"}, headers=env["token"](env["citizen_reporter"])).status_code == 403
+    # - Foreign NGO Beta PATCH -> 403
+    assert client.patch(url, json={"description": "Hacked by Foreign NGO"}, headers=env["token"](env["admin_beta"])).status_code == 403
+    # - Foreign Vet Beta PATCH -> 403
+    assert client.patch(url, json={"description": "Hacked by Foreign Vet"}, headers=env["token"](env["vet_beta"])).status_code == 403
 
-    # 6. Standalone / unlinked animal record (no rescue cases linked)
+    # - Own-tenant NGO PATCH -> 200
+    patch_ngo = client.patch(url, json={"description": "Bruno NGO Updated"}, headers=env["token"](env["admin_alpha"]))
+    assert patch_ngo.status_code == 200
+    assert patch_ngo.json()["description"] == "Bruno NGO Updated"
+
+    # - Exact-facility veterinarian PATCH:
+    # If case is still in dispatch status before arriving at clinic -> 403
+    # (case_alpha is currently in RESPONDER_ASSIGNED in auth_env)
+    assert client.patch(url, json={"description": "Premature Vet Edit"}, headers=env["token"](env["vet_alpha"])).status_code == 403
+
+    # Transition case_alpha to AT_VETERINARY_FACILITY -> 200
+    env["case_alpha"].status = RescueStatus.AT_VETERINARY_FACILITY
+    db.commit()
+    patch_vet = client.patch(url, json={"description": "Bruno Vet Updated"}, headers=env["token"](env["vet_alpha"]))
+    assert patch_vet.status_code == 200
+    assert patch_vet.json()["description"] == "Bruno Vet Updated"
+
+    # - Super Admin PATCH -> 200
+    patch_super = client.patch(url, json={"description": "Bruno Super Updated"}, headers=env["token"](env["super_admin"]))
+    assert patch_super.status_code == 200
+    assert patch_super.json()["description"] == "Bruno Super Updated"
+
+    # 3. Standalone / unlinked animal record (no rescue cases linked)
     animal_unlinked = Animal(species="Parrot", description="Standalone Polly")
     db.add(animal_unlinked)
     db.commit()
@@ -400,11 +421,11 @@ def test_animal_record_bola_closure(client: TestClient, db, auth_env):
     assert client.patch(unlinked_url, json={"description": "Hacked"}, headers=env["token"](env["citizen_reporter"])).status_code == 403
     # - unlinked animal + superadmin => 200
     assert client.get(unlinked_url, headers=env["token"](env["super_admin"])).status_code == 200
-    patch_super = client.patch(unlinked_url, json={"description": "Polly Managed"}, headers=env["token"](env["super_admin"]))
-    assert patch_super.status_code == 200
-    assert patch_super.json()["description"] == "Polly Managed"
+    patch_super_unlinked = client.patch(unlinked_url, json={"description": "Polly Managed"}, headers=env["token"](env["super_admin"]))
+    assert patch_super_unlinked.status_code == 200
+    assert patch_super_unlinked.json()["description"] == "Polly Managed"
 
-    # 7. POST /api/v1/animals (standalone creation restricted to SUPER_ADMIN)
+    # 4. POST /api/v1/animals (standalone creation restricted to SUPER_ADMIN)
     assert client.post("/api/v1/animals", json={"species": "Rabbit"}, headers=env["token"](env["admin_alpha"])).status_code == 403
     assert client.post("/api/v1/animals", json={"species": "Rabbit"}, headers=env["token"](env["vet_alpha"])).status_code == 403
     assert client.post("/api/v1/animals", json={"species": "Rabbit"}, headers=env["token"](env["rescuer_assigned"])).status_code == 403

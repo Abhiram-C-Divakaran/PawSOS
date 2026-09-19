@@ -296,10 +296,13 @@ def verify_animal_access(animal: Any, user: User, db: Optional[Session] = None, 
     """Enforce object-level authorization for accessing or mutating animal records.
     
     Policy:
-    - SUPER_ADMIN: Global access.
+    - SUPER_ADMIN: Global read and update access.
     - NGO_ADMIN: Animal must be linked to at least one rescue case owned by the NGO's organization.
+                 For update: own-tenant linked animal only.
     - VETERINARIAN: Animal must be linked to at least one rescue case assigned to the vet's facility.
+                    For update: exact-facility linked animal and at least one linked rescue in veterinary lifecycle state.
     - RESCUER: Animal must be linked to at least one rescue case where the rescuer holds an accepted assignment.
+               For update: READ ONLY (reject with HTTP 403 Forbidden).
     - CITIZEN / ALL OTHERS: HTTP 403 Forbidden.
     """
     if user.role == UserRole.SUPER_ADMIN:
@@ -324,11 +327,17 @@ def verify_animal_access(animal: Any, user: User, db: Optional[Session] = None, 
     if user.role == UserRole.VETERINARIAN:
         if not user.veterinary_facility_id:
             raise ForbiddenException("Access denied: Veterinarian is not associated with an authorized facility.")
-        if not any(c.veterinary_facility_id == user.veterinary_facility_id for c in cases):
+        facility_cases = [c for c in cases if c.veterinary_facility_id == user.veterinary_facility_id]
+        if not facility_cases:
             raise ForbiddenException("Access denied: Animal is not assigned to your veterinary facility.")
+        if for_update:
+            if not any(c.status in VETERINARY_LIFECYCLE_STATUSES for c in facility_cases):
+                raise ForbiddenException("Access denied: Animal has not arrived at or been referred to clinical veterinary care.")
         return
 
     if user.role == UserRole.RESCUER:
+        if for_update:
+            raise ForbiddenException("Access denied: Responders have read-only access to animal records.")
         if not any(has_rescuer_accepted_assignment(c, user, db) for c in cases):
             raise ForbiddenException("Access denied: Rescuer is not assigned to this animal's rescue case.")
         return

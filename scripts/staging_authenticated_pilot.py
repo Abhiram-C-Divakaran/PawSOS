@@ -62,6 +62,8 @@ class StagingPilotRunner:
         self.created_case_id: Optional[str] = None
         self.created_image_id: Optional[str] = None
         self.test_facility_id: Optional[str] = None
+        self.rescuer_a_orig_state: Optional[Dict[str, Any]] = None
+        self.rescuer_b_orig_state: Optional[Dict[str, Any]] = None
 
     def log(self, section: str, message: str, status: str = "INFO"):
         prefix = {
@@ -77,27 +79,79 @@ class StagingPilotRunner:
         raise PilotFailure(f"[{section}] {message}")
 
     def cleanup(self):
-        """Guaranteed cleanup hook to restore responder availability states and close HTTP client."""
-        self.log("CLEANUP", "Restoring responder availability states...")
-        if "rescuer_a" in self.tokens:
+        """Guaranteed cleanup hook to restore responder availability & location states and close HTTP client."""
+        self.log("CLEANUP", "Restoring responder availability states to original baseline...")
+        if "rescuer_a" in self.tokens and self.rescuer_a_orig_state:
+            target_status_a = self.rescuer_a_orig_state.get("availability_status")
+            if target_status_a:
+                try:
+                    resp_a = self.client.patch(
+                        f"{self.base_url}/api/v1/rescuers/me/availability",
+                        json={"availability_status": target_status_a},
+                        headers={"Authorization": f"Bearer {self.tokens['rescuer_a']}"},
+                    )
+                    if resp_a.status_code == 200:
+                        self.log("CLEANUP", f"Rescuer A availability restored to {target_status_a}", status="PASS")
+                    else:
+                        self.log("CLEANUP", f"Rescuer A availability restoration failed (HTTP {resp_a.status_code})", status="WARN")
+                except Exception as e:
+                    self.log("CLEANUP", f"Could not restore Rescuer A ({type(e).__name__})", status="WARN")
+
+            orig_lat = self.rescuer_a_orig_state.get("latitude")
+            orig_lon = self.rescuer_a_orig_state.get("longitude")
+            if orig_lat is not None and orig_lon is not None:
+                try:
+                    loc_resp_a = self.client.patch(
+                        f"{self.base_url}/api/v1/rescuers/me/location",
+                        json={"latitude": orig_lat, "longitude": orig_lon},
+                        headers={"Authorization": f"Bearer {self.tokens['rescuer_a']}"},
+                    )
+                    if loc_resp_a.status_code == 200:
+                        self.log("CLEANUP", "Rescuer A location restored to original coordinates", status="PASS")
+                    else:
+                        self.log("CLEANUP", f"Rescuer A location restoration failed (HTTP {loc_resp_a.status_code})", status="WARN")
+                except Exception as e:
+                    self.log("CLEANUP", f"Could not restore Rescuer A location ({type(e).__name__})", status="WARN")
+        elif "rescuer_a" in self.tokens:
             try:
-                self.client.patch(
+                resp_a = self.client.patch(
                     f"{self.base_url}/api/v1/rescuers/me/availability",
                     json={"availability_status": "AVAILABLE"},
                     headers={"Authorization": f"Bearer {self.tokens['rescuer_a']}"},
                 )
-                self.log("CLEANUP", "Rescuer A restored to AVAILABLE", status="PASS")
+                if resp_a.status_code == 200:
+                    self.log("CLEANUP", "Rescuer A reset to AVAILABLE", status="PASS")
+                else:
+                    self.log("CLEANUP", f"Rescuer A reset failed (HTTP {resp_a.status_code})", status="WARN")
             except Exception as e:
                 self.log("CLEANUP", f"Could not restore Rescuer A ({type(e).__name__})", status="WARN")
 
-        if "rescuer_b" in self.tokens:
+        if "rescuer_b" in self.tokens and self.rescuer_b_orig_state:
+            target_status_b = self.rescuer_b_orig_state.get("availability_status")
+            if target_status_b:
+                try:
+                    resp_b = self.client.patch(
+                        f"{self.base_url}/api/v1/rescuers/me/availability",
+                        json={"availability_status": target_status_b},
+                        headers={"Authorization": f"Bearer {self.tokens['rescuer_b']}"},
+                    )
+                    if resp_b.status_code == 200:
+                        self.log("CLEANUP", f"Rescuer B availability restored to {target_status_b}", status="PASS")
+                    else:
+                        self.log("CLEANUP", f"Rescuer B availability restoration failed (HTTP {resp_b.status_code})", status="WARN")
+                except Exception as e:
+                    self.log("CLEANUP", f"Could not restore Rescuer B ({type(e).__name__})", status="WARN")
+        elif "rescuer_b" in self.tokens:
             try:
-                self.client.patch(
+                resp_b = self.client.patch(
                     f"{self.base_url}/api/v1/rescuers/me/availability",
                     json={"availability_status": "AVAILABLE"},
                     headers={"Authorization": f"Bearer {self.tokens['rescuer_b']}"},
                 )
-                self.log("CLEANUP", "Rescuer B restored to AVAILABLE", status="PASS")
+                if resp_b.status_code == 200:
+                    self.log("CLEANUP", "Rescuer B reset to AVAILABLE", status="PASS")
+                else:
+                    self.log("CLEANUP", f"Rescuer B reset failed (HTTP {resp_b.status_code})", status="WARN")
             except Exception as e:
                 self.log("CLEANUP", f"Could not restore Rescuer B ({type(e).__name__})", status="WARN")
 
@@ -276,6 +330,39 @@ class StagingPilotRunner:
     # -------------------------------------------------------------------------
     def step_3_deterministic_setup_and_create_case(self):
         self.log("STEP 3", "Establishing deterministic responder availability states...")
+
+        # 3-pre: Capture baseline responder profiles before mutating state
+        self.log("STEP 3", "Capturing baseline responder profiles before establishing test state...")
+        prof_a_resp = self.client.get(
+            f"{self.base_url}/api/v1/rescuers/me/profile",
+            headers={"Authorization": f"Bearer {self.tokens['rescuer_a']}"},
+        )
+        if prof_a_resp.status_code != 200:
+            self.abort("STEP 3", f"Failed fetching baseline profile for Rescuer A: HTTP {prof_a_resp.status_code}")
+        prof_a = prof_a_resp.json()
+        self.rescuer_a_orig_state = {
+            "availability_status": prof_a.get("availability_status"),
+            "latitude": prof_a.get("latitude"),
+            "longitude": prof_a.get("longitude"),
+        }
+
+        prof_b_resp = self.client.get(
+            f"{self.base_url}/api/v1/rescuers/me/profile",
+            headers={"Authorization": f"Bearer {self.tokens['rescuer_b']}"},
+        )
+        if prof_b_resp.status_code != 200:
+            self.abort("STEP 3", f"Failed fetching baseline profile for Rescuer B: HTTP {prof_b_resp.status_code}")
+        prof_b = prof_b_resp.json()
+        self.rescuer_b_orig_state = {
+            "availability_status": prof_b.get("availability_status"),
+            "latitude": prof_b.get("latitude"),
+            "longitude": prof_b.get("longitude"),
+        }
+        self.log(
+            "STEP 3",
+            f"Captured baseline responder availability states (Rescuer A: {self.rescuer_a_orig_state['availability_status']}, Rescuer B: {self.rescuer_b_orig_state['availability_status']})",
+            status="PASS",
+        )
 
         # 3a. Rescuer A: set AVAILABLE and update location close to Kochi Marine Drive test incident
         resp_avail_a = self.client.patch(

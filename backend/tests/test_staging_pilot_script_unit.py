@@ -272,3 +272,136 @@ def test_step6_post_claim_foreign_evidence_denial():
             assert "Admin Beta accessed foreign evidence post-claim" in str(exc_info.value)
 
 
+def test_step3_captures_responder_baselines_before_mutation():
+    """Verify that step 3 fetches baseline profiles for Rescuer A and B before mutating availability."""
+    runner = StagingPilotRunner(
+        base_url="https://pawreach-api.onrender.com",
+        seed_password="TestPassword123!",
+        allow_http=True,
+    )
+    runner.tokens = {"rescuer_a": "token_a", "rescuer_b": "token_b", "citizen": "token_cit"}
+
+    mock_prof_a = MagicMock(status_code=200)
+    mock_prof_a.json.return_value = {"availability_status": "OFFLINE", "latitude": 10.1, "longitude": 76.3}
+
+    mock_prof_b = MagicMock(status_code=200)
+    mock_prof_b.json.return_value = {"availability_status": "BUSY", "latitude": None, "longitude": None}
+
+    mock_patch_avail_a = MagicMock(status_code=200)
+    mock_patch_loc_a = MagicMock(status_code=200)
+    mock_patch_avail_b = MagicMock(status_code=200)
+
+    mock_upload = MagicMock(status_code=200)
+    mock_upload.json.return_value = {"image_url": "cases/test.png"}
+
+    mock_case = MagicMock(status_code=201)
+    mock_case.json.return_value = {
+        "id": "case-123",
+        "triage_priority": "CRITICAL",
+        "triage_score": 85,
+        "status": "REPORTED",
+        "images": [{"id": "img-123"}],
+    }
+
+    with patch.object(runner.client, "get", side_effect=[mock_prof_a, mock_prof_b]):
+        with patch.object(runner.client, "patch", side_effect=[mock_patch_avail_a, mock_patch_loc_a, mock_patch_avail_b]):
+            with patch.object(runner.client, "post", side_effect=[mock_upload, mock_case]):
+                runner.step_3_deterministic_setup_and_create_case()
+
+    assert runner.rescuer_a_orig_state == {"availability_status": "OFFLINE", "latitude": 10.1, "longitude": 76.3}
+    assert runner.rescuer_b_orig_state == {"availability_status": "BUSY", "latitude": None, "longitude": None}
+
+
+def test_step3_aborts_if_baseline_capture_fails():
+    """Step 3 must abort immediately without mutating states if baseline profile fetch fails."""
+    runner = StagingPilotRunner(
+        base_url="https://pawreach-api.onrender.com",
+        seed_password="TestPassword123!",
+        allow_http=True,
+    )
+    runner.tokens = {"rescuer_a": "token_a", "rescuer_b": "token_b"}
+
+    mock_prof_fail = MagicMock(status_code=500)
+    mock_patch = MagicMock()
+
+    with patch.object(runner.client, "get", return_value=mock_prof_fail):
+        with patch.object(runner.client, "patch", mock_patch):
+            with pytest.raises(PilotFailure) as exc_info:
+                runner.step_3_deterministic_setup_and_create_case()
+            assert "Failed fetching baseline profile for Rescuer A" in str(exc_info.value)
+
+    mock_patch.assert_not_called()
+
+
+def test_cleanup_restores_original_states_and_locations():
+    """Cleanup must restore original availability status (not blindly AVAILABLE) and location."""
+    runner = StagingPilotRunner(
+        base_url="https://pawreach-api.onrender.com",
+        seed_password="TestPassword123!",
+        allow_http=True,
+    )
+    runner.tokens = {"rescuer_a": "token_a", "rescuer_b": "token_b"}
+    runner.rescuer_a_orig_state = {"availability_status": "OFFLINE", "latitude": 9.95, "longitude": 76.25}
+    runner.rescuer_b_orig_state = {"availability_status": "BUSY", "latitude": None, "longitude": None}
+
+    patch_calls = []
+    def mock_patch(url, **kwargs):
+        patch_calls.append((url, kwargs.get("json")))
+        resp = MagicMock(status_code=200)
+        return resp
+
+    with patch.object(runner.client, "patch", side_effect=mock_patch):
+        with patch.object(runner.client, "close") as mock_close:
+            runner.cleanup()
+            mock_close.assert_called_once()
+
+    assert len(patch_calls) == 3
+    assert patch_calls[0][0].endswith("/api/v1/rescuers/me/availability")
+    assert patch_calls[0][1] == {"availability_status": "OFFLINE"}
+
+    assert patch_calls[1][0].endswith("/api/v1/rescuers/me/location")
+    assert patch_calls[1][1] == {"latitude": 9.95, "longitude": 76.25}
+
+    assert patch_calls[2][0].endswith("/api/v1/rescuers/me/availability")
+    assert patch_calls[2][1] == {"availability_status": "BUSY"}
+
+
+def test_cleanup_logs_warn_on_non_200():
+    """Cleanup must log WARN (not PASS) when restoration API call returns non-200."""
+    runner = StagingPilotRunner(
+        base_url="https://pawreach-api.onrender.com",
+        seed_password="TestPassword123!",
+        allow_http=True,
+    )
+    runner.tokens = {"rescuer_a": "token_a", "rescuer_b": "token_b"}
+    runner.rescuer_a_orig_state = {"availability_status": "AVAILABLE", "latitude": None, "longitude": None}
+    runner.rescuer_b_orig_state = {"availability_status": "AVAILABLE", "latitude": None, "longitude": None}
+
+    mock_resp_fail = MagicMock(status_code=503)
+    mock_log = MagicMock()
+
+    with patch.object(runner.client, "patch", return_value=mock_resp_fail):
+        with patch.object(runner, "log", mock_log):
+            runner.cleanup()
+
+    warn_calls = [c for c in mock_log.call_args_list if c.kwargs.get("status") == "WARN" or (len(c.args) >= 3 and c.args[2] == "WARN")]
+    assert any("503" in str(c) for c in warn_calls)
+
+
+def test_cleanup_closes_client_even_when_patch_raises():
+    """Client must still close cleanly even if PATCH throws a network exception."""
+    runner = StagingPilotRunner(
+        base_url="https://pawreach-api.onrender.com",
+        seed_password="TestPassword123!",
+        allow_http=True,
+    )
+    runner.tokens = {"rescuer_a": "token_a", "rescuer_b": "token_b"}
+    runner.rescuer_a_orig_state = {"availability_status": "AVAILABLE", "latitude": None, "longitude": None}
+
+    with patch.object(runner.client, "patch", side_effect=RuntimeError("Network down")):
+        with patch.object(runner.client, "close") as mock_close:
+            runner.cleanup()
+            mock_close.assert_called_once()
+
+
+
