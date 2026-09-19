@@ -38,6 +38,13 @@ SYNTHETIC_PNG_FIXTURE = (
     b"\x00\x00\x00\x05\x00\x01z\xa8WP\x00\x00\x00\x00IEND\xaeB`\x82"
 )
 
+# Render's free web service can require more than one normal HTTP timeout to wake
+# from sleep. Retry only transient transport failures and 5xx responses; once an
+# endpoint responds normally, all environment/SHA/readiness assertions remain
+# strict and fail immediately.
+READINESS_WAKE_MAX_ATTEMPTS = 4
+READINESS_WAKE_RETRY_DELAY_SECONDS = 5.0
+
 
 class PilotFailure(Exception):
     """Raised when an authenticated pilot verification assertion fails."""
@@ -82,6 +89,45 @@ class StagingPilotRunner:
     def abort(self, section: str, message: str):
         self.log(section, message, status="FAIL")
         raise PilotFailure(f"[{section}] {message}")
+
+    def _get_with_wakeup_retries(self, url: str, endpoint_label: str):
+        """GET a readiness endpoint with bounded retries for free-tier wakeups."""
+        for attempt in range(1, READINESS_WAKE_MAX_ATTEMPTS + 1):
+            try:
+                resp = self.client.get(url)
+            except httpx.RequestError as exc:
+                if attempt == READINESS_WAKE_MAX_ATTEMPTS:
+                    self.abort(
+                        "STEP 1",
+                        f"Could not connect to {endpoint_label} after "
+                        f"{READINESS_WAKE_MAX_ATTEMPTS} attempts ({type(exc).__name__})",
+                    )
+                self.log(
+                    "STEP 1",
+                    f"{endpoint_label} wake-up attempt {attempt}/{READINESS_WAKE_MAX_ATTEMPTS} "
+                    f"failed ({type(exc).__name__}); retrying in "
+                    f"{READINESS_WAKE_RETRY_DELAY_SECONDS:g}s...",
+                    status="WARN",
+                )
+                time.sleep(READINESS_WAKE_RETRY_DELAY_SECONDS)
+                continue
+
+            # A sleeping/restarting free instance or upstream proxy can briefly
+            # return 5xx while processes initialize. Retry those responses only.
+            if resp.status_code >= 500 and attempt < READINESS_WAKE_MAX_ATTEMPTS:
+                self.log(
+                    "STEP 1",
+                    f"{endpoint_label} wake-up attempt {attempt}/{READINESS_WAKE_MAX_ATTEMPTS} "
+                    f"returned HTTP {resp.status_code}; retrying in "
+                    f"{READINESS_WAKE_RETRY_DELAY_SECONDS:g}s...",
+                    status="WARN",
+                )
+                time.sleep(READINESS_WAKE_RETRY_DELAY_SECONDS)
+                continue
+
+            return resp
+
+        raise AssertionError("unreachable")
 
     def cleanup(self):
         """Guaranteed cleanup hook to restore responder availability & location states and close HTTP client."""
@@ -205,70 +251,67 @@ class StagingPilotRunner:
     def step_1_readiness(self):
         self.log("STEP 1", "Verifying Backend Subsystem Deep Readiness...")
 
-        # 1a. Check /api/v1/health
+        # 1a. Check /api/v1/health. A free Render instance may need longer
+        # than one request timeout to wake, so only transient transport/5xx
+        # failures receive bounded retries.
         health_url = f"{self.base_url}/api/v1/health"
-        try:
-            resp = self.client.get(health_url)
-            if resp.status_code != 200:
-                self.abort("STEP 1", f"/health returned HTTP {resp.status_code}: {resp.text}")
-            hdata = resp.json()
-            if hdata.get("status") != "ok":
-                self.abort("STEP 1", f"/health status expected 'ok', got '{hdata.get('status')}'")
+        resp = self._get_with_wakeup_retries(health_url, "/health")
+        if resp.status_code != 200:
+            self.abort("STEP 1", f"/health returned HTTP {resp.status_code}: {resp.text}")
+        hdata = resp.json()
+        if hdata.get("status") != "ok":
+            self.abort("STEP 1", f"/health status expected 'ok', got '{hdata.get('status')}'")
 
-            observed_sha = hdata.get("git_sha", "")
-            env_val = hdata.get("environment", "")
-            if env_val != "staging" and not self.allow_http:
-                self.abort("STEP 1", f"/health environment expected 'staging', got '{env_val}'")
-            self.log("STEP 1", f"/health OK: environment={env_val} | git_sha={observed_sha}", status="PASS")
+        observed_sha = hdata.get("git_sha", "")
+        env_val = hdata.get("environment", "")
+        if env_val != "staging" and not self.allow_http:
+            self.abort("STEP 1", f"/health environment expected 'staging', got '{env_val}'")
+        self.log("STEP 1", f"/health OK: environment={env_val} | git_sha={observed_sha}", status="PASS")
 
-            if self.expected_sha:
-                # If both are 40-character full Git SHAs, require exact equality
-                if len(self.expected_sha) == 40 and len(observed_sha) == 40:
-                    if observed_sha.lower() != self.expected_sha.lower():
-                        self.abort(
-                            "STEP 1",
-                            f"Git SHA mismatch! Deployed={observed_sha}, Expected={self.expected_sha}"
-                        )
-                elif not (observed_sha.startswith(self.expected_sha) or self.expected_sha.startswith(observed_sha)):
+        if self.expected_sha:
+            # If both are 40-character full Git SHAs, require exact equality
+            if len(self.expected_sha) == 40 and len(observed_sha) == 40:
+                if observed_sha.lower() != self.expected_sha.lower():
                     self.abort(
                         "STEP 1",
                         f"Git SHA mismatch! Deployed={observed_sha}, Expected={self.expected_sha}"
                     )
-                self.log("STEP 1", f"Deployed Git SHA matches expected SHA: {self.expected_sha}", status="PASS")
-        except httpx.RequestError as e:
-            self.abort("STEP 1", f"Could not connect to /health ({type(e).__name__})")
+            elif not (observed_sha.startswith(self.expected_sha) or self.expected_sha.startswith(observed_sha)):
+                self.abort(
+                    "STEP 1",
+                    f"Git SHA mismatch! Deployed={observed_sha}, Expected={self.expected_sha}"
+                )
+            self.log("STEP 1", f"Deployed Git SHA matches expected SHA: {self.expected_sha}", status="PASS")
 
-        # 1b. Check /api/v1/health/ready
+        # 1b. Check /api/v1/health/ready. Combined API/Celery startup can lag
+        # liveness briefly, so use the same bounded transient retry policy.
         ready_url = f"{self.base_url}/api/v1/health/ready"
-        try:
-            resp = self.client.get(ready_url)
-            if resp.status_code != 200:
-                self.abort("STEP 1", f"Readiness endpoint returned HTTP {resp.status_code}: {resp.text}")
-            data = resp.json()
-            if data.get("status") != "ready":
-                self.abort("STEP 1", f"Readiness status expected 'ready', got '{data.get('status')}'")
+        resp = self._get_with_wakeup_retries(ready_url, "/health/ready")
+        if resp.status_code != 200:
+            self.abort("STEP 1", f"Readiness endpoint returned HTTP {resp.status_code}: {resp.text}")
+        data = resp.json()
+        if data.get("status") != "ready":
+            self.abort("STEP 1", f"Readiness status expected 'ready', got '{data.get('status')}'")
 
-            services = data.get("services", {})
-            checks = data.get("checks", {})
+        services = data.get("services", {})
+        checks = data.get("checks", {})
 
-            required_services = ["database", "postgis", "redis", "celery", "storage"]
-            for svc in required_services:
-                val = services.get(svc)
-                if val != "healthy":
-                    self.abort("STEP 1", f"Service '{svc}' is '{val}', expected 'healthy'")
+        required_services = ["database", "postgis", "redis", "celery", "storage"]
+        for svc in required_services:
+            val = services.get(svc)
+            if val != "healthy":
+                self.abort("STEP 1", f"Service '{svc}' is '{val}', expected 'healthy'")
 
-            worker_val = checks.get("worker")
-            if worker_val != "active":
-                self.abort("STEP 1", f"Check 'worker' is '{worker_val}', expected 'active'")
+        worker_val = checks.get("worker")
+        if worker_val != "active":
+            self.abort("STEP 1", f"Check 'worker' is '{worker_val}', expected 'active'")
 
-            self.log(
-                "STEP 1",
-                f"Deep readiness verified: DB={services.get('database')} | PostGIS={services.get('postgis')} | "
-                f"Redis={services.get('redis')} | Celery={services.get('celery')} | Worker={checks.get('worker')} | Storage={services.get('storage')}",
-                status="PASS"
-            )
-        except httpx.RequestError as e:
-            self.abort("STEP 1", f"Connection error during readiness check ({type(e).__name__})")
+        self.log(
+            "STEP 1",
+            f"Deep readiness verified: DB={services.get('database')} | PostGIS={services.get('postgis')} | "
+            f"Redis={services.get('redis')} | Celery={services.get('celery')} | Worker={checks.get('worker')} | Storage={services.get('storage')}",
+            status="PASS"
+        )
 
     # -------------------------------------------------------------------------
     # Step 2: Multi-Role Authentication
