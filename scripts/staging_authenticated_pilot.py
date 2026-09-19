@@ -286,33 +286,29 @@ class StagingPilotRunner:
 
         login_url = f"{self.base_url}/api/v1/auth/login"
         for role, email in actors.items():
-            resp = self.client.post(login_url, json={"email": email, "password": self.seed_password})
-            if resp.status_code == 200:
-                token_data = resp.json()
-                self.tokens[role] = token_data.get("access_token") or token_data.get("token")
-                self.log("STEP 2", f"Authenticated {role} ({email})", status="PASS")
-            else:
-                # If citizen is not seeded, register dynamically
-                if role == "citizen":
-                    self.log("STEP 2", "Citizen account not found; registering dynamic pilot citizen...", status="WARN")
-                    reg_url = f"{self.base_url}/api/v1/auth/register"
-                    reg_email = f"pilot_citizen_{uuid.uuid4().hex[:6]}@staging.pawsos.org"
-                    reg_resp = self.client.post(
-                        reg_url,
-                        json={
-                            "email": reg_email,
-                            "password": self.seed_password,
-                            "full_name": "Dynamic Pilot Citizen",
-                            "phone": f"+9198{uuid.uuid4().hex[:8]}",
-                            "role": "CITIZEN",
-                        },
-                    )
-                    if reg_resp.status_code in [200, 201]:
-                        log_resp = self.client.post(login_url, json={"email": reg_email, "password": self.seed_password})
-                        self.tokens["citizen"] = log_resp.json().get("access_token")
-                        self.log("STEP 2", f"Registered and authenticated dynamic citizen ({reg_email})", status="PASS")
-                        continue
-                self.abort("STEP 2", f"Failed login for {role} ({email}): HTTP {resp.status_code} - {resp.text}")
+            # FastAPI OAuth2PasswordRequestForm expects form-encoded fields named
+            # "username" and "password". The backend intentionally treats
+            # username as either an email address or phone number.
+            resp = self.client.post(
+                login_url,
+                data={"username": email, "password": self.seed_password},
+            )
+            if resp.status_code != 200:
+                self.abort(
+                    "STEP 2",
+                    f"Failed login for {role} ({email}): HTTP {resp.status_code} - {resp.text}",
+                )
+
+            token_data = resp.json()
+            token = token_data.get("access_token") or token_data.get("token")
+            if not token:
+                self.abort(
+                    "STEP 2",
+                    f"Login for {role} ({email}) returned HTTP 200 without an access token",
+                )
+
+            self.tokens[role] = token
+            self.log("STEP 2", f"Authenticated {role} ({email})", status="PASS")
 
     # -------------------------------------------------------------------------
     # Step 3: Deterministic Responder Setup & Incident Creation with Private Evidence
