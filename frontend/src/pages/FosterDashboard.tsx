@@ -73,7 +73,11 @@ export const FosterDashboard: React.FC = () => {
   };
 
   useEffect(() => {
-    fetchData();
+    const timeoutId = window.setTimeout(() => {
+      void fetchData();
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
   }, []);
 
   const handleSaveProfile = async (e: React.FormEvent) => {
