@@ -29,11 +29,13 @@ except ImportError:
     sys.exit(1)
 
 
-# Minimal synthetic 1x1 transparent PNG fixture for private evidence testing
+# Minimal synthetic 1x1 transparent PNG fixture for private evidence testing.
+# This byte sequence is a fully decodable PNG (including valid chunk CRCs), so it
+# exercises the same Pillow verification path used by the hosted upload service.
 SYNTHETIC_PNG_FIXTURE = (
     b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
-    b"\x08\x06\x00\x00\x00\x1f\x15c4\x00\x00\x00\nIDATx\x9cc\x00\x01\x00\x00"
-    b"\x05\x00\x01\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82"
+    b"\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\rIDATx\xdac````"
+    b"\x00\x00\x00\x05\x00\x01z\xa8WP\x00\x00\x00\x00IEND\xaeB`\x82"
 )
 
 

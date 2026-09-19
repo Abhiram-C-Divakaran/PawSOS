@@ -10,10 +10,12 @@ Validates:
 7. Cleanup runs in finally block to restore responder availabilities upon failure.
 """
 
+import io
 import os
 import sys
 from pathlib import Path
 import pytest
+from PIL import Image
 from unittest.mock import MagicMock, patch
 
 # Ensure scripts directory is importable
@@ -154,10 +156,22 @@ def test_cleanup_always_runs_on_failure():
 
 
 def test_synthetic_png_fixture_valid():
-    """Ensure SYNTHETIC_PNG_FIXTURE has valid PNG signature."""
+    """Ensure the synthetic evidence fixture is a genuinely decodable PNG."""
     assert SYNTHETIC_PNG_FIXTURE.startswith(b"\x89PNG\r\n\x1a\n")
     assert b"IEND" in SYNTHETIC_PNG_FIXTURE
     assert len(SYNTHETIC_PNG_FIXTURE) < 150  # Must be tiny and deterministic
+
+    # Mirror the hosted storage service's Pillow integrity check so a fixture
+    # with a valid signature but corrupt chunks cannot pass CI again.
+    with Image.open(io.BytesIO(SYNTHETIC_PNG_FIXTURE)) as image:
+        assert image.format == "PNG"
+        image.verify()
+
+    # Reopen after verify() and force pixel decoding, matching the optimizer's
+    # second pass before it saves the normalized upload.
+    with Image.open(io.BytesIO(SYNTHETIC_PNG_FIXTURE)) as image:
+        assert image.size == (1, 1)
+        image.load()
 
 
 def test_cli_has_no_password_argument():
