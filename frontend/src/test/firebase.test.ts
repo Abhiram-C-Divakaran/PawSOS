@@ -6,6 +6,7 @@ import {
   initializeFirebase,
   requestNotificationPermission,
   getFCMToken,
+  registerFirebaseMessagingServiceWorker,
   registerDeviceTokenWithBackend,
   unregisterDeviceTokenFromBackend,
   onForegroundNotification,
@@ -91,6 +92,13 @@ describe('Firebase Service (src/services/firebase.ts)', () => {
 
       const msg = await initializeFirebase();
       expect(msg).toBeNull();
+    });
+  });
+
+  describe('registerFirebaseMessagingServiceWorker', () => {
+    it('returns null safely when Firebase or service workers are unavailable', async () => {
+      const registration = await registerFirebaseMessagingServiceWorker();
+      expect(registration).toBeNull();
     });
   });
 

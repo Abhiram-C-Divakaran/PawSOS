@@ -14,6 +14,36 @@ const firebaseConfig = {
 let app: FirebaseApp | null = null;
 let messaging: Messaging | null = null;
 
+const getFirebaseServiceWorkerUrl = (): string => {
+  const params = new URLSearchParams({
+    apiKey: firebaseConfig.apiKey,
+    authDomain: firebaseConfig.authDomain,
+    projectId: firebaseConfig.projectId,
+    storageBucket: firebaseConfig.storageBucket,
+    messagingSenderId: firebaseConfig.messagingSenderId,
+    appId: firebaseConfig.appId,
+  });
+
+  return `/firebase-messaging-sw.js?${params.toString()}`;
+};
+
+export const registerFirebaseMessagingServiceWorker = async (): Promise<ServiceWorkerRegistration | null> => {
+  if (
+    typeof navigator === 'undefined' ||
+    !('serviceWorker' in navigator) ||
+    !isFirebaseConfigured()
+  ) {
+    return null;
+  }
+
+  try {
+    return await navigator.serviceWorker.register(getFirebaseServiceWorkerUrl(), { scope: '/' });
+  } catch (err) {
+    console.warn('Firebase messaging service worker registration failed:', err);
+    return null;
+  }
+};
+
 export const isFirebaseConfigured = (): boolean => {
   return Boolean(
     firebaseConfig.apiKey &&
@@ -65,8 +95,14 @@ export const getFCMToken = async (): Promise<string | null> => {
     const msg = await initializeFirebase();
     if (!msg) return null;
 
+    const serviceWorkerRegistration = await registerFirebaseMessagingServiceWorker();
+    if (!serviceWorkerRegistration) return null;
+
     const vapidKey = import.meta.env.VITE_FIREBASE_VAPID_KEY || undefined;
-    const token = await getToken(msg, { vapidKey });
+    const token = await getToken(msg, {
+      vapidKey,
+      serviceWorkerRegistration,
+    });
     return token;
   } catch (err) {
     console.warn('Could not retrieve FCM token:', err);

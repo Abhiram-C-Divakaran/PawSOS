@@ -71,7 +71,11 @@ export const NGOAdoptions: React.FC = () => {
   };
 
   useEffect(() => {
-    fetchData();
+    const timeoutId = window.setTimeout(() => {
+      void fetchData();
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
   }, []);
 
   const handleCreateListing = async (e: React.FormEvent) => {
