@@ -46,7 +46,11 @@ export const NGOFoster: React.FC = () => {
   };
 
   useEffect(() => {
-    fetchData();
+    const timeoutId = window.setTimeout(() => {
+      void fetchData();
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
   }, []);
 
   const handleVerifyHome = async (homeId: string) => {
