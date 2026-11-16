@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -25,42 +26,75 @@ def register_device_token(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ):
-    """Register or update a push device token (FCM)."""
-    device = (
-        db.query(DeviceToken)
-        .filter(DeviceToken.token == payload.token, DeviceToken.user_id == current_user.id)
-        .first()
-    )
+    """Register or update a push device token (FCM), safely deduplicating across users and concurrent requests."""
+    now = datetime.now(timezone.utc)
+    device = db.query(DeviceToken).filter(DeviceToken.token == payload.token).first()
     if device:
+        device.user_id = current_user.id
         device.platform = payload.platform
         device.device_name = payload.device_name
         device.is_active = True
-        device.last_seen_at = datetime.now(timezone.utc)
-    else:
-        device = DeviceToken(
-            user_id=current_user.id,
-            token=payload.token,
-            platform=payload.platform,
-            device_name=payload.device_name,
-            is_active=True,
-            last_seen_at=datetime.now(timezone.utc),
-        )
-        db.add(device)
+        device.last_seen_at = now
+        db.commit()
+        db.refresh(device)
+        return device
 
+    try:
+        with db.begin_nested():
+            device = DeviceToken(
+                user_id=current_user.id,
+                token=payload.token,
+                platform=payload.platform,
+                device_name=payload.device_name,
+                is_active=True,
+                last_seen_at=now,
+            )
+            db.add(device)
+            db.flush()
+        db.commit()
+        db.refresh(device)
+        return device
+    except IntegrityError:
+        device = db.query(DeviceToken).filter(DeviceToken.token == payload.token).first()
+        if not device:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Concurrent device token registration conflict",
+            )
+        device.user_id = current_user.id
+        device.platform = payload.platform
+        device.device_name = payload.device_name
+        device.is_active = True
+        device.last_seen_at = now
+        db.commit()
+        db.refresh(device)
+        return device
+
+@router.delete("/devices/inactive/cleanup")
+def cleanup_inactive_device_tokens(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Purge deactivated or revoked push device tokens for the current user."""
+    removed_count = (
+        db.query(DeviceToken)
+        .filter(DeviceToken.user_id == current_user.id, DeviceToken.is_active == False)
+        .delete(synchronize_session=False)
+    )
     db.commit()
-    db.refresh(device)
-    return device
+    return {"success": True, "removed_count": removed_count}
 
-@router.delete("/devices/{token}")
+@router.delete("/devices/{token:path}")
 def unregister_device_token(
     token: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ):
     """Deactivate or remove a push device token."""
+    cleaned_token = (token or "").strip()
     device = (
         db.query(DeviceToken)
-        .filter(DeviceToken.token == token, DeviceToken.user_id == current_user.id)
+        .filter(DeviceToken.token == cleaned_token, DeviceToken.user_id == current_user.id)
         .first()
     )
     if device:

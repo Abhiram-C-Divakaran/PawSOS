@@ -125,7 +125,17 @@ class NotificationService:
                     logger.warning(f"FCM sender mismatch for token {device.token[:12]}... Deactivating.")
                     device.is_active = False
                 except Exception as ex:
-                    logger.error(f"FCM delivery error for device {device.id}: {ex}")
+                    err_code = str(getattr(ex, "code", "") or "").upper()
+                    err_name = type(ex).__name__
+                    if err_code in ("UNREGISTERED", "INVALID_ARGUMENT", "SENDER_ID_MISMATCH") or err_name in (
+                        "UnregisteredError",
+                        "SenderIdMismatchError",
+                        "InvalidArgumentError",
+                    ):
+                        logger.warning(f"FCM token {device.token[:12]}... invalid ({err_name}). Deactivating device.")
+                        device.is_active = False
+                    else:
+                        logger.error(f"FCM delivery error for device {device.id}: {ex}")
             db.commit()
         except Exception as e:
             logger.error(f"Error during FCM push distribution: {e}")

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Bell, CheckCheck, ShieldAlert, HeartHandshake, Stethoscope } from 'lucide-react';
 import api from '../services/api';
+import { sanitizeNotificationRoute } from '../services/firebase';
 import type { NotificationItem } from '../types';
 
 interface NotificationBellProps {
@@ -15,7 +16,6 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ variant = 'l
   const [isOpen, setIsOpen] = useState<boolean>(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
-
 
   useEffect(() => {
     let isMounted = true;
@@ -38,15 +38,24 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ variant = 'l
     };
   }, []);
 
-  // Close dropdown on outside click
+  // Close dropdown on outside click or Escape key
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
         setIsOpen(false);
       }
     };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsOpen(false);
+      }
+    };
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
   }, []);
 
   const handleMarkAllRead = async () => {
@@ -77,11 +86,9 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ variant = 'l
     if (notif.data) {
       try {
         const parsed = typeof notif.data === 'string' ? JSON.parse(notif.data) : notif.data;
-        if (parsed?.route) {
-          navigate(parsed.route);
-          return;
-        } else if (parsed?.case_id) {
-          navigate(`/cases/${parsed.case_id}`);
+        const safeRoute = sanitizeNotificationRoute(parsed?.route, parsed?.case_id);
+        if (safeRoute) {
+          navigate(safeRoute);
           return;
         }
       } catch {
@@ -89,7 +96,10 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ variant = 'l
       }
     }
     if (notif.rescue_case_id) {
-      navigate(`/cases/${notif.rescue_case_id}`);
+      const safeFallback = sanitizeNotificationRoute(undefined, notif.rescue_case_id);
+      if (safeFallback) {
+        navigate(safeFallback);
+      }
     }
   };
 
@@ -110,9 +120,12 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ variant = 'l
     <div className="relative" ref={dropdownRef}>
       <button
         id="notification-bell-btn"
+        type="button"
         aria-label="View notifications"
+        aria-expanded={isOpen}
+        aria-haspopup="true"
         onClick={() => setIsOpen(!isOpen)}
-        className={`relative p-2.5 rounded-full transition-all focus:outline-none ${
+        className={`relative p-2.5 rounded-full transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-teal ${
           variant === 'dark'
             ? 'text-gray-300 hover:text-white hover:bg-white/10'
             : 'text-slate-600 hover:text-slate-900 bg-slate-100/70 hover:bg-slate-200/70 border border-slate-200'
@@ -132,7 +145,9 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ variant = 'l
       {isOpen && (
         <div
           id="notification-dropdown"
-          className="absolute right-0 mt-2 w-80 sm:w-96 bg-white rounded-xl shadow-2xl border border-slate-200 z-50 overflow-hidden"
+          role="region"
+          aria-label="Notifications list"
+          className="absolute right-0 mt-2 w-[calc(100vw-2rem)] max-w-sm sm:w-96 bg-white rounded-xl shadow-2xl border border-slate-200 z-50 overflow-hidden"
         >
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 bg-slate-50 border-b border-slate-200">
@@ -146,8 +161,9 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ variant = 'l
             </div>
             {unreadCount > 0 && (
               <button
+                type="button"
                 onClick={handleMarkAllRead}
-                className="flex items-center gap-1 text-xs text-slate-600 hover:text-blue-700 font-medium transition-colors"
+                className="flex items-center gap-1 text-xs text-slate-600 hover:text-blue-700 font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded"
               >
                 <CheckCheck className="w-3.5 h-3.5" />
                 Mark all read
@@ -165,8 +181,16 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ variant = 'l
               notifications.map((n) => (
                 <div
                   key={n.id}
+                  role="button"
+                  tabIndex={0}
                   onClick={() => handleNotificationClick(n)}
-                  className={`px-4 py-3 cursor-pointer hover:bg-blue-50/50 transition-colors flex items-start gap-3 ${
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      void handleNotificationClick(n);
+                    }
+                  }}
+                  className={`px-4 py-3 cursor-pointer hover:bg-blue-50/50 focus:outline-none focus-visible:bg-blue-50/70 transition-colors flex items-start gap-3 ${
                     !n.is_read ? 'bg-blue-50/30 font-medium' : 'text-slate-700'
                   }`}
                 >

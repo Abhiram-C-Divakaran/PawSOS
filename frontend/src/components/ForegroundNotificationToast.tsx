@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AlertTriangle, X, ChevronRight, ShieldAlert } from 'lucide-react';
-import { onForegroundNotification } from '../services/firebase';
+import { onForegroundNotification, sanitizeNotificationRoute } from '../services/firebase';
 
 interface ToastData {
   id: string;
@@ -13,11 +13,12 @@ interface ToastData {
 
 export const ForegroundNotificationToast: React.FC = () => {
   const [activeToast, setActiveToast] = useState<ToastData | null>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const navigate = useNavigate();
 
   useEffect(() => {
     const unsubscribe = onForegroundNotification((payload) => {
-      const route = payload.data?.route || (payload.data?.case_id ? `/cases/${payload.data.case_id}` : undefined);
+      const route = sanitizeNotificationRoute(payload.data?.route, payload.data?.case_id);
       const priority = payload.data?.priority || (payload.title?.includes('CRITICAL') ? 'CRITICAL' : 'GENERAL');
       const toast: ToastData = {
         id: Date.now().toString(),
@@ -28,15 +29,20 @@ export const ForegroundNotificationToast: React.FC = () => {
       };
       setActiveToast(toast);
 
-      // Auto-dismiss after 10 seconds if not clicked
-      const timer = setTimeout(() => {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+      }
+      timerRef.current = setTimeout(() => {
         setActiveToast((current) => (current?.id === toast.id ? null : current));
       }, 10000);
-
-      return () => clearTimeout(timer);
     });
 
-    return () => unsubscribe();
+    return () => {
+      unsubscribe();
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+      }
+    };
   }, []);
 
   if (!activeToast) return null;
@@ -54,7 +60,9 @@ export const ForegroundNotificationToast: React.FC = () => {
     <div
       id="foreground-notification-toast"
       data-testid="foreground-notification-toast"
-      className="fixed top-20 right-4 z-50 max-w-md w-full animate-slide-in-down"
+      role="alert"
+      aria-live={isCritical ? 'assertive' : 'polite'}
+      className="fixed top-20 right-4 left-4 sm:left-auto z-50 max-w-md sm:w-full animate-slide-in-down"
     >
       <div
         className={`rounded-xl p-4 shadow-2xl border backdrop-blur-md transition-all flex items-start gap-3.5 ${
@@ -75,7 +83,7 @@ export const ForegroundNotificationToast: React.FC = () => {
           )}
         </div>
 
-        <div className="flex-1 min-w-0" onClick={handleClick} role="button" tabIndex={0}>
+        <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between gap-1">
             <h4 className="font-bold text-sm truncate text-white">{activeToast.title}</h4>
             <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-white/10 shrink-0">
@@ -89,11 +97,9 @@ export const ForegroundNotificationToast: React.FC = () => {
             <button
               id="toast-action-btn"
               data-testid="toast-action-btn"
-              onClick={(e) => {
-                e.stopPropagation();
-                handleClick();
-              }}
-              className="mt-2.5 inline-flex items-center gap-1 text-xs font-bold text-amber-400 hover:text-amber-300 transition-colors"
+              type="button"
+              onClick={handleClick}
+              className="mt-2.5 inline-flex items-center gap-1 text-xs font-bold text-amber-400 hover:text-amber-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 rounded transition-colors"
             >
               View Rescue <ChevronRight className="w-3.5 h-3.5" />
             </button>
@@ -103,9 +109,10 @@ export const ForegroundNotificationToast: React.FC = () => {
         <button
           id="close-toast-btn"
           data-testid="close-toast-btn"
+          type="button"
           onClick={() => setActiveToast(null)}
           aria-label="Close notification"
-          className="text-stone-400 hover:text-white p-1 rounded-md hover:bg-white/10 shrink-0 transition-colors"
+          className="text-stone-400 hover:text-white p-1 rounded-md hover:bg-white/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-white shrink-0 transition-colors"
         >
           <X className="w-4 h-4" />
         </button>

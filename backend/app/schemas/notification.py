@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
 from typing import Optional, Dict, Any, List
 import uuid
 from datetime import datetime
@@ -7,6 +7,16 @@ class DeviceTokenCreate(BaseModel):
     token: str
     platform: str = "WEB"
     device_name: Optional[str] = None
+
+    @field_validator("token")
+    @classmethod
+    def validate_token(cls, v: str) -> str:
+        cleaned = (v or "").strip()
+        if not cleaned:
+            raise ValueError("Device token must not be empty")
+        if len(cleaned) > 4096:
+            raise ValueError("Device token exceeds maximum length")
+        return cleaned
 
 class DeviceTokenResponse(BaseModel):
     id: uuid.UUID

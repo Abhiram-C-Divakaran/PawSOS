@@ -3,6 +3,29 @@
 importScripts('https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/10.8.0/firebase-messaging-compat.js');
 
+function sanitizeNotificationRoute(rawRoute, fallbackCaseId) {
+  const safeCaseId =
+    typeof fallbackCaseId === 'string' && /^[a-zA-Z0-9-]+$/.test(fallbackCaseId.trim())
+      ? fallbackCaseId.trim()
+      : '';
+  const candidate =
+    typeof rawRoute === 'string' && rawRoute.trim()
+      ? rawRoute.trim()
+      : safeCaseId
+      ? `/cases/${safeCaseId}`
+      : '/';
+
+  if (
+    !candidate.startsWith('/') ||
+    candidate.startsWith('//') ||
+    /[\r\n\\]/.test(candidate) ||
+    /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(candidate)
+  ) {
+    return '/';
+  }
+  return candidate;
+}
+
 // Parse URL search params or fallback to self configuration
 const searchParams = new URL(location).searchParams;
 const firebaseConfig = {
@@ -21,15 +44,15 @@ if (firebaseConfig.apiKey && firebaseConfig.projectId) {
   messaging.onBackgroundMessage((payload) => {
     const title = payload.notification?.title || payload.data?.title || '🐾 PawReach Emergency Alert';
     const body = payload.notification?.body || payload.data?.body || payload.data?.message || 'New dispatch or case update.';
-    const route = payload.data?.route || (payload.data?.case_id ? `/cases/${payload.data.case_id}` : '/');
+    const route = sanitizeNotificationRoute(payload.data?.route, payload.data?.case_id);
 
     const notificationOptions = {
       body,
       icon: '/icons/icon-192.svg',
       badge: '/icons/icon-192.svg',
       data: {
-        route,
         ...payload.data,
+        route,
       },
       tag: payload.data?.offer_id || payload.data?.case_id || 'pawreach-alert',
       renotify: true,
@@ -42,18 +65,23 @@ if (firebaseConfig.apiKey && firebaseConfig.projectId) {
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const route = event.notification.data?.route || '/';
+  const route = sanitizeNotificationRoute(
+    event.notification.data?.route,
+    event.notification.data?.case_id
+  );
 
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
-      // If PawReach window is open, focus and navigate it
+      // If PawReach window is open, focus and navigate it safely within same origin
       for (const client of windowClients) {
         if (client.url && 'focus' in client) {
-          client.navigate(route);
+          if ('navigate' in client) {
+            client.navigate(route);
+          }
           return client.focus();
         }
       }
-      // Otherwise open new window
+      // Otherwise open new window at safe internal route
       if (clients.openWindow) {
         return clients.openWindow(route);
       }

@@ -14,6 +14,42 @@ const firebaseConfig = {
 let app: FirebaseApp | null = null;
 let messaging: Messaging | null = null;
 
+/**
+ * Ensures notification deep-link targets are strictly internal relative paths.
+ * Blocks protocol-relative URLs (//evil.com), external origins, and javascript:/data: schemes.
+ */
+export const sanitizeNotificationRoute = (
+  rawRoute?: string | null,
+  fallbackCaseId?: string | null
+): string | undefined => {
+  const safeCaseId =
+    typeof fallbackCaseId === 'string' && /^[a-zA-Z0-9-]+$/.test(fallbackCaseId.trim())
+      ? fallbackCaseId.trim()
+      : '';
+
+  const candidate =
+    typeof rawRoute === 'string' && rawRoute.trim()
+      ? rawRoute.trim()
+      : safeCaseId
+      ? `/cases/${safeCaseId}`
+      : '';
+
+  if (!candidate) {
+    return undefined;
+  }
+
+  if (
+    !candidate.startsWith('/') ||
+    candidate.startsWith('//') ||
+    /[\r\n\\]/.test(candidate) ||
+    /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(candidate)
+  ) {
+    return '/';
+  }
+
+  return candidate;
+};
+
 const getFirebaseServiceWorkerUrl = (): string => {
   const params = new URLSearchParams({
     apiKey: firebaseConfig.apiKey,
@@ -115,14 +151,18 @@ export const registerDeviceTokenWithBackend = async (
   platform = 'WEB',
   deviceName?: string
 ): Promise<any> => {
+  const cleanedToken = (token || '').trim();
+  if (!cleanedToken) {
+    throw new Error('Device token must not be empty');
+  }
   const name = deviceName || (typeof navigator !== 'undefined' ? navigator.userAgent.substring(0, 100) : 'Web Browser');
   try {
     const res = await api.post('/notifications/devices', {
-      token,
+      token: cleanedToken,
       platform,
       device_name: name,
     });
-    localStorage.setItem('fcm_registered_token', token);
+    localStorage.setItem('fcm_registered_token', cleanedToken);
     return res.data;
   } catch (err) {
     console.error('Failed to register device token with backend:', err);
@@ -139,6 +179,16 @@ export const unregisterDeviceTokenFromBackend = async (): Promise<void> => {
   } catch (err) {
     console.warn('Failed to unregister device token:', err);
     localStorage.removeItem('fcm_registered_token');
+  }
+};
+
+export const cleanupRevokedDeviceTokens = async (): Promise<number> => {
+  try {
+    const res = await api.delete('/notifications/devices/inactive/cleanup');
+    return res.data?.removed_count ?? 0;
+  } catch (err) {
+    console.warn('Failed to cleanup inactive device tokens:', err);
+    return 0;
   }
 };
 
