@@ -6,6 +6,7 @@ import {
   AlertCircle,
 } from 'lucide-react';
 import api from '../../services/api';
+import { formatApiError } from '../../utils/error';
 import type { FosterHome, FosterCandidate, RescueCase, FosterAssignment } from '../../types';
 
 export const NGOFoster: React.FC = () => {
@@ -15,6 +16,7 @@ export const NGOFoster: React.FC = () => {
   const [assignments, setAssignments] = useState<FosterAssignment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
   // Matching state
   const [selectedCaseId, setSelectedCaseId] = useState<string>('');
@@ -39,7 +41,7 @@ export const NGOFoster: React.FC = () => {
       setCases(casesRes.data || []);
       setAssignments(assignRes.data || []);
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to load NGO foster operations data');
+      setError(formatApiError(err, 'Failed to load NGO foster operations data'));
     } finally {
       setLoading(false);
     }
@@ -55,10 +57,13 @@ export const NGOFoster: React.FC = () => {
 
   const handleVerifyHome = async (homeId: string) => {
     try {
+      setError(null);
+      setSuccessMsg(null);
       await api.post(`/ngo/foster/homes/${homeId}/verify`);
-      fetchData();
+      setSuccessMsg('Foster home verified successfully.');
+      await fetchData();
     } catch (err: any) {
-      alert(err.response?.data?.detail || 'Failed to verify foster home');
+      setError(formatApiError(err, 'Failed to verify foster home'));
     }
   };
 
@@ -66,10 +71,11 @@ export const NGOFoster: React.FC = () => {
     if (!selectedCaseId) return;
     try {
       setMatchingLoading(true);
+      setError(null);
       const res = await api.post('/ngo/foster/matches', { case_id: selectedCaseId });
       setMatchingCandidates(res.data || []);
     } catch (err: any) {
-      alert(err.response?.data?.detail || 'Failed to compute foster matches');
+      setError(formatApiError(err, 'Failed to compute foster matches'));
     } finally {
       setMatchingLoading(false);
     }
@@ -80,6 +86,8 @@ export const NGOFoster: React.FC = () => {
     if (!selectedHomeForOffer || !selectedCaseId) return;
     try {
       setSubmittingOffer(true);
+      setError(null);
+      setSuccessMsg(null);
       await api.post('/ngo/foster/assignments', {
         rescue_case_id: selectedCaseId,
         foster_home_id: selectedHomeForOffer.foster_home_id,
@@ -87,10 +95,10 @@ export const NGOFoster: React.FC = () => {
       });
       setSelectedHomeForOffer(null);
       setOfferNotes('');
-      alert('Foster offer sent successfully to caregiver!');
-      fetchData();
+      setSuccessMsg('Foster offer sent successfully to caregiver!');
+      await fetchData();
     } catch (err: any) {
-      alert(err.response?.data?.detail || 'Failed to create foster offer');
+      setError(formatApiError(err, 'Failed to create foster offer'));
     } finally {
       setSubmittingOffer(false);
     }
@@ -98,7 +106,7 @@ export const NGOFoster: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="flex justify-center items-center h-64">
+      <div role="status" className="flex justify-center items-center h-64">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-brand-teal"></div>
       </div>
     );
@@ -118,8 +126,15 @@ export const NGOFoster: React.FC = () => {
         </div>
       </div>
 
+      {successMsg && (
+        <div role="status" className="bg-emerald-50 border border-emerald-200 text-emerald-800 p-4 rounded-xl flex items-center space-x-3 text-sm">
+          <CheckCircle className="w-5 h-5 flex-shrink-0 text-emerald-600" />
+          <span>{successMsg}</span>
+        </div>
+      )}
+
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-xl flex items-center space-x-3 text-sm">
+        <div role="alert" className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-xl flex items-center space-x-3 text-sm">
           <AlertCircle className="w-5 h-5 flex-shrink-0 text-red-500" />
           <span>{error}</span>
         </div>
@@ -288,9 +303,12 @@ export const NGOFoster: React.FC = () => {
       {activeTab === 'matching' && (
         <div className="space-y-6">
           <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm space-y-4">
-            <h3 className="text-base font-bold text-gray-900">Select a Recovering Rescue Animal</h3>
+            <label htmlFor="recovering-animal-select" className="block text-base font-bold text-gray-900">
+              Select a Recovering Rescue Animal
+            </label>
             <div className="flex flex-col sm:flex-row gap-4 items-center">
               <select
+                id="recovering-animal-select"
                 value={selectedCaseId}
                 onChange={(e) => setSelectedCaseId(e.target.value)}
                 className="w-full sm:w-96 px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-brand-teal focus:bg-white outline-none"
@@ -436,17 +454,23 @@ export const NGOFoster: React.FC = () => {
 
       {/* Offer Modal */}
       {selectedHomeForOffer && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="foster-offer-modal-title"
+          className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+        >
           <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 shadow-xl">
-            <h3 className="text-lg font-bold text-gray-900">Send Foster Placement Offer</h3>
+            <h3 id="foster-offer-modal-title" className="text-lg font-bold text-gray-900">Send Foster Placement Offer</h3>
             <p className="text-xs text-gray-500">
               Offering placement to <strong>{selectedHomeForOffer.caregiver_name}</strong> ({selectedHomeForOffer.locality})
             </p>
 
             <form onSubmit={handleCreateOffer} className="space-y-4 text-sm">
               <div>
-                <label className="block text-gray-700 font-semibold mb-1">Instructions / Care Notes</label>
+                <label htmlFor="foster-offer-notes" className="block text-gray-700 font-semibold mb-1">Instructions / Care Notes</label>
                 <textarea
+                  id="foster-offer-notes"
                   rows={3}
                   placeholder="Provide dietary guidelines, medication instructions, and expected duration..."
                   value={offerNotes}

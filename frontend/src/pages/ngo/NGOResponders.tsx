@@ -199,6 +199,7 @@ export const NGOResponders: React.FC = () => {
           <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
             type="text"
+            aria-label="Search responders"
             placeholder="Search by responder name, email, or phone..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -210,6 +211,7 @@ export const NGOResponders: React.FC = () => {
             <Filter className="w-3.5 h-3.5" /> Filter:
           </div>
           <select
+            aria-label="Filter responders by availability"
             value={availabilityFilter}
             onChange={(e) => setAvailabilityFilter(e.target.value)}
             className="px-3 py-2 text-xs font-medium bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -220,6 +222,7 @@ export const NGOResponders: React.FC = () => {
             <option value="OFFLINE">Offline</option>
           </select>
           <select
+            aria-label="Filter responders by active status"
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
             className="px-3 py-2 text-xs font-medium bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"

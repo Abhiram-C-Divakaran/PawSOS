@@ -153,9 +153,11 @@ export const NGOCaseDetail = () => {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-5 rounded-2xl border border-[#E4EAF2] shadow-sm">
         <div className="flex items-center gap-3">
           <button
+            type="button"
             onClick={() => navigate('/ngo/cases')}
             className="p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition-colors"
             title="Back to Cases"
+            aria-label="Back to Cases"
           >
             <ArrowLeft className="w-5 h-5" />
           </button>
@@ -363,16 +365,22 @@ export const NGOCaseDetail = () => {
 
       {/* Administrative Action Modal */}
       {actionType && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 flex items-center justify-center p-4 backdrop-blur-xs">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="admin-action-modal-title"
+          className="fixed inset-0 z-50 bg-slate-900/60 flex items-center justify-center p-4 backdrop-blur-xs"
+        >
           <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-[#E4EAF2] space-y-4 animate-in fade-in zoom-in-95 duration-150">
-            <h3 className="text-base font-bold text-[#12213A]">
+            <h3 id="admin-action-modal-title" className="text-base font-bold text-[#12213A]">
               Confirm Action: {actionType.toUpperCase().replace(/_/g, ' ')}
             </h3>
 
             {actionType === 'assign_responder' && (
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Select Field Responder:</label>
+                <label htmlFor="admin-select-responder" className="block text-xs font-semibold text-slate-700 mb-1">Select Field Responder:</label>
                 <select
+                  id="admin-select-responder"
                   value={selectedRescuerId}
                   onChange={(e) => setSelectedRescuerId(e.target.value)}
                   className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs bg-white focus:ring-2 focus:ring-blue-500"
@@ -388,8 +396,9 @@ export const NGOCaseDetail = () => {
 
             {actionType === 'change_facility' && (
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Select Partner Clinic:</label>
+                <label htmlFor="admin-select-facility" className="block text-xs font-semibold text-slate-700 mb-1">Select Partner Clinic:</label>
                 <select
+                  id="admin-select-facility"
                   value={selectedFacilityId}
                   onChange={(e) => setSelectedFacilityId(e.target.value)}
                   className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs bg-white focus:ring-2 focus:ring-blue-500"
@@ -404,8 +413,9 @@ export const NGOCaseDetail = () => {
             )}
 
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">Operational Audit Reason:</label>
+              <label htmlFor="admin-audit-reason" className="block text-xs font-semibold text-slate-700 mb-1">Operational Audit Reason:</label>
               <textarea
+                id="admin-audit-reason"
                 value={actionReason}
                 onChange={(e) => setActionReason(e.target.value)}
                 placeholder="Specify reason for audit logging..."

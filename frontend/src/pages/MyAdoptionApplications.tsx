@@ -11,6 +11,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import api from '../services/api';
+import { formatApiError } from '../utils/error';
 import type { AdoptionApplication } from '../types';
 
 export const MyAdoptionApplications: React.FC = () => {
@@ -18,6 +19,8 @@ export const MyAdoptionApplications: React.FC = () => {
   const [applications, setApplications] = useState<AdoptionApplication[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [confirmingWithdrawId, setConfirmingWithdrawId] = useState<string | null>(null);
+  const [withdrawing, setWithdrawing] = useState(false);
   const [showSuccessToast, setShowSuccessToast] = useState(
     Boolean((location.state as any)?.submittedSuccess)
   );
@@ -29,7 +32,7 @@ export const MyAdoptionApplications: React.FC = () => {
       const res = await api.get('/adoptions/my-applications');
       setApplications(Array.isArray(res.data) ? res.data : []);
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to load adoption applications');
+      setError(formatApiError(err, 'Failed to load adoption applications'));
     } finally {
       setLoading(false);
     }
@@ -43,13 +46,19 @@ export const MyAdoptionApplications: React.FC = () => {
     return () => window.clearTimeout(timeoutId);
   }, []);
 
-  const handleWithdraw = async (appId: string) => {
-    if (!confirm('Are you sure you want to withdraw this adoption application?')) return;
+  const handleConfirmWithdraw = async () => {
+    if (!confirmingWithdrawId) return;
     try {
-      await api.post(`/adoptions/applications/${appId}/withdraw`);
-      fetchApplications();
+      setWithdrawing(true);
+      setError(null);
+      await api.post(`/adoptions/applications/${confirmingWithdrawId}/withdraw`);
+      setConfirmingWithdrawId(null);
+      await fetchApplications();
     } catch (err: any) {
-      alert(err.response?.data?.detail || 'Failed to withdraw application');
+      setError(formatApiError(err, 'Failed to withdraw application'));
+      setConfirmingWithdrawId(null);
+    } finally {
+      setWithdrawing(false);
     }
   };
 
@@ -110,12 +119,17 @@ export const MyAdoptionApplications: React.FC = () => {
     <div className="max-w-4xl mx-auto space-y-6">
       {/* Toast */}
       {showSuccessToast && (
-        <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 p-4 rounded-2xl flex items-center justify-between shadow-sm">
+        <div role="status" className="bg-emerald-50 border border-emerald-200 text-emerald-800 p-4 rounded-2xl flex items-center justify-between shadow-sm">
           <div className="flex items-center space-x-3 text-sm">
             <CheckCircle className="w-5 h-5 text-emerald-600 flex-shrink-0" />
             <span>Your adoption application has been submitted successfully! The NGO will review it shortly.</span>
           </div>
-          <button onClick={() => setShowSuccessToast(false)} className="text-emerald-700 font-bold text-xs ml-4">
+          <button
+            type="button"
+            aria-label="Dismiss notification"
+            onClick={() => setShowSuccessToast(false)}
+            className="text-emerald-700 font-bold text-xs ml-4 p-1 rounded hover:bg-emerald-100"
+          >
             ✕
           </button>
         </div>
@@ -137,7 +151,7 @@ export const MyAdoptionApplications: React.FC = () => {
       </div>
 
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-xl flex items-center space-x-3 text-sm">
+        <div role="alert" className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-xl flex items-center space-x-3 text-sm">
           <AlertCircle className="w-5 h-5 flex-shrink-0 text-red-500" />
           <span>{error}</span>
         </div>
@@ -181,8 +195,10 @@ export const MyAdoptionApplications: React.FC = () => {
                   {getStatusBadge(app.status)}
                   {app.status !== 'APPROVED' && app.status !== 'REJECTED' && app.status !== 'WITHDRAWN' && (
                     <button
-                      onClick={() => handleWithdraw(app.id)}
-                      className="text-gray-400 hover:text-red-600 p-1.5 rounded-lg hover:bg-red-50 transition"
+                      type="button"
+                      onClick={() => setConfirmingWithdrawId(app.id)}
+                      aria-label="Withdraw application"
+                      className="text-gray-400 hover:text-red-600 p-1.5 rounded-lg hover:bg-red-50 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
                       title="Withdraw application"
                     >
                       <Trash2 className="w-4 h-4" />
@@ -232,6 +248,43 @@ export const MyAdoptionApplications: React.FC = () => {
               )}
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Withdraw Confirmation Dialog */}
+      {confirmingWithdrawId && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="withdraw-dialog-title"
+          className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4"
+        >
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 shadow-xl border border-gray-100">
+            <h3 id="withdraw-dialog-title" className="text-lg font-bold text-gray-900">
+              Withdraw Adoption Application?
+            </h3>
+            <p className="text-sm text-gray-600">
+              Are you sure you want to withdraw this adoption application? This action cannot be undone.
+            </p>
+            <div className="flex justify-end space-x-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setConfirmingWithdrawId(null)}
+                disabled={withdrawing}
+                className="px-4 py-2 border border-gray-300 rounded-xl text-xs font-semibold text-gray-700 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmWithdraw}
+                disabled={withdrawing}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold shadow-sm disabled:opacity-50"
+              >
+                {withdrawing ? 'Withdrawing...' : 'Confirm Withdraw'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

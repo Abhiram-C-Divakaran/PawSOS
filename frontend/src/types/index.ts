@@ -304,6 +304,7 @@ export interface ServiceHealth {
   celery: string;
   storage: string;
   firebase: string;
+  ai_triage?: string;
 }
 
 export interface HealthReadinessResponse {

@@ -13,6 +13,7 @@ import {
   XCircle,
 } from 'lucide-react';
 import api from '../services/api';
+import { formatApiError } from '../utils/error';
 import type { FosterHome, FosterAssignment, FosterHomeAvailability } from '../types';
 
 export const FosterDashboard: React.FC = () => {
@@ -30,6 +31,11 @@ export const FosterDashboard: React.FC = () => {
   const [medicalCare, setMedicalCare] = useState(false);
   const [availabilityStatus, setAvailabilityStatus] = useState<FosterHomeAvailability>('AVAILABLE');
   const [submittingProfile, setSubmittingProfile] = useState(false);
+
+  // Decline offer modal state
+  const [decliningAssignmentId, setDecliningAssignmentId] = useState<string | null>(null);
+  const [declineReason, setDeclineReason] = useState('');
+  const [submittingDecline, setSubmittingDecline] = useState(false);
 
   // Care update modal state
   const [selectedAssignment, setSelectedAssignment] = useState<FosterAssignment | null>(null);
@@ -66,7 +72,7 @@ export const FosterDashboard: React.FC = () => {
       const assignRes = await api.get('/foster/assignments');
       setAssignments(assignRes.data || []);
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to load foster dashboard');
+      setError(formatApiError(err, 'Failed to load foster dashboard'));
     } finally {
       setLoading(false);
     }
@@ -84,6 +90,7 @@ export const FosterDashboard: React.FC = () => {
     e.preventDefault();
     try {
       setSubmittingProfile(true);
+      setError(null);
       const payload = {
         locality,
         capacity: Number(capacity),
@@ -100,9 +107,9 @@ export const FosterDashboard: React.FC = () => {
         setFosterHome(res.data);
       }
       setShowProfileModal(false);
-      fetchData();
+      await fetchData();
     } catch (err: any) {
-      alert(err.response?.data?.detail || 'Failed to save foster profile');
+      setError(formatApiError(err, 'Failed to save foster profile'));
     } finally {
       setSubmittingProfile(false);
     }
@@ -110,20 +117,30 @@ export const FosterDashboard: React.FC = () => {
 
   const handleAcceptOffer = async (assignmentId: string) => {
     try {
+      setError(null);
       await api.post(`/foster/assignments/${assignmentId}/accept`);
-      fetchData();
+      await fetchData();
     } catch (err: any) {
-      alert(err.response?.data?.detail || 'Failed to accept foster offer');
+      setError(formatApiError(err, 'Failed to accept foster offer'));
     }
   };
 
-  const handleDeclineOffer = async (assignmentId: string) => {
-    const reason = prompt('Please enter a reason for declining (optional):');
+  const handleConfirmDeclineOffer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!decliningAssignmentId) return;
     try {
-      await api.post(`/foster/assignments/${assignmentId}/decline`, { reason: reason || 'Caregiver unavailable' });
-      fetchData();
+      setSubmittingDecline(true);
+      setError(null);
+      await api.post(`/foster/assignments/${decliningAssignmentId}/decline`, {
+        reason: declineReason.trim() || 'Caregiver unavailable',
+      });
+      setDecliningAssignmentId(null);
+      setDeclineReason('');
+      await fetchData();
     } catch (err: any) {
-      alert(err.response?.data?.detail || 'Failed to decline foster offer');
+      setError(formatApiError(err, 'Failed to decline foster offer'));
+    } finally {
+      setSubmittingDecline(false);
     }
   };
 
@@ -132,6 +149,7 @@ export const FosterDashboard: React.FC = () => {
     if (!selectedAssignment) return;
     try {
       setSubmittingUpdate(true);
+      setError(null);
       await api.post(`/foster/assignments/${selectedAssignment.id}/updates`, {
         notes: updateNotes,
         appetite_status: appetite,
@@ -142,9 +160,9 @@ export const FosterDashboard: React.FC = () => {
       setShowUpdateModal(false);
       setUpdateNotes('');
       setBehavioralNotes('');
-      fetchData();
+      await fetchData();
     } catch (err: any) {
-      alert(err.response?.data?.detail || 'Failed to submit care update');
+      setError(formatApiError(err, 'Failed to submit care update'));
     } finally {
       setSubmittingUpdate(false);
     }
@@ -369,12 +387,17 @@ export const FosterDashboard: React.FC = () => {
 
                 <div className="flex items-center space-x-3 flex-shrink-0">
                   <button
-                    onClick={() => handleDeclineOffer(assignment.id)}
+                    type="button"
+                    onClick={() => {
+                      setDecliningAssignmentId(assignment.id);
+                      setDeclineReason('');
+                    }}
                     className="px-4 py-2 border border-gray-300 hover:bg-gray-50 text-gray-700 rounded-xl text-sm font-medium transition"
                   >
                     Decline
                   </button>
                   <button
+                    type="button"
                     onClick={() => handleAcceptOffer(assignment.id)}
                     className="px-5 py-2 bg-brand-teal hover:bg-teal-600 text-white rounded-xl text-sm font-medium shadow-sm transition flex items-center space-x-2"
                   >
@@ -496,23 +519,91 @@ export const FosterDashboard: React.FC = () => {
         </div>
       )}
 
+      {/* Decline Offer Modal */}
+      {decliningAssignmentId && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="decline-foster-offer-title"
+          className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+        >
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 shadow-xl">
+            <div className="flex justify-between items-center border-b border-gray-100 pb-3">
+              <h3 id="decline-foster-offer-title" className="text-lg font-bold text-gray-900">
+                Decline Foster Placement Offer
+              </h3>
+              <button
+                type="button"
+                aria-label="Close decline modal"
+                onClick={() => setDecliningAssignmentId(null)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <XCircle className="w-5 h-5" />
+              </button>
+            </div>
+            <form onSubmit={handleConfirmDeclineOffer} className="space-y-4 text-sm">
+              <div>
+                <label htmlFor="foster-decline-reason" className="block text-gray-700 font-medium mb-1">
+                  Reason for declining (optional)
+                </label>
+                <input
+                  id="foster-decline-reason"
+                  type="text"
+                  placeholder="e.g. Travelling this week, home currently full..."
+                  value={declineReason}
+                  onChange={(e) => setDeclineReason(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-teal focus:border-transparent outline-none"
+                />
+              </div>
+              <div className="flex justify-end space-x-3 pt-2 border-t border-gray-100">
+                <button
+                  type="button"
+                  onClick={() => setDecliningAssignmentId(null)}
+                  className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 font-medium"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submittingDecline}
+                  className="px-5 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium shadow-sm transition disabled:opacity-50"
+                >
+                  {submittingDecline ? 'Declining...' : 'Confirm Decline'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Profile Setup / Edit Modal */}
       {showProfileModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="foster-profile-modal-title"
+          className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+        >
           <div className="bg-white rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-xl">
             <div className="flex justify-between items-center border-b border-gray-100 pb-3">
-              <h3 className="text-lg font-bold text-gray-900">
+              <h3 id="foster-profile-modal-title" className="text-lg font-bold text-gray-900">
                 {fosterHome ? 'Edit Foster Home Profile' : 'Setup Foster Home Profile'}
               </h3>
-              <button onClick={() => setShowProfileModal(false)} className="text-gray-400 hover:text-gray-600">
+              <button
+                type="button"
+                aria-label="Close profile modal"
+                onClick={() => setShowProfileModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
                 <XCircle className="w-5 h-5" />
               </button>
             </div>
 
             <form onSubmit={handleSaveProfile} className="space-y-4 text-sm">
               <div>
-                <label className="block text-gray-700 font-medium mb-1">Neighborhood / Locality</label>
+                <label htmlFor="foster-locality" className="block text-gray-700 font-medium mb-1">Neighborhood / Locality</label>
                 <input
+                  id="foster-locality"
                   type="text"
                   required
                   placeholder="e.g. Bandra West, Mumbai"
@@ -523,23 +614,25 @@ export const FosterDashboard: React.FC = () => {
                 <p className="text-xs text-gray-400 mt-1">Coarse area name only. Exact street address is never exposed publicly.</p>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-gray-700 font-medium mb-1">Capacity (Max Pets)</label>
+                  <label htmlFor="foster-capacity" className="block text-gray-700 font-medium mb-1">Capacity (Max Pets)</label>
                   <input
+                    id="foster-capacity"
                     type="number"
                     min={1}
                     max={20}
                     required
                     value={capacity}
-                    onChange={(e) => setCapacity(parseInt(e.target.value, 10))}
+                    onChange={(e) => setCapacity(parseInt(e.target.value, 10) || 1)}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-teal focus:border-transparent outline-none"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-gray-700 font-medium mb-1">Availability Status</label>
+                  <label htmlFor="foster-availability" className="block text-gray-700 font-medium mb-1">Availability Status</label>
                   <select
+                    id="foster-availability"
                     value={availabilityStatus}
                     onChange={(e) => setAvailabilityStatus(e.target.value as FosterHomeAvailability)}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-teal focus:border-transparent outline-none"
@@ -552,8 +645,9 @@ export const FosterDashboard: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-gray-700 font-medium mb-1">Accepted Species</label>
+                <label htmlFor="foster-accepted-species" className="block text-gray-700 font-medium mb-1">Accepted Species</label>
                 <input
+                  id="foster-accepted-species"
                   type="text"
                   value={acceptedSpecies}
                   onChange={(e) => setAcceptedSpecies(e.target.value)}
@@ -598,22 +692,33 @@ export const FosterDashboard: React.FC = () => {
 
       {/* Care Update Modal */}
       {showUpdateModal && selectedAssignment && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="foster-care-update-title"
+          className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+        >
           <div className="bg-white rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-xl">
             <div className="flex justify-between items-center border-b border-gray-100 pb-3">
               <div>
-                <h3 className="text-lg font-bold text-gray-900">Record Care Update</h3>
+                <h3 id="foster-care-update-title" className="text-lg font-bold text-gray-900">Record Care Update</h3>
                 <p className="text-xs text-gray-500">Case {selectedAssignment.rescue_case?.case_number || 'Placement'}</p>
               </div>
-              <button onClick={() => setShowUpdateModal(false)} className="text-gray-400 hover:text-gray-600">
+              <button
+                type="button"
+                aria-label="Close care update modal"
+                onClick={() => setShowUpdateModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
                 <XCircle className="w-5 h-5" />
               </button>
             </div>
 
             <form onSubmit={handleSubmitCareUpdate} className="space-y-4 text-sm">
               <div>
-                <label className="block text-gray-700 font-medium mb-1">Care Observation Notes *</label>
+                <label htmlFor="foster-update-notes" className="block text-gray-700 font-medium mb-1">Care Observation Notes *</label>
                 <textarea
+                  id="foster-update-notes"
                   required
                   rows={3}
                   placeholder="Describe appetite, recovery progress, rest, and comfort level..."
@@ -623,10 +728,11 @@ export const FosterDashboard: React.FC = () => {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-gray-700 font-medium mb-1">Appetite</label>
+                  <label htmlFor="foster-appetite" className="block text-gray-700 font-medium mb-1">Appetite</label>
                   <select
+                    id="foster-appetite"
                     value={appetite}
                     onChange={(e) => setAppetite(e.target.value)}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-teal focus:border-transparent outline-none"
@@ -639,8 +745,9 @@ export const FosterDashboard: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block text-gray-700 font-medium mb-1">Mobility</label>
+                  <label htmlFor="foster-mobility" className="block text-gray-700 font-medium mb-1">Mobility</label>
                   <select
+                    id="foster-mobility"
                     value={mobility}
                     onChange={(e) => setMobility(e.target.value)}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-teal focus:border-transparent outline-none"
@@ -667,8 +774,9 @@ export const FosterDashboard: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-gray-700 font-medium mb-1">Behavioral Observations</label>
+                <label htmlFor="foster-behavioral-notes" className="block text-gray-700 font-medium mb-1">Behavioral Observations</label>
                 <input
+                  id="foster-behavioral-notes"
                   type="text"
                   placeholder="e.g. Calm, playful, friendly with family members"
                   value={behavioralNotes}

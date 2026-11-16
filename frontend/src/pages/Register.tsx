@@ -51,12 +51,12 @@ export const Register = () => {
   };
 
   return (
-    <div className="min-h-[70vh] flex items-center justify-center">
-      <div className="bg-white p-8 rounded-xl shadow-sm border border-gray-100 w-full max-w-md">
-        <h2 className="text-2xl font-bold text-brand-darkNavy mb-6 text-center">Create an Account</h2>
+    <div className="min-h-[70vh] flex items-center justify-center px-2">
+      <div className="bg-white p-6 sm:p-8 rounded-xl shadow-sm border border-gray-100 w-full max-w-md">
+        <h1 className="text-2xl font-bold text-brand-darkNavy mb-6 text-center">Create an Account</h1>
         
         {error && (
-          <div className="mb-4 bg-red-50 text-red-600 p-3 rounded-lg text-sm flex items-start">
+          <div role="alert" className="mb-4 bg-red-50 text-red-600 p-3 rounded-lg text-sm flex items-start">
             <AlertCircle className="w-5 h-5 mr-2 flex-shrink-0" />
             <p>{error}</p>
           </div>

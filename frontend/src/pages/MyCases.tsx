@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../services/api';
+import { formatApiError } from '../utils/error';
 import type { RescueCase } from '../types';
 import { AlertCircle, Clock, MapPin, Activity } from 'lucide-react';
 
@@ -14,8 +15,8 @@ export const MyCases = () => {
       try {
         const response = await api.get('/rescues/my');
         setCases(response.data);
-      } catch {
-        setError('Failed to load your rescue cases.');
+      } catch (err: any) {
+        setError(formatApiError(err, 'Failed to load your rescue cases.'));
       } finally {
         setLoading(false);
       }
@@ -23,19 +24,19 @@ export const MyCases = () => {
     fetchCases();
   }, []);
 
-  if (loading) return <div className="text-center py-12">Loading cases...</div>;
+  if (loading) return <div role="status" className="text-center py-12 text-gray-600 font-medium">Loading cases...</div>;
 
   return (
     <div className="max-w-4xl mx-auto">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold text-brand-darkNavy">My Rescue Reports</h1>
-        <Link to="/report" className="bg-brand-teal text-white px-4 py-2 rounded-lg font-medium hover:bg-brand-brightTeal transition">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-6">
+        <h1 className="text-2xl sm:text-3xl font-bold text-brand-darkNavy">My Rescue Reports</h1>
+        <Link to="/report" className="self-start sm:self-auto bg-brand-teal text-white px-4 py-2 rounded-lg font-medium hover:bg-brand-brightTeal transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-darkNavy">
           Report New Animal
         </Link>
       </div>
 
       {error && (
-        <div className="mb-6 bg-red-50 text-red-600 p-4 rounded-lg flex items-start">
+        <div role="alert" className="mb-6 bg-red-50 text-red-600 p-4 rounded-lg flex items-start">
           <AlertCircle className="w-5 h-5 mr-2 flex-shrink-0 mt-0.5" />
           <p>{error}</p>
         </div>
@@ -46,6 +47,9 @@ export const MyCases = () => {
           <Activity className="w-16 h-16 text-gray-300 mx-auto mb-4" />
           <h3 className="text-xl font-bold text-gray-700 mb-2">No rescue reports yet</h3>
           <p className="text-gray-500 mb-6 max-w-md mx-auto">If you find an animal in distress, PawReach can help connect it with nearby support.</p>
+          <Link to="/report" className="inline-block bg-brand-teal text-white px-5 py-2.5 rounded-lg font-semibold text-sm hover:bg-brand-brightTeal transition">
+            Report an Animal Now
+          </Link>
         </div>
       ) : (
         <div className="grid gap-4 md:grid-cols-2">

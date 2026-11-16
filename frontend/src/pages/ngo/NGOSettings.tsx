@@ -28,6 +28,7 @@ export const NGOSettings: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(true);
   const [savingPrefs, setSavingPrefs] = useState<boolean>(false);
   const [revokingSessions, setRevokingSessions] = useState<boolean>(false);
+  const [showRevokeConfirm, setShowRevokeConfirm] = useState<boolean>(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [fcmTesting, setFcmTesting] = useState<boolean>(false);
@@ -89,9 +90,6 @@ export const NGOSettings: React.FC = () => {
   };
 
   const handleLogoutAll = async () => {
-    if (!window.confirm('Are you sure you want to revoke all active sessions across all devices? You will be logged out immediately.')) {
-      return;
-    }
     try {
       setRevokingSessions(true);
       await api.post('/auth/logout-all');
@@ -101,6 +99,7 @@ export const NGOSettings: React.FC = () => {
       console.error('Failed to revoke sessions', err);
       setError(formatApiError(err));
       setRevokingSessions(false);
+      setShowRevokeConfirm(false);
     }
   };
 
@@ -117,7 +116,7 @@ export const NGOSettings: React.FC = () => {
     if (Notification.permission === 'granted') {
       new Notification('PawReach SOS Operational Alert', {
         body: 'Push notification engine is operational and ready for pilot deployment.',
-        icon: '/favicon.ico',
+        icon: '/icons/icon-192.svg',
       });
       setFcmResult('Test notification triggered successfully.');
       setFcmTesting(false);
@@ -126,7 +125,7 @@ export const NGOSettings: React.FC = () => {
         if (permission === 'granted') {
           new Notification('PawReach SOS Operational Alert', {
             body: 'Push notification engine is operational and ready for pilot deployment.',
-            icon: '/favicon.ico',
+            icon: '/icons/icon-192.svg',
           });
           setFcmResult('Permission granted. Test notification dispatched.');
         } else {
@@ -397,7 +396,7 @@ export const NGOSettings: React.FC = () => {
           </div>
           <button
             type="button"
-            onClick={handleLogoutAll}
+            onClick={() => setShowRevokeConfirm(true)}
             disabled={revokingSessions}
             className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors disabled:opacity-50 shrink-0"
           >
@@ -413,6 +412,43 @@ export const NGOSettings: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {/* Revoke All Sessions Confirmation Modal */}
+      {showRevokeConfirm && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="revoke-sessions-modal-title"
+          className="fixed inset-0 z-50 bg-slate-900/60 flex items-center justify-center p-4 backdrop-blur-xs"
+        >
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl border border-red-200">
+            <h3 id="revoke-sessions-modal-title" className="text-base font-bold text-red-900">
+              Revoke All Active Device Sessions?
+            </h3>
+            <p className="text-xs text-slate-600 leading-relaxed">
+              This will immediately invalidate all refresh tokens and active sessions across all mobile and desktop devices. You will need to sign in again.
+            </p>
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowRevokeConfirm(false)}
+                disabled={revokingSessions}
+                className="px-4 py-2 border border-slate-300 rounded-xl text-xs font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleLogoutAll}
+                disabled={revokingSessions}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold shadow-sm disabled:opacity-50"
+              >
+                {revokingSessions ? 'Revoking...' : 'Confirm Revoke All'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

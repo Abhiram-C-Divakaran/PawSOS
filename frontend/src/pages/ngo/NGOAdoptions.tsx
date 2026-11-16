@@ -7,6 +7,7 @@ import {
   FileText,
 } from 'lucide-react';
 import api from '../../services/api';
+import { formatApiError } from '../../utils/error';
 import type {
   AdoptionListing,
   AdoptionApplication,
@@ -20,6 +21,7 @@ export const NGOAdoptions: React.FC = () => {
   const [eligibleCases, setEligibleCases] = useState<RescueCase[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
   // Application filter
   const [appFilter, setAppFilter] = useState('ALL');
@@ -64,7 +66,7 @@ export const NGOAdoptions: React.FC = () => {
       setApplications(Array.isArray(appsRes.data) ? appsRes.data : []);
       setEligibleCases(Array.isArray(eligibleRes.data) ? eligibleRes.data : []);
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to load adoption operations data');
+      setError(formatApiError(err, 'Failed to load adoption operations data'));
     } finally {
       setLoading(false);
     }
@@ -83,6 +85,8 @@ export const NGOAdoptions: React.FC = () => {
     if (!selectedCaseId) return;
     try {
       setCreatingListing(true);
+      setError(null);
+      setSuccessMsg(null);
       await api.post('/ngo/adoptions/listings', {
         rescue_case_id: selectedCaseId,
         title: listingTitle,
@@ -96,10 +100,10 @@ export const NGOAdoptions: React.FC = () => {
       setPublicDescription('');
       setPublicImageUrl('');
       setLocality('');
-      alert('Adoption listing published successfully to public catalog!');
-      fetchData();
+      setSuccessMsg('Adoption listing published successfully to public catalog!');
+      await fetchData();
     } catch (err: any) {
-      alert(err.response?.data?.detail || 'Failed to publish adoption listing');
+      setError(formatApiError(err, 'Failed to publish adoption listing'));
     } finally {
       setCreatingListing(false);
     }
@@ -107,10 +111,13 @@ export const NGOAdoptions: React.FC = () => {
 
   const handleMarkReview = async (appId: string) => {
     try {
+      setError(null);
+      setSuccessMsg(null);
       await api.post(`/ngo/adoptions/applications/${appId}/review`, { notes: 'Application initially reviewed by coordinator' });
-      fetchData();
+      setSuccessMsg('Application marked under review.');
+      await fetchData();
     } catch (err: any) {
-      alert(err.response?.data?.detail || 'Failed to mark under review');
+      setError(formatApiError(err, 'Failed to mark under review'));
     }
   };
 
@@ -119,6 +126,8 @@ export const NGOAdoptions: React.FC = () => {
     if (!selectedAppForVisit) return;
     try {
       setSchedulingVisit(true);
+      setError(null);
+      setSuccessMsg(null);
       await api.post(`/ngo/adoptions/applications/${selectedAppForVisit.id}/visits`, {
         scheduled_at: new Date(visitDateTime).toISOString(),
         visit_type: visitType,
@@ -129,10 +138,10 @@ export const NGOAdoptions: React.FC = () => {
       setVisitDateTime('');
       setVisitLocation('');
       setVisitNotes('');
-      alert('Visit scheduled successfully! Applicant has been notified.');
-      fetchData();
+      setSuccessMsg('Visit scheduled successfully! Applicant has been notified.');
+      await fetchData();
     } catch (err: any) {
-      alert(err.response?.data?.detail || 'Failed to schedule visit');
+      setError(formatApiError(err, 'Failed to schedule visit'));
     } finally {
       setSchedulingVisit(false);
     }
@@ -143,15 +152,17 @@ export const NGOAdoptions: React.FC = () => {
     if (!selectedAppForApproval) return;
     try {
       setApproving(true);
+      setError(null);
+      setSuccessMsg(null);
       await api.post(`/ngo/adoptions/applications/${selectedAppForApproval.id}/approve`, {
         decision_notes: decisionNotes,
       });
       setSelectedAppForApproval(null);
       setDecisionNotes('');
-      alert('Adoption approved and finalized! Case marked as ADOPTED and listing closed.');
-      fetchData();
+      setSuccessMsg('Adoption approved and finalized! Case marked as ADOPTED and listing closed.');
+      await fetchData();
     } catch (err: any) {
-      alert(err.response?.data?.detail || 'Failed to approve adoption');
+      setError(formatApiError(err, 'Failed to approve adoption'));
     } finally {
       setApproving(false);
     }
@@ -162,15 +173,17 @@ export const NGOAdoptions: React.FC = () => {
     if (!selectedAppForRejection) return;
     try {
       setRejecting(true);
+      setError(null);
+      setSuccessMsg(null);
       await api.post(`/ngo/adoptions/applications/${selectedAppForRejection.id}/reject`, {
         rejection_reason: rejectionReason,
       });
       setSelectedAppForRejection(null);
       setRejectionReason('');
-      alert('Application rejected. Applicant has been notified.');
-      fetchData();
+      setSuccessMsg('Application rejected. Applicant has been notified.');
+      await fetchData();
     } catch (err: any) {
-      alert(err.response?.data?.detail || 'Failed to reject application');
+      setError(formatApiError(err, 'Failed to reject application'));
     } finally {
       setRejecting(false);
     }
@@ -178,7 +191,7 @@ export const NGOAdoptions: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="flex justify-center items-center h-64">
+      <div role="status" className="flex justify-center items-center h-64">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-brand-teal"></div>
       </div>
     );
@@ -201,6 +214,7 @@ export const NGOAdoptions: React.FC = () => {
         </div>
 
         <button
+          type="button"
           onClick={() => setShowCreateModal(true)}
           className="flex items-center space-x-2 px-5 py-2.5 bg-brand-teal hover:bg-teal-600 text-white rounded-xl text-sm font-bold shadow-sm transition"
         >
@@ -209,8 +223,15 @@ export const NGOAdoptions: React.FC = () => {
         </button>
       </div>
 
+      {successMsg && (
+        <div role="status" className="bg-emerald-50 border border-emerald-200 text-emerald-800 p-4 rounded-xl flex items-center space-x-3 text-sm">
+          <CheckCircle className="w-5 h-5 flex-shrink-0 text-emerald-600" />
+          <span>{successMsg}</span>
+        </div>
+      )}
+
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-xl flex items-center space-x-3 text-sm">
+        <div role="alert" className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-xl flex items-center space-x-3 text-sm">
           <AlertTriangle className="w-5 h-5 flex-shrink-0 text-red-500" />
           <span>{error}</span>
         </div>
@@ -476,17 +497,23 @@ export const NGOAdoptions: React.FC = () => {
 
       {/* Publish Listing Modal */}
       {showCreateModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="publish-listing-modal-title"
+          className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+        >
           <div className="bg-white rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-xl">
-            <h3 className="text-lg font-bold text-gray-900">Publish Animal for Adoption</h3>
+            <h3 id="publish-listing-modal-title" className="text-lg font-bold text-gray-900">Publish Animal for Adoption</h3>
             <p className="text-xs text-gray-500">
               Only animals currently in <strong>READY_FOR_ADOPTION</strong> status are eligible for public listing.
             </p>
 
             <form onSubmit={handleCreateListing} className="space-y-4 text-sm">
               <div>
-                <label className="block text-gray-700 font-semibold mb-1">Select Ready Animal *</label>
+                <label htmlFor="adoption-eligible-case" className="block text-gray-700 font-semibold mb-1">Select Ready Animal *</label>
                 <select
+                  id="adoption-eligible-case"
                   required
                   value={selectedCaseId}
                   onChange={(e) => {
@@ -513,8 +540,9 @@ export const NGOAdoptions: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-gray-700 font-semibold mb-1">Public Title *</label>
+                <label htmlFor="adoption-listing-title" className="block text-gray-700 font-semibold mb-1">Public Title *</label>
                 <input
+                  id="adoption-listing-title"
                   type="text"
                   required
                   placeholder="e.g. Bella - Playful 1yo Golden Retriever"
@@ -525,8 +553,9 @@ export const NGOAdoptions: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-gray-700 font-semibold mb-1">Public Story & Traits</label>
+                <label htmlFor="adoption-listing-desc" className="block text-gray-700 font-semibold mb-1">Public Story & Traits</label>
                 <textarea
+                  id="adoption-listing-desc"
                   rows={3}
                   placeholder="Describe personality, good with kids, energy level..."
                   value={publicDescription}
@@ -536,8 +565,9 @@ export const NGOAdoptions: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-gray-700 font-semibold mb-1">Public Photo URL</label>
+                <label htmlFor="adoption-listing-photo" className="block text-gray-700 font-semibold mb-1">Public Photo URL</label>
                 <input
+                  id="adoption-listing-photo"
                   type="url"
                   placeholder="https://... (clean sanitized public photo)"
                   value={publicImageUrl}
@@ -547,8 +577,9 @@ export const NGOAdoptions: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-gray-700 font-semibold mb-1">Coarse Locality</label>
+                <label htmlFor="adoption-listing-locality" className="block text-gray-700 font-semibold mb-1">Coarse Locality</label>
                 <input
+                  id="adoption-listing-locality"
                   type="text"
                   placeholder="e.g. Bandra West, Mumbai"
                   value={locality}
@@ -580,17 +611,23 @@ export const NGOAdoptions: React.FC = () => {
 
       {/* Schedule Visit Modal */}
       {selectedAppForVisit && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="schedule-visit-modal-title"
+          className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+        >
           <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 shadow-xl">
-            <h3 className="text-lg font-bold text-gray-900">Schedule Meet & Greet Visit</h3>
+            <h3 id="schedule-visit-modal-title" className="text-lg font-bold text-gray-900">Schedule Meet & Greet Visit</h3>
             <p className="text-xs text-gray-500">
               Candidate: <strong>{selectedAppForVisit.applicant?.full_name}</strong> for {selectedAppForVisit.listing?.title}
             </p>
 
             <form onSubmit={handleScheduleVisit} className="space-y-4 text-sm">
               <div>
-                <label className="block text-gray-700 font-semibold mb-1">Date & Time *</label>
+                <label htmlFor="visit-datetime" className="block text-gray-700 font-semibold mb-1">Date & Time *</label>
                 <input
+                  id="visit-datetime"
                   type="datetime-local"
                   required
                   value={visitDateTime}
@@ -600,8 +637,9 @@ export const NGOAdoptions: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-gray-700 font-semibold mb-1">Visit Type</label>
+                <label htmlFor="visit-type" className="block text-gray-700 font-semibold mb-1">Visit Type</label>
                 <select
+                  id="visit-type"
                   value={visitType}
                   onChange={(e) => setVisitType(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-teal outline-none"
@@ -613,8 +651,9 @@ export const NGOAdoptions: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-gray-700 font-semibold mb-1">Meeting Location *</label>
+                <label htmlFor="visit-location" className="block text-gray-700 font-semibold mb-1">Meeting Location *</label>
                 <input
+                  id="visit-location"
                   type="text"
                   required
                   placeholder="Address or shelter location"
@@ -625,8 +664,9 @@ export const NGOAdoptions: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-gray-700 font-semibold mb-1">Instructions for Applicant</label>
+                <label htmlFor="visit-notes" className="block text-gray-700 font-semibold mb-1">Instructions for Applicant</label>
                 <textarea
+                  id="visit-notes"
                   rows={2}
                   placeholder="Please bring ID proof, ensure all household members are present..."
                   value={visitNotes}
@@ -658,12 +698,17 @@ export const NGOAdoptions: React.FC = () => {
 
       {/* Approve Modal */}
       {selectedAppForApproval && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="approve-adoption-modal-title"
+          className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+        >
           <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 shadow-xl border-2 border-emerald-500">
             <div className="flex items-center space-x-3 text-emerald-700">
               <CheckCircle className="w-8 h-8" />
               <div>
-                <h3 className="text-lg font-bold text-gray-900">Approve & Finalize Adoption</h3>
+                <h3 id="approve-adoption-modal-title" className="text-lg font-bold text-gray-900">Approve & Finalize Adoption</h3>
                 <p className="text-xs text-gray-500">Final placement confirmation</p>
               </div>
             </div>
@@ -686,8 +731,9 @@ export const NGOAdoptions: React.FC = () => {
 
             <form onSubmit={handleApproveAdoption} className="space-y-4 text-sm">
               <div>
-                <label className="block text-gray-700 font-semibold mb-1">Decision / Finalization Notes</label>
+                <label htmlFor="approve-decision-notes" className="block text-gray-700 font-semibold mb-1">Decision / Finalization Notes</label>
                 <textarea
+                  id="approve-decision-notes"
                   rows={2}
                   placeholder="e.g. Home inspection verified, adoption contract signed."
                   value={decisionNotes}
@@ -719,17 +765,23 @@ export const NGOAdoptions: React.FC = () => {
 
       {/* Reject Modal */}
       {selectedAppForRejection && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="reject-adoption-modal-title"
+          className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+        >
           <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 shadow-xl">
-            <h3 className="text-lg font-bold text-gray-900">Reject Application</h3>
+            <h3 id="reject-adoption-modal-title" className="text-lg font-bold text-gray-900">Reject Application</h3>
             <p className="text-xs text-gray-500">
               Applicant: <strong>{selectedAppForRejection.applicant?.full_name}</strong>
             </p>
 
             <form onSubmit={handleRejectApplication} className="space-y-4 text-sm">
               <div>
-                <label className="block text-gray-700 font-semibold mb-1">Reason for Rejection *</label>
+                <label htmlFor="reject-application-reason" className="block text-gray-700 font-semibold mb-1">Reason for Rejection *</label>
                 <textarea
+                  id="reject-application-reason"
                   required
                   rows={3}
                   placeholder="e.g. Selected another applicant with larger outdoor space..."

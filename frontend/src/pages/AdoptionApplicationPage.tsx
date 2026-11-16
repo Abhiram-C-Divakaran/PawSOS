@@ -105,7 +105,7 @@ export const AdoptionApplicationPage: React.FC = () => {
         </div>
 
         {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-xl flex items-center space-x-3 text-sm">
+          <div role="alert" className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-xl flex items-center space-x-3 text-sm">
             <AlertCircle className="w-5 h-5 flex-shrink-0 text-red-500" />
             <span>{error}</span>
           </div>
@@ -115,8 +115,9 @@ export const AdoptionApplicationPage: React.FC = () => {
           {/* Housing details */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-gray-700 font-semibold mb-1">Housing Type *</label>
+              <label htmlFor="housing-type" className="block text-gray-700 font-semibold mb-1">Housing Type *</label>
               <select
+                id="housing-type"
                 value={housingType}
                 onChange={(e) => setHousingType(e.target.value)}
                 className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-brand-teal focus:bg-white outline-none"
@@ -129,14 +130,15 @@ export const AdoptionApplicationPage: React.FC = () => {
             </div>
 
             <div>
-              <label className="block text-gray-700 font-semibold mb-1">Family Members in Home *</label>
+              <label htmlFor="family-members-count" className="block text-gray-700 font-semibold mb-1">Family Members in Home *</label>
               <input
+                id="family-members-count"
                 type="number"
                 min={1}
                 max={20}
                 required
                 value={familyMembersCount}
-                onChange={(e) => setFamilyMembersCount(parseInt(e.target.value, 10))}
+                onChange={(e) => setFamilyMembersCount(parseInt(e.target.value, 10) || 1)}
                 className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-brand-teal focus:bg-white outline-none"
               />
             </div>
@@ -167,8 +169,9 @@ export const AdoptionApplicationPage: React.FC = () => {
 
           {/* Past Experience */}
           <div>
-            <label className="block text-gray-700 font-semibold mb-1">Previous Pet Experience</label>
+            <label htmlFor="experience-with-pets" className="block text-gray-700 font-semibold mb-1">Previous Pet Experience</label>
             <textarea
+              id="experience-with-pets"
               rows={2}
               placeholder="e.g. Raised rescued dogs for 5 years, familiar with basic training and vet schedules..."
               value={experienceWithPets}
@@ -179,8 +182,9 @@ export const AdoptionApplicationPage: React.FC = () => {
 
           {/* Reason for adoption */}
           <div>
-            <label className="block text-gray-700 font-semibold mb-1">Why would you like to adopt this pet? *</label>
+            <label htmlFor="reason-for-adoption" className="block text-gray-700 font-semibold mb-1">Why would you like to adopt this pet? *</label>
             <textarea
+              id="reason-for-adoption"
               required
               rows={4}
               placeholder="Tell the NGO about your routine, why this pet caught your eye, and how they will fit into your family..."

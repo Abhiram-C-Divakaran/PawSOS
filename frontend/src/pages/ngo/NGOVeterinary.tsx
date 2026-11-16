@@ -139,6 +139,7 @@ export const NGOVeterinary: React.FC = () => {
           <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
             type="text"
+            aria-label="Search veterinary clinics"
             placeholder="Search clinics by name, district, or address..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -147,6 +148,8 @@ export const NGOVeterinary: React.FC = () => {
         </div>
         <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
           <button
+            type="button"
+            aria-pressed={filterEmergency === true}
             onClick={() => setFilterEmergency((prev) => (prev === true ? null : true))}
             className={`px-3 py-1.5 text-xs font-bold rounded-xl border transition ${
               filterEmergency === true
@@ -157,6 +160,8 @@ export const NGOVeterinary: React.FC = () => {
             Emergency Trauma
           </button>
           <button
+            type="button"
+            aria-pressed={filter247 === true}
             onClick={() => setFilter247((prev) => (prev === true ? null : true))}
             className={`px-3 py-1.5 text-xs font-bold rounded-xl border transition ${
               filter247 === true
@@ -168,6 +173,7 @@ export const NGOVeterinary: React.FC = () => {
           </button>
           {(filterEmergency !== null || filter247 !== null || search) && (
             <button
+              type="button"
               onClick={() => {
                 setFilterEmergency(null);
                 setFilter247(null);

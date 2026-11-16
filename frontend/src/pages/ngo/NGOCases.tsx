@@ -122,12 +122,13 @@ export const NGOCases: React.FC = () => {
 
       {/* Error Alert Banner */}
       {claimError && (
-        <div className="p-3.5 bg-red-50 border border-red-200 text-red-700 text-xs rounded-2xl flex items-center justify-between">
+        <div role="alert" className="p-3.5 bg-red-50 border border-red-200 text-red-700 text-xs rounded-2xl flex items-center justify-between">
           <div className="flex items-center gap-2">
             <ShieldAlert className="w-4 h-4 text-red-600 flex-shrink-0" />
             <span>{claimError}</span>
           </div>
           <button
+            type="button"
             onClick={() => setClaimError(null)}
             className="font-bold underline text-red-800 ml-3 hover:text-red-900"
           >
@@ -142,6 +143,7 @@ export const NGOCases: React.FC = () => {
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             type="text"
+            aria-label="Search rescue cases"
             placeholder="Search by case #, species, location..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -155,6 +157,7 @@ export const NGOCases: React.FC = () => {
           </div>
 
           <select
+            aria-label="Filter by priority"
             value={priorityFilter}
             onChange={(e) => {
               setPriorityFilter(e.target.value);
@@ -170,6 +173,7 @@ export const NGOCases: React.FC = () => {
           </select>
 
           <select
+            aria-label="Filter by status"
             value={statusFilter}
             onChange={(e) => {
               setStatusFilter(e.target.value);

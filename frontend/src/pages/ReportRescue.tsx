@@ -180,8 +180,9 @@ export const ReportRescue = () => {
                 <button
                   key={animal}
                   type="button"
+                  aria-pressed={species === animal}
                   onClick={() => setSpecies(animal)}
-                  className={`p-4 rounded-xl border-2 text-lg font-medium transition-all ${
+                  className={`p-4 rounded-xl border-2 text-lg font-medium transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-teal ${
                     species === animal
                       ? 'border-brand-teal bg-brand-softMint text-brand-teal'
                       : 'border-gray-200 hover:border-brand-teal hover:bg-gray-50'
@@ -296,10 +297,11 @@ export const ReportRescue = () => {
             />
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="landmark-address" className="block text-sm font-medium text-gray-700 mb-1">
                 Landmark or Street Details
               </label>
               <input
+                id="landmark-address"
                 type="text"
                 value={address}
                 onChange={(e) => setAddress(e.target.value)}
@@ -394,10 +396,11 @@ export const ReportRescue = () => {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="additional-observations" className="block text-sm font-medium text-gray-700 mb-1">
                 Additional observations (Optional)
               </label>
               <textarea
+                id="additional-observations"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-teal text-sm"
@@ -445,7 +448,7 @@ export const ReportRescue = () => {
                 <div>
                   <span className="text-xs text-gray-500 uppercase tracking-wider font-semibold">Attached Photo</span>
                   <div className="mt-1 w-28 h-28 rounded-lg overflow-hidden border border-gray-200">
-                    <img src={photoUrl} alt="Attached rescue photo" className="w-full h-full object-cover" />
+                    <img src={photoPreview || photoUrl} alt="Attached rescue photo" className="w-full h-full object-cover" />
                   </div>
                 </div>
               )}

@@ -225,11 +225,11 @@ export const VetDashboard = () => {
         <div className="lg:col-span-2">
           {selectedCase ? (
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden animate-in fade-in">
-              <div className="bg-gray-50 px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+              <div className="bg-gray-50 px-6 py-4 border-b border-gray-200 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
                 <h2 className="text-base font-bold text-brand-darkNavy">
                   Medical Record: {selectedCase.case_number} ({selectedCase.species})
                 </h2>
-                <span className="text-xs font-semibold text-brand-teal bg-teal-50 px-2.5 py-1 rounded border border-teal-200">
+                <span className="self-start sm:self-auto text-xs font-semibold text-brand-teal bg-teal-50 px-2.5 py-1 rounded border border-teal-200">
                   Status: {selectedCase.status.replace(/_/g, ' ')}
                 </span>
               </div>
@@ -266,10 +266,11 @@ export const VetDashboard = () => {
                 <form onSubmit={handleTreatmentSubmit} className="space-y-4">
                   <div className="grid sm:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">
+                      <label htmlFor="vet-facility-select" className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">
                         Admitting Facility
                       </label>
                       <select
+                        id="vet-facility-select"
                         value={facilityId}
                         onChange={(e) => setFacilityId(e.target.value)}
                         className="w-full px-3.5 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-brand-teal"
@@ -284,10 +285,11 @@ export const VetDashboard = () => {
                     </div>
 
                     <div>
-                      <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">
+                      <label htmlFor="vet-diagnosis-input" className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">
                         Veterinary Diagnosis *
                       </label>
                       <input
+                        id="vet-diagnosis-input"
                         type="text"
                         required
                         value={diagnosis}
@@ -299,10 +301,11 @@ export const VetDashboard = () => {
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">
+                    <label htmlFor="vet-medications-input" className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">
                       Prescribed Medications (comma separated)
                     </label>
                     <input
+                      id="vet-medications-input"
                       type="text"
                       value={medications}
                       onChange={(e) => setMedications(e.target.value)}
@@ -312,10 +315,11 @@ export const VetDashboard = () => {
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">
+                    <label htmlFor="vet-notes-textarea" className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">
                       Clinical Notes & Treatment Plan *
                     </label>
                     <textarea
+                      id="vet-notes-textarea"
                       required
                       value={notes}
                       onChange={(e) => setNotes(e.target.value)}

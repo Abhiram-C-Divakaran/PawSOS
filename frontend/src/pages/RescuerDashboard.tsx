@@ -437,9 +437,14 @@ export const RescuerDashboard = () => {
 
       {/* Decline Reason Modal */}
       {rejectingOfferId && (
-        <div className="fixed inset-0 z-50 bg-stone-900/50 flex items-center justify-center p-4 backdrop-blur-xs">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="decline-offer-modal-title"
+          className="fixed inset-0 z-50 bg-stone-900/50 flex items-center justify-center p-4 backdrop-blur-xs"
+        >
           <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-stone-200">
-            <h3 className="text-base font-bold text-stone-900 mb-2 flex items-center gap-2">
+            <h3 id="decline-offer-modal-title" className="text-base font-bold text-stone-900 mb-2 flex items-center gap-2">
               <AlertTriangle className="w-5 h-5 text-amber-500" />
               Decline Rescue Offer
             </h3>
@@ -565,11 +570,12 @@ export const RescuerDashboard = () => {
                 {/* Veterinary Facility Selector for Transporting */}
                 {['RESCUED', 'TRANSPORTING'].includes(activeCase.status) && (
                   <div className="w-full max-w-sm mb-4 bg-white p-3.5 rounded-lg border border-gray-200 shadow-sm">
-                    <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1 flex items-center">
+                    <label htmlFor="vet-destination-select" className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1 flex items-center">
                       <Building2 className="w-3.5 h-3.5 mr-1 text-brand-teal" />
                       Select Veterinary Destination
                     </label>
                     <select
+                      id="vet-destination-select"
                       value={selectedFacilityId}
                       onChange={(e) => setSelectedFacilityId(e.target.value)}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-brand-teal"
@@ -610,7 +616,7 @@ export const RescuerDashboard = () => {
       ) : (
         /* Nearby Emergencies List */
         <div className="space-y-4">
-          <div className="flex justify-between items-center">
+          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1">
             <h2 className="text-xl font-bold text-brand-darkNavy flex items-center">
               Nearby Emergencies
               <span className="ml-2.5 bg-gray-100 text-gray-700 text-xs px-2.5 py-0.5 rounded-full font-semibold">

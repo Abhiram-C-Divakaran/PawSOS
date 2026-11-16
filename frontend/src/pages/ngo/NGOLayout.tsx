@@ -194,7 +194,7 @@ export const NGOLayout: React.FC = () => {
               {systemStatus === 'offline' && 'System Offline'}
             </span>
           </button>
-          <span className="font-mono text-[10px] opacity-70">v2.7 Pilot</span>
+          <span className="font-mono text-[10px] opacity-70">v1.0.0</span>
         </div>
       </div>
     </div>
@@ -314,14 +314,20 @@ export const NGOLayout: React.FC = () => {
 
       {/* System Health Telemetry Modal */}
       {showHealthModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="system-health-modal-title"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150"
+        >
           <div className="relative w-full max-w-md bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden">
             <div className="bg-[#10243E] px-6 py-4 flex items-center justify-between text-white">
               <div className="flex items-center gap-2">
                 <Activity className="w-5 h-5 text-blue-400" />
-                <h3 className="font-bold text-sm">System Health & Telemetry</h3>
+                <h3 id="system-health-modal-title" className="font-bold text-sm">System Health & Telemetry</h3>
               </div>
               <button
+                type="button"
                 onClick={() => setShowHealthModal(false)}
                 className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
                 aria-label="Close telemetry modal"
@@ -401,8 +407,14 @@ export const NGOLayout: React.FC = () => {
                   {
                     name: 'Firebase Push Infrastructure',
                     icon: Activity,
-                    status: healthData?.services?.firebase || 'configured',
-                    desc: 'Web Push & background service worker alerts',
+                    status: healthData?.services?.firebase || 'unconfigured',
+                    desc: 'Optional Web Push & service worker alerts',
+                  },
+                  {
+                    name: 'AI Visual Triage',
+                    icon: Activity,
+                    status: healthData?.services?.ai_triage || 'disabled',
+                    desc: 'Optional non-diagnostic visual urgency advisor',
                   },
                 ].map((sub, idx) => (
                   <div key={idx} className="p-3 flex items-center justify-between bg-white hover:bg-slate-50 transition-colors">
@@ -416,8 +428,10 @@ export const NGOLayout: React.FC = () => {
                     <span
                       className={clsx(
                         'px-2 py-0.5 rounded-md font-semibold text-[11px] capitalize shrink-0 ml-2',
-                        ['healthy', 'connected', 'ready', 'configured'].includes(sub.status)
+                        ['healthy', 'connected', 'ready', 'configured', 'available'].includes(sub.status)
                           ? 'bg-emerald-50 text-emerald-700'
+                          : ['unconfigured', 'disabled'].includes(sub.status)
+                          ? 'bg-slate-100 text-slate-600'
                           : sub.status === 'degraded'
                           ? 'bg-amber-50 text-amber-700'
                           : 'bg-red-50 text-red-700'

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Heart, Search, ShieldCheck, MapPin, Sparkles } from 'lucide-react';
 import api from '../services/api';
+import { formatApiError } from '../utils/error';
 import type { AdoptionListing } from '../types';
 
 export const AdoptionBrowse: React.FC = () => {
@@ -21,7 +22,7 @@ export const AdoptionBrowse: React.FC = () => {
         const res = await api.get('/adoptions');
         setListings(res.data || []);
       } catch (err: any) {
-        setError(err.response?.data?.detail || 'Failed to load adoption catalog');
+        setError(formatApiError(err, 'Failed to load adoption catalog'));
       } finally {
         setLoading(false);
       }
@@ -64,6 +65,7 @@ export const AdoptionBrowse: React.FC = () => {
           <Search className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
           <input
             type="text"
+            aria-label="Search adoption listings"
             placeholder="Search by name, locality, or trait..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
@@ -76,8 +78,10 @@ export const AdoptionBrowse: React.FC = () => {
           {['ALL', 'DOG', 'CAT'].map((species) => (
             <button
               key={species}
+              type="button"
+              aria-pressed={selectedSpecies === species}
               onClick={() => setSelectedSpecies(species)}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition flex-shrink-0 ${
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition flex-shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-teal ${
                 selectedSpecies === species
                   ? 'bg-brand-teal text-white shadow-sm'
                   : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
@@ -91,11 +95,11 @@ export const AdoptionBrowse: React.FC = () => {
 
       {/* Listings Grid */}
       {loading ? (
-        <div className="flex justify-center items-center h-64">
+        <div role="status" className="flex justify-center items-center h-64">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-brand-teal"></div>
         </div>
       ) : error ? (
-        <div className="bg-red-50 border border-red-200 text-red-700 p-6 rounded-2xl text-center">
+        <div role="alert" className="bg-red-50 border border-red-200 text-red-700 p-6 rounded-2xl text-center">
           <p className="font-semibold">{error}</p>
         </div>
       ) : filteredListings.length === 0 ? (

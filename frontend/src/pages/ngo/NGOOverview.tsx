@@ -79,7 +79,12 @@ export const NGOOverview: React.FC = () => {
         }))
       );
 
-      setNotifications(Array.isArray(notifRes?.data) ? notifRes.data.slice(0, 5) : []);
+      const rawNotifs = Array.isArray(notifRes?.data?.items)
+        ? notifRes.data.items
+        : Array.isArray(notifRes?.data)
+        ? notifRes.data
+        : [];
+      setNotifications(rawNotifs.slice(0, 5));
     } catch (err: any) {
       console.error('Error fetching NGO overview data', err);
       setError('Unable to load authoritative operational data. Please check network connection.');
@@ -145,9 +150,12 @@ export const NGOOverview: React.FC = () => {
       });
     };
 
-    // 1. Add Rescue Case Markers
+    // 1. Add Rescue Case Markers (only when exact coordinates are present)
     if (Array.isArray(cases)) {
       cases.forEach((c) => {
+        if (typeof c.latitude !== 'number' || typeof c.longitude !== 'number') {
+          return;
+        }
         let pinColor = '#22A65A';
         let iconColor = '#22A65A';
         let iconContent = '<span style="width: 8px; height: 8px; border-radius: 50%; background: #22A65A;"></span>';
@@ -180,7 +188,7 @@ export const NGOOverview: React.FC = () => {
     // 2. Add Responder Vehicle Markers
     if (Array.isArray(responders)) {
       responders.forEach((r) => {
-        if (r.latitude && r.longitude) {
+        if (typeof r.latitude === 'number' && typeof r.longitude === 'number') {
           const vehicleIcon = L.divIcon({
             className: 'ngo-pin-marker',
             html: `
@@ -205,7 +213,7 @@ export const NGOOverview: React.FC = () => {
     // 3. Add Partner Veterinary Facility Markers
     if (Array.isArray(facilities)) {
       facilities.forEach((f) => {
-        if (f.latitude && f.longitude) {
+        if (typeof f.latitude === 'number' && typeof f.longitude === 'number') {
           const vetIcon = L.divIcon({
             className: 'ngo-pin-marker',
             html: `
@@ -224,15 +232,27 @@ export const NGOOverview: React.FC = () => {
       });
     }
 
-    // Auto-fit bounds if we have points
+    // Auto-fit bounds if we have valid geographic points
     const points: [number, number][] = [];
-    cases.forEach((c) => points.push([c.latitude, c.longitude]));
-    responders.forEach((r) => r.latitude && r.longitude && points.push([r.latitude, r.longitude]));
-    facilities.forEach((f) => f.latitude && f.longitude && points.push([f.latitude, f.longitude]));
+    cases.forEach((c) => {
+      if (typeof c.latitude === 'number' && typeof c.longitude === 'number') {
+        points.push([c.latitude, c.longitude]);
+      }
+    });
+    responders.forEach((r) => {
+      if (typeof r.latitude === 'number' && typeof r.longitude === 'number') {
+        points.push([r.latitude, r.longitude]);
+      }
+    });
+    facilities.forEach((f) => {
+      if (typeof f.latitude === 'number' && typeof f.longitude === 'number') {
+        points.push([f.latitude, f.longitude]);
+      }
+    });
 
-    if (points.length > 0) {
+    if (points.length > 0 && typeof L.latLngBounds === 'function' && typeof map.fitBounds === 'function') {
       const group = L.latLngBounds(points);
-      if (group.isValid()) {
+      if (group && typeof group.isValid === 'function' && group.isValid()) {
         map.fitBounds(group.pad(0.12));
       }
     }
@@ -725,7 +745,7 @@ export const NGOOverview: React.FC = () => {
                     filteredCases.map((c) => (
                       <tr
                         key={c.id}
-                        onClick={() => navigate(`/ngo/cases/${c.id}`)}
+                        onClick={() => navigate(c.organization_id ? `/ngo/cases/${c.id}` : '/ngo/cases')}
                         className="hover:bg-blue-50/40 cursor-pointer transition-colors"
                       >
                         <td className="py-3 px-2 font-mono font-bold text-slate-800">
@@ -747,7 +767,7 @@ export const NGOOverview: React.FC = () => {
                         </td>
                         <td className="py-3 px-2 text-right text-blue-600 font-semibold">
                           <span className="inline-flex items-center gap-0.5">
-                            Manage
+                            {c.organization_id ? 'Manage' : 'Claim'}
                             <ChevronRight className="w-3.5 h-3.5 text-blue-600" />
                           </span>
                         </td>

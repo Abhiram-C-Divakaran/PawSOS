@@ -10,6 +10,7 @@ import {
   AlertCircle,
 } from 'lucide-react';
 import api from '../services/api';
+import { formatApiError } from '../utils/error';
 import { useAuth } from '../context/useAuth';
 import type { AdoptionListing } from '../types';
 
@@ -31,7 +32,7 @@ export const AdoptionDetail: React.FC = () => {
         const res = await api.get(`/adoptions/${listingId}`);
         setListing(res.data);
       } catch (err: any) {
-        setError(err.response?.data?.detail || 'Failed to load adoption listing');
+        setError(formatApiError(err, 'Failed to load adoption listing'));
       } finally {
         setLoading(false);
       }
@@ -41,7 +42,7 @@ export const AdoptionDetail: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="flex justify-center items-center h-64">
+      <div role="status" className="flex justify-center items-center h-64">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-brand-teal"></div>
       </div>
     );
@@ -49,7 +50,7 @@ export const AdoptionDetail: React.FC = () => {
 
   if (error || !listing) {
     return (
-      <div className="max-w-2xl mx-auto p-8 bg-white rounded-2xl text-center border border-gray-100 shadow-sm space-y-4">
+      <div role="alert" className="max-w-2xl mx-auto p-8 bg-white rounded-2xl text-center border border-gray-100 shadow-sm space-y-4">
         <AlertCircle className="w-12 h-12 text-red-500 mx-auto" />
         <h2 className="text-xl font-bold text-gray-900">Listing Not Found</h2>
         <p className="text-sm text-gray-500">{error || 'This animal listing is unavailable or has already been adopted.'}</p>
@@ -62,7 +63,9 @@ export const AdoptionDetail: React.FC = () => {
 
   const handleApply = () => {
     if (!isAuthenticated) {
-      navigate(`/login?redirect=/adopt/${listing.id}/apply`);
+      navigate(`/login?redirect=/adopt/${listing.id}/apply`, {
+        state: { from: { pathname: `/adopt/${listing.id}/apply` } },
+      });
     } else {
       navigate(`/adopt/${listing.id}/apply`);
     }

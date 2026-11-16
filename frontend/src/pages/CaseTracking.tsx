@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import api from '../services/api';
 import { formatApiError } from '../utils/error';
 import type { RescueCase, RescueTimeline } from '../types';
@@ -46,7 +46,7 @@ export const CaseTracking = () => {
 
   if (loading && !rescueCase) {
     return (
-      <div className="max-w-3xl mx-auto py-16 text-center">
+      <div role="status" className="max-w-3xl mx-auto py-16 text-center">
         <div className="inline-block w-8 h-8 border-4 border-brand-teal border-t-transparent rounded-full animate-spin mb-4" />
         <p className="text-gray-600 font-medium">Fetching real-time case data...</p>
       </div>
@@ -55,13 +55,13 @@ export const CaseTracking = () => {
 
   if (error || !rescueCase) {
     return (
-      <div className="max-w-md mx-auto py-16 text-center bg-white p-8 rounded-xl border border-gray-200 shadow-sm">
+      <div role="alert" className="max-w-md mx-auto py-16 text-center bg-white p-8 rounded-xl border border-gray-200 shadow-sm">
         <ShieldAlert className="w-12 h-12 text-rose-500 mx-auto mb-3" />
         <h2 className="text-lg font-bold text-gray-800 mb-1">Access Restricted</h2>
         <p className="text-gray-600 text-sm mb-4">{error || 'Case not found'}</p>
-        <a href="/my-cases" className="inline-block bg-brand-darkNavy text-white px-5 py-2.5 rounded-lg text-sm font-semibold">
+        <Link to="/my-cases" className="inline-block bg-brand-darkNavy text-white px-5 py-2.5 rounded-lg text-sm font-semibold hover:bg-brand-deepNavy transition">
           Return to My Cases
-        </a>
+        </Link>
       </div>
     );
   }
