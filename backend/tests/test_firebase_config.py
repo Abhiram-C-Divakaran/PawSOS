@@ -7,7 +7,11 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from app.config import Settings, settings
-from app.services.notification_service import initialize_firebase_admin
+from app.core.constants import UserRole
+from app.core.security import create_access_token, get_password_hash
+from app.models.device_token import DeviceToken
+from app.models.user import User
+from app.services.notification_service import NotificationService, initialize_firebase_admin
 
 
 class TestFirebaseCredentialLoading:
@@ -130,3 +134,120 @@ class TestRequireFirebaseBehavior:
                     data = resp.json()
                     assert data["status"] == "ready"
                     assert data["services"]["firebase"] == "unconfigured"
+
+
+class TestDeviceTokenHardening:
+    """Tests for FCM device token deduplication, cross-user browser reassignment, and invalid token cleanup."""
+
+    def test_duplicate_and_cross_user_device_token_registration_and_cleanup(self, client, db):
+        user_a = User(
+            email="fcm.user.a@test.org",
+            phone="+919000011111",
+            full_name="FCM User A",
+            password_hash="dummy_hash_a",
+            role=UserRole.CITIZEN,
+            is_active=True,
+        )
+        user_b = User(
+            email="fcm.user.b@test.org",
+            phone="+919000022222",
+            full_name="FCM User B",
+            password_hash="dummy_hash_b",
+            role=UserRole.RESCUER,
+            is_active=True,
+        )
+        db.add_all([user_a, user_b])
+        db.commit()
+
+        headers_a = {"Authorization": f"Bearer {create_access_token(user_a.id)}"}
+        headers_b = {"Authorization": f"Bearer {create_access_token(user_b.id)}"}
+
+        # 1. Empty or whitespace token is rejected
+        bad_resp = client.post(
+            "/api/v1/notifications/devices",
+            json={"token": "   ", "platform": "WEB"},
+            headers=headers_a,
+        )
+        assert bad_resp.status_code == 422
+
+        # 2. User A registers token containing colon/slash
+        shared_browser_token = "fcm-browser-token:APA91b/test_token_123"
+        reg_a1 = client.post(
+            "/api/v1/notifications/devices",
+            json={"token": shared_browser_token, "platform": "WEB", "device_name": "Chrome"},
+            headers=headers_a,
+        )
+        assert reg_a1.status_code == 200
+        assert reg_a1.json()["user_id"] == str(user_a.id)
+
+        # 3. Duplicate registration by User A is idempotent
+        reg_a2 = client.post(
+            "/api/v1/notifications/devices",
+            json={"token": shared_browser_token, "platform": "WEB", "device_name": "Chrome Updated"},
+            headers=headers_a,
+        )
+        assert reg_a2.status_code == 200
+        assert reg_a2.json()["id"] == reg_a1.json()["id"]
+
+        # 4. User B logs in on the same browser and registers the same FCM token -> reassigned without IntegrityError
+        reg_b = client.post(
+            "/api/v1/notifications/devices",
+            json={"token": shared_browser_token, "platform": "WEB", "device_name": "Chrome User B"},
+            headers=headers_b,
+        )
+        assert reg_b.status_code == 200
+        assert reg_b.json()["user_id"] == str(user_b.id)
+        assert reg_b.json()["is_active"] is True
+
+        # 5. User B unregisters the token (with slash in path) and cleans up inactive tokens
+        unreg_b = client.delete(
+            f"/api/v1/notifications/devices/{shared_browser_token}",
+            headers=headers_b,
+        )
+        assert unreg_b.status_code == 200
+
+        # User A cannot delete User B's inactive token via cleanup
+        cleanup_a = client.delete("/api/v1/notifications/devices/inactive/cleanup", headers=headers_a)
+        assert cleanup_a.status_code == 200
+        assert cleanup_a.json()["removed_count"] == 0
+
+        # User B cleans up their inactive token
+        cleanup_b = client.delete("/api/v1/notifications/devices/inactive/cleanup", headers=headers_b)
+        assert cleanup_b.status_code == 200
+        assert cleanup_b.json()["removed_count"] == 1
+
+    def test_send_fcm_deactivates_invalid_argument_tokens(self, db):
+        user = User(
+            email="fcm.invalid@test.org",
+            phone="+919000033333",
+            full_name="FCM Invalid Token User",
+            password_hash="dummy_hash_inv",
+            role=UserRole.RESCUER,
+            is_active=True,
+        )
+        db.add(user)
+        db.commit()
+
+        token_row = DeviceToken(
+            user_id=user.id,
+            token="malformed-fcm-token-xyz",
+            platform="WEB",
+            is_active=True,
+        )
+        db.add(token_row)
+        db.commit()
+
+        class InvalidArgumentError(Exception):
+            code = "INVALID_ARGUMENT"
+
+        with patch("app.services.notification_service._firebase_initialized", True):
+            with patch("app.services.notification_service.messaging") as mock_messaging:
+                mock_messaging.UnregisteredError = type("UnregisteredError", (Exception,), {})
+                mock_messaging.SenderIdMismatchError = type("SenderIdMismatchError", (Exception,), {})
+                mock_messaging.send.side_effect = InvalidArgumentError("The registration token is not a valid FCM registration token")
+
+                NotificationService._send_fcm(db, user.id, "Test Alert", "Body")
+
+        db.refresh(token_row)
+        assert token_row.is_active is False
+

@@ -9,6 +9,8 @@ import {
   registerFirebaseMessagingServiceWorker,
   registerDeviceTokenWithBackend,
   unregisterDeviceTokenFromBackend,
+  cleanupRevokedDeviceTokens,
+  sanitizeNotificationRoute,
   onForegroundNotification,
 } from '../services/firebase';
 
@@ -176,6 +178,33 @@ describe('Firebase Service (src/services/firebase.ts)', () => {
     it('returns an unsubscribe function', () => {
       const unsubscribe = onForegroundNotification(() => {});
       expect(typeof unsubscribe).toBe('function');
+    });
+  });
+
+  describe('sanitizeNotificationRoute', () => {
+    it('allows safe internal routes and constructs fallback case routes', () => {
+      expect(sanitizeNotificationRoute('/cases/abc-123')).toBe('/cases/abc-123');
+      expect(sanitizeNotificationRoute(undefined, 'case-999')).toBe('/cases/case-999');
+      expect(sanitizeNotificationRoute('', '')).toBeUndefined();
+    });
+
+    it('blocks external URLs, protocol-relative URLs, and javascript: schemes', () => {
+      expect(sanitizeNotificationRoute('https://evil.example/phish')).toBe('/');
+      expect(sanitizeNotificationRoute('//evil.example/phish')).toBe('/');
+      expect(sanitizeNotificationRoute('javascript:alert(1)')).toBe('/');
+      expect(sanitizeNotificationRoute('/valid\r\nHeader-Injection: 1')).toBe('/');
+    });
+  });
+
+  describe('cleanupRevokedDeviceTokens', () => {
+    it('calls inactive cleanup endpoint and returns removed count', async () => {
+      const deleteSpy = vi.spyOn(api, 'delete').mockResolvedValueOnce({
+        data: { success: true, removed_count: 2 },
+      });
+
+      const count = await cleanupRevokedDeviceTokens();
+      expect(deleteSpy).toHaveBeenCalledWith('/notifications/devices/inactive/cleanup');
+      expect(count).toBe(2);
     });
   });
 });

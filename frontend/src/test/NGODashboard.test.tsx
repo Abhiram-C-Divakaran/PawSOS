@@ -97,6 +97,62 @@ describe('NGO Operations Command Center Tests', () => {
       expect(screen.getByText('Bandra West (19.06, 72.83)')).toBeInTheDocument();
       expect(screen.getByText('8 reports')).toBeInTheDocument();
     });
+
+    it('safely handles NGOCaseSummaryResponse items without coordinates and NotificationListResponse items', async () => {
+      (api.get as any).mockImplementation((url: string) => {
+        if (url.includes('/analytics/overview')) {
+          return Promise.resolve({ data: { active_cases: 1 } });
+        }
+        if (url.includes('/analytics/hotspots')) {
+          return Promise.resolve({ data: [] });
+        }
+        if (url.includes('/cases')) {
+          return Promise.resolve({
+            data: [
+              {
+                id: 'summary-case-1',
+                case_number: 'PR-SUM-001',
+                species: 'Dog',
+                triage_priority: 'CRITICAL',
+                status: 'SEARCHING_RESPONDER',
+                organization_id: null,
+                address_text: 'Location protected until claim',
+                created_at: new Date().toISOString(),
+              },
+            ],
+          });
+        }
+        if (url.includes('/notifications')) {
+          return Promise.resolve({
+            data: {
+              items: [
+                {
+                  id: 'notif-1',
+                  title: 'Critical Escalation Alert',
+                  message: 'Case PR-SUM-001 requires NGO attention',
+                  created_at: new Date().toISOString(),
+                  is_read: false,
+                },
+              ],
+              unread_count: 1,
+            },
+          });
+        }
+        return Promise.resolve({ data: [] });
+      });
+
+      render(
+        <BrowserRouter>
+          <NGOOverview />
+        </BrowserRouter>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('PR-SUM-001')).toBeInTheDocument();
+        expect(screen.getByText('Critical Escalation Alert')).toBeInTheDocument();
+        expect(screen.getByText('Claim')).toBeInTheDocument();
+      });
+    });
   });
 
   describe('NGOCases', () => {
