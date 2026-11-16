@@ -77,6 +77,8 @@ class Settings(BaseSettings):
     # Phase 3B: AI-Assisted Visual Triage & Safety
     AI_TRIAGE_ENABLED: bool = False
     AI_TRIAGE_PROVIDER: str = "disabled"
+    AI_TRIAGE_API_KEY: str = ""
+    AI_TRIAGE_API_BASE_URL: str = "https://generativelanguage.googleapis.com/v1beta"
     AI_TRIAGE_TIMEOUT_SECONDS: float = 15.0
     AI_TRIAGE_MIN_CONFIDENCE: float = 0.70
     AI_TRIAGE_MODEL_NAME: str = "pawreach-vision-safety"

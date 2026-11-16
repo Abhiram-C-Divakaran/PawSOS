@@ -232,6 +232,10 @@ def perform_ai_triage_task(self, case_id_str: str, image_id_str: str, db_session
         # Update assessment record
         assessment.status = "COMPLETED"
         assessment.source = fusion_result.source
+        assessment.provider = ai_result.provider or provider.provider_name
+        assessment.model_name = ai_result.model_name or provider.model_name
+        assessment.model_version = ai_result.model_version or provider.model_version
+        assessment.sanitized_error_code = None
         assessment.suggested_priority = ai_result.suggested_priority
         assessment.score = ai_result.score
         assessment.confidence = ai_result.confidence

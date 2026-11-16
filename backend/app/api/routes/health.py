@@ -155,8 +155,11 @@ def health_readiness(response: Response, db: Session = Depends(get_db)):
     else:
         try:
             from app.ai.factory import get_vision_triage_provider
-            get_vision_triage_provider()
-            checks["ai_triage"] = "configured"
+            provider = get_vision_triage_provider()
+            if getattr(provider, "is_configured", True) is False:
+                checks["ai_triage"] = "degraded"
+            else:
+                checks["ai_triage"] = "configured"
         except Exception as e:
             logger.warning(f"AI triage diagnostic warning: {e}")
             checks["ai_triage"] = "degraded"

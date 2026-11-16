@@ -1,7 +1,9 @@
 from app.ai.base import VisionTriageProvider
 from app.ai.disabled import DisabledVisionTriageProvider
+from app.ai.gemini import GeminiVisionTriageProvider
 from app.ai.mock import MockVisionTriageProvider
 from app.config import settings
+
 
 def get_vision_triage_provider() -> VisionTriageProvider:
     """
@@ -16,6 +18,9 @@ def get_vision_triage_provider() -> VisionTriageProvider:
     if provider_name == "disabled":
         return DisabledVisionTriageProvider()
 
+    if provider_name == "gemini":
+        return GeminiVisionTriageProvider()
+
     if provider_name == "mock":
         env = (settings.ENVIRONMENT or "development").lower()
         if env in ["production", "staging"]:
@@ -24,4 +29,6 @@ def get_vision_triage_provider() -> VisionTriageProvider:
             )
         return MockVisionTriageProvider()
 
-    raise ValueError(f"Unknown AI triage provider: '{provider_name}'. Supported providers: disabled, mock.")
+    raise ValueError(
+        f"Unknown AI triage provider: '{provider_name}'. Supported providers: disabled, gemini, mock."
+    )
