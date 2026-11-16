@@ -203,11 +203,13 @@ The frontend normalization layer (`frontend/src/utils/apiConfig.ts`) automatical
 ---
 
 > [!NOTE]
-> **Operational Status**: **`PHASE 3B FINAL CLEANUP — LIVE STAGING VALIDATED ✅`** | **`LIVE INFRASTRUCTURE VERIFIED — AUTHENTICATED PILOT PENDING`**.
+> **Operational Status**: **`PHASE 3C & V1.0 RELEASE HARDENING — LIVE STAGING & AUTHENTICATED PILOT VALIDATED ✅`**.
+> - **Authenticated Staging Pilot**: `SUCCESS` in GitHub Actions Run [`35464082551`](https://github.com/Abhiram-C-Divakaran/PawSOS/actions/runs/35464082551) against live Render/Supabase/Upstash staging at SHA [`def8de5`](https://github.com/Abhiram-C-Divakaran/PawSOS/commit/def8de56c9a9323def930066b3ff8a4e3396a123).
+> - **Phase 3C PWA Polish Deployment**: `SUCCESS` in GitHub Actions Deployment Run [`35465336141`](https://github.com/Abhiram-C-Divakaran/PawSOS/actions/runs/35465336141) (CI Run [`35465104021`](https://github.com/Abhiram-C-Divakaran/PawSOS/actions/runs/35465104021)) at SHA [`04ffe2f`](https://github.com/Abhiram-C-Divakaran/PawSOS/commit/04ffe2f9cd0a64ff9369fe87f42526e0178ee41f).
 
 ---
 
-## 8. Dispatch Claim Integrity Closure & Authenticated Live Staging Pilot Validation Record
+## 8. Dispatch Claim Integrity Closure & Historical Staging Validation Record
 
 * **Verification Date**: September 18, 2026
 * **Target Environment**: Staging (Free Cloud Demo)
@@ -215,8 +217,8 @@ The frontend normalization layer (`frontend/src/utils/apiConfig.ts`) automatical
 * **Commit Message**: `fix(security): close discovery privacy and staging pilot gaps`
 * **Preceding Core CI Run**: `PawReach CI / CD Pipeline` Run `35362773445` (`SUCCESS` - all 4 required gates green)
 * **Live Staging Deployment Run**: `Staging Deployment & Smoke Tests` Run `35363303817` (`SUCCESS` - exact SHA `7cbbb62` deployed and verified)
-* **Authenticated Pilot Status**: **`AUTHENTICATED PILOT PENDING`**
-  * **Automated Pilot Execution Run**: `35383131986` (`FAILURE`)
+* **Historical Pilot Snapshot (Superseded by Section 10)**:
+  * **Automated Pilot Execution Run**: `35383131986` (`FAILURE` prior to `STAGING_SEED_PASSWORD` rotation in Section 10)
   * **Failure Analysis**: `FAILED BEFORE EXECUTION — STAGING_SEED_PASSWORD ENVIRONMENT SECRET NOT CONFIGURED IN GITHUB ENVIRONMENT 'staging'`. The preflight step verified the missing secret and exited cleanly without running commands or leaking secrets.
   * **Pilot Hardening**: Workflow updated to eliminate password inputs, enforce secret presence safely, pass `--expected-sha`, parse nested readiness telemetry, verify responder determinism with guaranteed cleanup, upload synthetic private evidence, and test explicit multi-tenant case claiming (`POST /api/v1/ngo/cases/{case_id}/claim`).
 
@@ -300,8 +302,8 @@ The frontend normalization layer (`frontend/src/utils/apiConfig.ts`) automatical
 * **Commit Message**: `fix(security): import Any in case_access for animal authorization boundary`
 * **Preceding Core CI Run**: `PawReach CI / CD Pipeline` Run `35388208844` (`SUCCESS` — all 4 required gates green)
 * **Live Staging Deployment Run**: `Staging Deployment & Smoke Tests` Run `35388656412` (`SUCCESS` — exact SHA `eec5475` deployed and verified)
-* **Authenticated Pilot Status**: **`AUTHENTICATED PILOT PENDING`**
-  * **Automated Pilot Execution Run**: `35388946280` (`FAILURE`)
+* **Historical Pilot Snapshot (Superseded by Section 10)**:
+  * **Automated Pilot Execution Run**: `35388946280` (`FAILURE` prior to `STAGING_SEED_PASSWORD` configuration)
   * **Failure Analysis**: `FAILED BEFORE EXECUTION — STAGING_SEED_PASSWORD ENVIRONMENT SECRET NOT CONFIGURED IN GITHUB ENVIRONMENT 'staging'`. The preflight step verified the missing secret and exited cleanly without running commands or leaking secrets.
 
 ### Job Execution Summary
@@ -373,6 +375,36 @@ The frontend normalization layer (`frontend/src/utils/apiConfig.ts`) automatical
    - Unassigned cases strictly stripped from all NGO analytics queries.
    - `execute_ngo_case_action` rejects unassigned cases with HTTP 403 Forbidden.
    - `assign_responder` blocks unaffiliated and foreign-org responders with HTTP 403 Forbidden, and inactive responders with HTTP 400 Bad Request.
+
+---
+
+## 10. Authenticated Live Staging Pilot Execution & Phase 3C PWA Validation Record
+
+* **Verification Date**: September 19–20, 2026
+* **Target Environment**: Staging (`https://pawreach-api.onrender.com`)
+* **Authenticated Pilot Execution Commit**: `def8de56c9a9323def930066b3ff8a4e3396a123` (`fix(pilot): tolerate Render free-tier cold starts (#6)`)
+  * **Preceding CI Run**: `PawReach CI / CD Pipeline` Run [`35463569514`](https://github.com/Abhiram-C-Divakaran/PawSOS/actions/runs/35463569514) (`SUCCESS`)
+  * **Staging Deployment Run**: `Staging Deployment & Smoke Tests` Run [`35463841324`](https://github.com/Abhiram-C-Divakaran/PawSOS/actions/runs/35463841324) (`SUCCESS`)
+  * **Authenticated Pilot Workflow Run**: `Staging Authenticated Pilot Execution` Run [`35464082551`](https://github.com/Abhiram-C-Divakaran/PawSOS/actions/runs/35464082551) (**`SUCCESS`**)
+* **Phase 3C PWA Polish Merge Commit**: `04ffe2f9cd0a64ff9369fe87f42526e0178ee41f` (`feat(frontend): complete Phase 3C PWA polish (#1)`)
+  * **Core CI Run**: `PawReach CI / CD Pipeline` Run [`35465104021`](https://github.com/Abhiram-C-Divakaran/PawSOS/actions/runs/35465104021) (`SUCCESS`)
+  * **Live Staging Deployment & Smoke Tests Run**: `Staging Deployment & Smoke Tests` Run [`35465336141`](https://github.com/Abhiram-C-Divakaran/PawSOS/actions/runs/35465336141) (**`SUCCESS`**)
+
+### Authenticated Pilot End-to-End Verification Steps (Run `35464082551`)
+
+| Pilot Stage | Assertion Verified | Result |
+|-------------|--------------------|--------|
+| **1. Readiness & Wake-Up Telemetry** | `/api/v1/health` and `/api/v1/health/ready` verified against expected SHA `def8de5` with cold-start retry tolerance; PostgreSQL, PostGIS, Upstash Redis TLS, Celery worker heartbeat, and Supabase S3 private storage healthy | `PASS` |
+| **2. Multi-Role Authentication** | OAuth2 form authentication verified for seeded Citizen, Rescuer A, Rescuer B, Veterinarian Alpha, NGO Admin Alpha, and NGO Admin Beta accounts after credential rotation and fixture reconciliation | `PASS` |
+| **3. Responder Availability Setup** | Deterministic baseline recorded; Rescuer A set to `AVAILABLE` with fresh GPS coordinates, Rescuer B set to `BUSY` | `PASS` |
+| **4. Synthetic Emergency Intake & Evidence** | Valid Pillow-verified 1x1 PNG uploaded to private S3 bucket and attached to new CRITICAL emergency rescue case | `PASS` |
+| **5. Dispatch & Single-Winner Claim Integrity** | Automatic dispatch offer issued to Rescuer A; unoffered Rescuer B blocked with HTTP 403 Forbidden; Rescuer A atomic claim succeeded | `PASS` |
+| **6. Private Media Authorization Boundaries** | Presigned S3 access granted to Reporter and Assigned Rescuer A; denied (HTTP 403) to unoffered Rescuer B, unclaimed NGO Alpha, and foreign NGO Beta | `PASS` |
+| **7. Atomic NGO Claim & Tenant Isolation** | NGO Alpha claimed case via `POST /api/v1/ngo/cases/{id}/claim`; foreign NGO Beta blocked (HTTP 409 on claim, HTTP 403 on dossier/evidence) | `PASS` |
+| **8. Field Rescue Lifecycle Progression** | Rescuer A progressed case through `RESPONDER_EN_ROUTE` → `ANIMAL_LOCATED` → `RESCUED` → `TRANSPORTING` → `AT_VETERINARY_FACILITY` | `PASS` |
+| **9. Veterinary Facility Scoping & Treatment** | Veterinarian Alpha logged clinical treatment and progressed recovery (`UNDER_TREATMENT` → `RECOVERING` → `READY_FOR_RELEASE`) | `PASS` |
+| **10. Closure, Audit Trail & State Cleanup** | Case transitioned to `RELEASED` → `CLOSED`; timeline and audit logs verified; Rescuer A and Rescuer B availability/location states restored to original baseline | `PASS` |
+
 
 
 

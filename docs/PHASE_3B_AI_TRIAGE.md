@@ -71,23 +71,25 @@ The AI subsystem is located in `backend/app/ai/`:
 | :--- | :--- | :--- |
 | `VisionTriageProvider` | `app/ai/base.py` | Abstract base class defining the provider contract (`assess(image_bytes, context, timeout=15.0)`). Providers enforce timeout at their network/client boundary. |
 | `DisabledVisionTriageProvider` | `app/ai/disabled.py` | Safe no-op provider used when feature flag is disabled or unconfigured. |
+| `GeminiVisionTriageProvider` | `app/ai/gemini.py` | Real external multimodal vision provider calling Google Gemini Vision over HTTPS (`httpx`) with strict timeout, JSON schema validation, non-diagnostic prompt guardrails, and zero PII/GPS transmission. |
 | `MockVisionTriageProvider` | `app/ai/mock.py` | Deterministic, test-only provider for automated test suites and local dev. |
 | Provider Factory | `app/ai/factory.py` | Factory that instantiates the active provider based on environment variables. **Enforces that mock provider cannot run in production or staging environments.** |
 | `HybridTriageFusionEngine` | `app/ai/fusion.py` | Pure logic engine that fuses rule-based inputs and AI results with non-downgrade guarantees. |
 
 > [!IMPORTANT]
-> **Implemented Providers Notice**:
-> Only `disabled` and `mock` providers are currently implemented in Phase 3B. The `mock` provider is restricted strictly to automated test suites and local development. No real external vision provider (e.g. OpenAI, Gemini, or external vision APIs) is implemented yet; external providers are neither enabled nor selectable in staging or production.
+> **Implemented Providers & Hosted Demo Notice**:
+> Three providers are implemented: `disabled`, `gemini` (`GeminiVisionTriageProvider`), and `mock` (`MockVisionTriageProvider`, restricted strictly to automated tests and local development). In the zero-cost hosted staging environment (`pawreach-api.onrender.com`), `AI_TRIAGE_ENABLED=false` and `AI_TRIAGE_PROVIDER="disabled"` by default unless the operator configures `AI_TRIAGE_API_KEY` and sets `AI_TRIAGE_ENABLED=true` and `AI_TRIAGE_PROVIDER="gemini"`.
 
 ### Configuration Variables (`backend/app/config.py`)
 
 | Variable | Default | Purpose |
 | :--- | :--- | :--- |
 | `AI_TRIAGE_ENABLED` | `false` | Master feature flag for visual triage. |
-| `AI_TRIAGE_PROVIDER` | `"disabled"` | Active provider (`"disabled"` default, or `"mock"` for local test suites). |
+| `AI_TRIAGE_PROVIDER` | `"disabled"` | Active provider (`"disabled"` default, `"gemini"` for Google Gemini Vision, or `"mock"` for local test suites). |
+| `AI_TRIAGE_API_KEY` | `""` | API key for the external vision provider (`gemini`). Never logged or exposed in responses. |
 | `AI_TRIAGE_TIMEOUT_SECONDS` | `15.0` | Maximum timeout passed to provider client/network socket boundary. |
 | `AI_TRIAGE_MIN_CONFIDENCE` | `0.70` | Minimum confidence threshold for escalation eligibility. |
-| `AI_TRIAGE_MODEL_NAME` | `"pawreach-vision-safety"` | Model identifier for audit provenance. |
+| `AI_TRIAGE_MODEL_NAME` | `"pawreach-vision-safety"` | Model identifier for audit provenance (defaults to `"gemini-2.5-flash"` when `AI_TRIAGE_PROVIDER="gemini"` and default model name is unchanged). |
 | `AI_TRIAGE_MODEL_VERSION` | `"v1.0"` | Model version identifier for audit provenance. |
 
 ---
